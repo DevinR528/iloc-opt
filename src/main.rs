@@ -1,36 +1,29 @@
 #![allow(unused)]
 
+use std::{env, fs};
+
+// Our Instruction definition
 mod iloc;
 
-use std::io::Read;
+// Each pass of our optimizing compiler
+//
+// Local Value Numbering
+mod loc_val_num;
 
-use iloc::{parse_text, Instruction};
+use iloc::{make_blks, parse_text, Instruction};
+
+const JAVA_ILOC_BENCH: &str = "java -jar ~/Downloads/my-cs6810-ssa-opt-project/iloc.jar -s";
+const JAVA_ILOC_DEBUG: &str = "java -jar ~/Downloads/my-cs6810-ssa-opt-project/iloc.jar -d";
 
 fn main() {
-    use std::collections::HashMap;
-    use std::fs;
+    let files = env::args().skip(1).collect::<Vec<_>>();
 
-    let mut map = HashMap::new();
+    for file in files {
+        println!("{}", file);
 
-    let text = fs::read_to_string("./input.txt").unwrap();
-    for line in text.split(&[' ', '\n'][..]) {
-        if line.is_empty() {
-            continue;
-        }
-        (*map.entry(line).or_insert(0_usize)) += 1;
+        let input = fs::read_to_string(file).unwrap();
+        let mut iloc = parse_text(&input).unwrap();
+        let blocks = make_blks(iloc);
+        println!("{:?}", blocks.functions);
     }
-
-    // `count` is a reference to a usize or *usize in c
-    // `&count` destructures the pointer doing a dereference
-    //
-    // it's like in c++ if you return a tuple you can
-    // `auto [a, b] = tuple_return();`
-    let mut totes = 0;
-    for (word, &count) in map.iter() {
-        totes += count;
-        if count > 1 {
-            println!("{} {}", word, count);
-        }
-    }
-    println!("{}", totes);
 }

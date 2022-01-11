@@ -15,10 +15,10 @@
 	store	%vr0  => %vr4
 	loadI	-4  => %vr5
 	add	%vr0, %vr5 => %vr6
-	call	init, %vr6 
+	call	init, %vr6
 	loadI	-4  => %vr5
 	add	%vr0, %vr5 => %vr6
-	call	writearray, %vr6 
+	call	writearray, %vr6
 	loadI	1  => %vr7
 	i2i	%vr7  => %vr4
 	loadI	10  => %vr8
@@ -53,7 +53,7 @@
 	loadI	4  => %vr14
 	mult	%vr13, %vr14 => %vr15
 	sub	%vr12, %vr15 => %vr16
-	call	inc, %vr16 
+	call	inc, %vr16
 	loadI	1  => %vr7
 	add	%vr4, %vr7 => %vr19
 	i2i	%vr19  => %vr4
@@ -64,7 +64,7 @@
 .L0:	nop
 	loadI	-4  => %vr5
 	add	%vr0, %vr5 => %vr6
-	call	writearray, %vr6 
+	call	writearray, %vr6
 	ret
 	.frame	init, 0, %vr8
 	loadI	1  => %vr9

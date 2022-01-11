@@ -1,11 +1,22 @@
 use std::{collections::HashMap, str::FromStr};
 
-#[derive(Clone, Copy, Debug)]
-pub struct Val(usize);
+#[derive(Clone, Debug)]
+pub enum Val {
+    Integer(isize),
+    Float(f64),
+    Location(String),
+}
 impl FromStr for Val {
     type Err = &'static str;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Val(s.parse::<usize>().map_err(|_| "`Val` parse error")?))
+        Ok(if s.chars().all(|c| c.is_numeric() || c == '-') {
+            Val::Integer(s.parse::<isize>().map_err(|_| {
+                println!("{}", s);
+                "`Val` parse error"
+            })?)
+        } else {
+            Val::Location(s.to_string())
+        })
     }
 }
 
@@ -29,13 +40,13 @@ impl FromStr for Reg {
 }
 
 #[derive(Clone, Debug)]
-pub enum Loc {}
+pub struct Loc(String);
 
 impl FromStr for Loc {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        todo!()
+        Ok(Self(s.to_string()))
     }
 }
 
@@ -113,8 +124,20 @@ pub enum Instruction {
     ImmJump(Loc),
     /// jump %r `jump`
     Jump(Reg),
+    /// Call instruction, includes arguments.
+    /// `call name %r, %r
+    Call { name: String, args: Vec<Reg> },
+    /// Call instruction, includes arguments and return register.
+    /// `call name %r, %r
+    ImmCall { name: String, args: Vec<Reg>, ret: Reg },
+    /// Call instruction, includes arguments and return register.
+    /// `call name %r, %r
+    ImmRCall { reg: Reg, args: Vec<Reg>, ret: Reg },
     /// `ret`
     Ret,
+    /// Return a value in a register.
+    /// `iret %r`
+    ImmRet(Reg),
     /// cbr %r -> label `cbr` conditional break if tree
     CbrT { cond: Reg, loc: Loc },
     /// cbrne %r -> label `cbrne` conditional break if false
@@ -127,26 +150,45 @@ pub enum Instruction {
     CbrNE { a: Reg, b: Reg, loc: Loc },
 
     // Floating point arithmetic
+    /// `f2i`
     F2I { src: Reg, dst: Reg },
+    /// `i2f`
     I2F { src: Reg, dst: Reg },
+    /// `f2f`
     F2F { src: Reg, dst: Reg },
+    /// `fadd`
     FAdd { src_a: Reg, src_b: Reg, dst: Reg },
+    /// `fsub`
     FSub { src_a: Reg, src_b: Reg, dst: Reg },
+    /// `fmult`
     FMult { src_a: Reg, src_b: Reg, dst: Reg },
+    /// `fdiv`
     FDiv { src_a: Reg, src_b: Reg, dst: Reg },
+    /// `fcomp`
     FComp { src_a: Reg, src_b: Reg, dst: Reg },
-    FLoad { src_a: Reg, src_b: Reg, dst: Reg },
+    /// `fload`
+    FLoad { src: Reg, dst: Reg },
+    /// `floadAI`
     FLoadAddImm { src: Reg, add: Val, dst: Reg },
+    /// `floadAO`
     FLoadAdd { src: Reg, add: Reg, dst: Reg },
+    /// `fstore`
     FStore { src_a: Reg, src_b: Reg, dst: Reg },
+    /// `fstoreAI`
     FStoreAddImm { src: Reg, add: Val, dst: Reg },
+    /// `fstoreAO`
     FStoreAdd { src: Reg, add: Reg, dst: Reg },
 
     // I/O operations
+    /// `fread %r` where r is a float target.
     FRead(Reg),
+    /// `fread %r` where r is an int target.
     IRead(Reg),
+    /// `fread %r` where r is a float source.
     FWrite(Reg),
+    /// `fread %r` where r is an integer source.
     IWrite(Reg),
+    /// `fread %r` where r is a null terminated string source.
     SWrite(Reg),
 
     // Stack operations
@@ -222,10 +264,43 @@ pub enum Instruction {
     // Pseudo operations
     Data,
     Text,
-    Frame { name: String, size: usize, params: Vec<String> },
+    Frame { name: String, size: usize, params: Vec<Reg> },
     Global { name: String, size: usize, align: usize },
     String { name: String, content: String },
-    Float { name: String, content: usize },
+    Float { name: String, content: f64 },
+
+    // TODO: hmm should this not be
+    /// Labeled block.
+    Label(String),
+}
+
+pub enum Operand<'a> {
+    Register(&'a Reg),
+    Location(&'a Loc),
+    Value(&'a Val),
+}
+
+impl Instruction {
+    // TODO: make another enum so this isn't so crappy
+    // Have
+    // enum Instruction {
+    //     NoOperands(Inst),
+    //     SingleOperand(Inst()),
+    //     TwoOperand(Inst { src, dst }),
+    // }
+    /// Optional target register for 3 address instructions.
+    pub fn target_reg(&self) -> Option<&Reg> {
+        todo!()
+    }
+
+    /// The return value is (left, right) `Option<Operand<'_>>`.
+    pub fn operands(&self) -> (Option<Operand<'_>>, Option<Operand<'_>>) {
+        todo!()
+    }
+
+    pub fn inst_name(&self) -> &str {
+        todo!()
+    }
 }
 
 pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
@@ -320,6 +395,7 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 konst: Val::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
+
             // Memory operations
             ["loadI", src, "=>", dst] => instructions.push(Instruction::ImmLoad {
                 src: Val::from_str(src)?,
@@ -393,16 +469,198 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 test: Reg::from_str(a)?,
                 dst: Reg::from_str(dst)?,
             }),
+            ["testne", a, "=>", dst] => instructions.push(Instruction::TestNE {
+                test: Reg::from_str(a)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["testgt", a, "=>", dst] => instructions.push(Instruction::TestGT {
+                test: Reg::from_str(a)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["testge", a, "=>", dst] => instructions.push(Instruction::TestGE {
+                test: Reg::from_str(a)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["testlt", a, "=>", dst] => instructions.push(Instruction::TestLT {
+                test: Reg::from_str(a)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["testle", a, "=>", dst] => instructions.push(Instruction::TestLE {
+                test: Reg::from_str(a)?,
+                dst: Reg::from_str(dst)?,
+            }),
+
+            // Float operations
+            ["f2i", src, "=>", dst] => instructions.push(Instruction::F2I {
+                src: Reg::from_str(src)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["i2f", src, "=>", dst] => instructions.push(Instruction::I2F {
+                src: Reg::from_str(src)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["f2f", src, "=>", dst] => instructions.push(Instruction::F2F {
+                src: Reg::from_str(src)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["fadd", a, b, "=>", dst] => instructions.push(Instruction::FAdd {
+                src_a: Reg::from_str(a)?,
+                src_b: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["fsub", a, b, "=>", dst] => instructions.push(Instruction::FSub {
+                src_a: Reg::from_str(a)?,
+                src_b: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["fmult", a, b, "=>", dst] => instructions.push(Instruction::FMult {
+                src_a: Reg::from_str(a)?,
+                src_b: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["fdiv", a, b, "=>", dst] => instructions.push(Instruction::FDiv {
+                src_a: Reg::from_str(a)?,
+                src_b: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["fcomp", a, b, "=>", dst] => instructions.push(Instruction::FComp {
+                src_a: Reg::from_str(a)?,
+                src_b: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["fload", a, "=>", dst] => instructions.push(Instruction::FLoad {
+                src: Reg::from_str(a)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["floadAI", a, b, "=>", dst] => instructions.push(Instruction::FLoadAddImm {
+                src: Reg::from_str(a)?,
+                add: Val::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["floadAO", a, b, "=>", dst] => instructions.push(Instruction::FLoadAdd {
+                src: Reg::from_str(a)?,
+                add: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["store", a, "=>", dst] => instructions.push(Instruction::Store {
+                src: Reg::from_str(a)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["storeAI", a, b, "=>", dst] => instructions.push(Instruction::StoreAddImm {
+                src: Reg::from_str(a)?,
+                add: Val::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["storeAO", a, b, "=>", dst] => instructions.push(Instruction::StoreAdd {
+                src: Reg::from_str(a)?,
+                add: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+
+            // I/O operations
+            ["fread", target] => instructions.push(Instruction::FRead(Reg::from_str(target)?)),
+            ["iread", target] => instructions.push(Instruction::IRead(Reg::from_str(target)?)),
+            ["fwrite", src] => instructions.push(Instruction::FWrite(Reg::from_str(src)?)),
+            ["iwrite", src] => instructions.push(Instruction::IWrite(Reg::from_str(src)?)),
+            ["swrite", src] => instructions.push(Instruction::SWrite(Reg::from_str(src)?)),
+
+            // Branch operations
+            ["jumpI", "->", label] => {
+                instructions.push(Instruction::ImmJump(Loc::from_str(label)?))
+            }
+            ["jump", "->", target] => instructions.push(Instruction::Jump(Reg::from_str(target)?)),
+            ["call", name, args @ ..] => {
+                let args = args
+                    .iter()
+                    .map(|s| Reg::from_str(s))
+                    .collect::<Result<Vec<_>, &'static str>>()?;
+                instructions.push(Instruction::Call {
+                    name: name.to_string(),
+                    args,
+                })
+            }
+            ["icall", name, args @ .., "=>", ret] => {
+                let args = args
+                    .iter()
+                    .map(|s| Reg::from_str(s))
+                    .collect::<Result<Vec<_>, &'static str>>()?;
+                instructions.push(Instruction::ImmCall {
+                    name: name.to_string(),
+                    args,
+                    ret: Reg::from_str(ret)?,
+                })
+            }
+            ["ircall", reg, args @ .., "=>", ret] => {
+                let args = args
+                    .iter()
+                    .map(|s| Reg::from_str(s))
+                    .collect::<Result<Vec<_>, &'static str>>()?;
+                instructions.push(Instruction::ImmRCall {
+                    reg: Reg::from_str(reg)?,
+                    args,
+                    ret: Reg::from_str(ret)?,
+                })
+            }
+            ["ret"] => instructions.push(Instruction::Ret),
+            ["iret", res] => instructions.push(Instruction::ImmRet(Reg::from_str(res)?)),
+            ["cbr", src, "->", label] => instructions.push(Instruction::CbrT {
+                cond: Reg::from_str(src)?,
+                loc: Loc::from_str(label)?,
+            }),
+            ["cbrne", src, "->", label] => instructions.push(Instruction::CbrF {
+                cond: Reg::from_str(src)?,
+                loc: Loc::from_str(label)?,
+            }),
+            ["cbr_LT", a, b, "->", label] => instructions.push(Instruction::CbrLT {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                loc: Loc::from_str(label)?,
+            }),
+            ["cbr_LE", a, b, "->", label] => instructions.push(Instruction::CbrLE {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                loc: Loc::from_str(label)?,
+            }),
+            ["cbr_GT", a, b, "->", label] => instructions.push(Instruction::CbrGT {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                loc: Loc::from_str(label)?,
+            }),
+            ["cbr_GE", a, b, "->", label] => instructions.push(Instruction::CbrGE {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                loc: Loc::from_str(label)?,
+            }),
+            ["cbr_EQ", a, b, "->", label] => instructions.push(Instruction::CbrEQ {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                loc: Loc::from_str(label)?,
+            }),
+            ["cbr_NE", a, b, "->", label] => instructions.push(Instruction::CbrNE {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                loc: Loc::from_str(label)?,
+            }),
+
+            // Stack operations
+            ["push", c] => instructions.push(Instruction::Push(Val::from_str(c)?)),
+            ["pushr", reg] => instructions.push(Instruction::PushR(Reg::from_str(reg)?)),
+            ["pop"] => instructions.push(Instruction::Pop),
+            ["stadd"] => instructions.push(Instruction::StAdd),
+            ["stsub"] => instructions.push(Instruction::StSub),
+            ["stmul"] => instructions.push(Instruction::StMul),
+            ["stdiv"] => instructions.push(Instruction::StDiv),
+            ["stlshift"] => instructions.push(Instruction::StLShift),
+            ["strshift"] => instructions.push(Instruction::StRShift),
 
             // Pseudo operations
             [".data"] => instructions.push(Instruction::Data),
             [".text"] => instructions.push(Instruction::Text),
             [".frame", name, size, params @ ..] => {
-                let params = if params.is_empty() {
-                    vec![]
-                } else {
-                    params.iter().map(|s| s.to_string()).collect()
-                };
+                let params = params
+                    .iter()
+                    .map(|s| Reg::from_str(s))
+                    .collect::<Result<Vec<_>, &'static str>>()?;
                 instructions.push(Instruction::Frame {
                     name: name.to_string(),
                     size: size.parse().map_err(|_| "failed to parse .frame size")?,
@@ -422,14 +680,81 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 name: name.to_string(),
                 content: val.parse().map_err(|_| "failed to parse .float value")?,
             }),
+            [label, "nop"] => instructions.push(Instruction::Label(label.to_string())),
             inst => todo!("{:?}", inst),
             // _ => {
             //     return Err("invalid instruction sequence");
             // }
         }
-        println!("{:?}", instructions);
     }
     Ok(instructions)
+}
+
+#[derive(Debug)]
+pub struct Block {
+    pub label: String,
+    /// Keep the instruction around for easy `to_string`ing.
+    inst: Instruction,
+    pub instructions: Vec<Instruction>,
+}
+
+#[derive(Debug)]
+pub struct Function {
+    pub label: String,
+    /// Keep the instruction around for easy `to_string`ing.
+    inst: Instruction,
+    pub blk: Vec<Block>,
+}
+
+#[derive(Debug)]
+pub struct IlocProgram {
+    /// The .text and .data segments of an iloc program.
+    pub preamble: Vec<Instruction>,
+    /// Basic blocks.
+    pub functions: Vec<Function>,
+}
+
+pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
+    let fn_start = iloc
+        .iter()
+        .position(|inst| matches!(inst, Instruction::Frame { .. }))
+        .unwrap_or_default();
+    let (preamble, rest) = iloc.split_at(fn_start);
+
+    let mut functions = vec![];
+    let mut fn_idx = 0;
+    let mut blk_idx = 0;
+    for inst in rest {
+        if let Instruction::Frame { name, .. } = inst {
+            functions.push(Function {
+                label: name.to_string(),
+                inst: inst.clone(),
+                blk: vec![Block {
+                    label: format!(".L_{}", name),
+                    inst: inst.clone(),
+                    instructions: vec![],
+                }],
+            });
+            fn_idx = functions.len().saturating_sub(1);
+            blk_idx = 0;
+        } else if let Instruction::Label(label) = inst {
+            functions[fn_idx].blk.push(Block {
+                label: label.to_string(),
+                inst: inst.clone(),
+                instructions: vec![],
+            });
+            blk_idx = functions[fn_idx].blk.len().saturating_sub(1);
+        } else {
+            functions[fn_idx].blk[blk_idx]
+                .instructions
+                .push(inst.clone());
+        }
+    }
+
+    IlocProgram {
+        preamble: preamble.to_vec(),
+        functions,
+    }
 }
 
 #[test]
