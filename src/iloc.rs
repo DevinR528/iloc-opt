@@ -1497,7 +1497,7 @@ impl fmt::Display for Instruction {
             Instruction::Frame { name, size, params } => {
                 writeln!(
                     f,
-                    ".{} {} {} {}",
+                    ".{} {}, {} {}",
                     self.inst_name(),
                     name,
                     size,
@@ -1509,17 +1509,17 @@ impl fmt::Display for Instruction {
                 )
             }
             Instruction::Global { name, size, align } => {
-                writeln!(f, "    .{} {} {} {}", self.inst_name(), name, size, align)
+                writeln!(f, "    .{} {}, {} {}", self.inst_name(), name, size, align)
             }
             Instruction::String { name, content } => {
-                writeln!(f, "    .{} {} {}", self.inst_name(), name, content)
+                writeln!(f, "    .{} {}, {}", self.inst_name(), name, content)
             }
             Instruction::Float { name, content } => {
-                writeln!(f, "    .{} {} {}", self.inst_name(), name, content)
+                writeln!(f, "    .{} {}, {}", self.inst_name(), name, content)
             }
             Instruction::Label(label) => writeln!(f, "{}", label),
             Instruction::Text | Instruction::Data => writeln!(f, "    .{}", self.inst_name()),
-            _ => writeln!(f, "    .{}", self.inst_name()),
+            _ => writeln!(f, "    {}", self.inst_name()),
         }
     }
 }
@@ -2340,8 +2340,8 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
                 label: name.to_string(),
                 inst: inst.clone(),
                 blk: vec![Block {
-                    label: format!(".L_{}", name),
-                    inst: Instruction::Label(format!(".L_{}", name)),
+                    label: format!(".L_{}:", name),
+                    inst: Instruction::Label(format!(".L_{}:", name)),
                     instructions: vec![],
                 }],
             });

@@ -1,15 +1,15 @@
     .data
-    .string .int_wformat "%d\12"
-    .string .float_wformat "%f\12"
-    .string .char_wformat "%c\12"
-    .string .string_wformat "%s\12"
-    .string .int_rformat "%d"
-    .string .float_rformat "%f"
-    .string .char_rformat "%c"
-    .string .string_rformat "%s"
+    .string .int_wformat, "%d\12"
+    .string .float_wformat, "%f\12"
+    .string .char_wformat, "%c\12"
+    .string .string_wformat, "%s\12"
+    .string .int_rformat, "%d"
+    .string .float_rformat, "%f"
+    .string .char_rformat, "%c"
+    .string .string_rformat, "%s"
     .text
-.frame main 3960 
-.L_main
+.frame main, 3960 
+.L_main:
     loadI 30 => %vr8
     i2i %vr8 => %vr5
     loadI 30 => %vr8
@@ -306,4 +306,4 @@
     sub %vr17, %vr78 => %vr79
     load %vr79 => %vr80
     iwrite %vr80
-    .ret
+    ret
