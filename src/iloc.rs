@@ -1,4 +1,10 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{
+    collections::HashMap,
+    fmt,
+    hash::{self, Hash},
+    mem::discriminant,
+    str::FromStr,
+};
 
 #[derive(Clone, Debug)]
 pub enum Val {
@@ -6,6 +12,26 @@ pub enum Val {
     Float(f64),
     Location(String),
 }
+impl Hash for Val {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Self::Integer(int) => int.hash(state),
+            Self::Float(float) => float.to_bits().hash(state),
+            Self::Location(int) => int.hash(state),
+        }
+    }
+}
+impl PartialEq for Val {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Integer(a), Self::Integer(b)) => a.eq(b),
+            (Self::Float(a), Self::Float(b)) => a.to_bits().eq(&b.to_bits()),
+            (Self::Location(a), Self::Location(b)) => a.eq(b),
+            _ => false,
+        }
+    }
+}
+impl Eq for Val {}
 impl FromStr for Val {
     type Err = &'static str;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -19,8 +45,17 @@ impl FromStr for Val {
         })
     }
 }
+impl fmt::Display for Val {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Val::Integer(int) => int.fmt(f),
+            Val::Float(flt) => flt.fmt(f),
+            Val::Location(loc) => loc.fmt(f),
+        }
+    }
+}
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Reg {
     Expr(usize),
     Var(usize),
@@ -29,6 +64,9 @@ pub enum Reg {
 impl FromStr for Reg {
     type Err = &'static str;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if !s.starts_with("%vr") {
+            return Err("register must start with %vr[num]");
+        }
         Ok(Reg::Var(
             s.split("%vr")
                 .last()
@@ -38,8 +76,15 @@ impl FromStr for Reg {
         ))
     }
 }
+impl fmt::Display for Reg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Reg::Expr(num) | Reg::Var(num) => write!(f, "%vr{}", num),
+        }
+    }
+}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Loc(String);
 
 impl FromStr for Loc {
@@ -49,13 +94,18 @@ impl FromStr for Loc {
         Ok(Self(s.to_string()))
     }
 }
+impl fmt::Display for Loc {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[rustfmt::skip]
 #[derive(Clone, Debug)]
-pub enum Instruction {
+pub enum Instruction<R = Reg, V = Val, L = Loc> {
     // Integer arithmetic operations
     /// %r => %r `i2i`
-    I2I { src: Reg, dst: Reg },
+    I2I { src: R, dst: R },
     /// %r + %r => %r `add`
     Add { src_a: Reg, src_b: Reg, dst: Reg },
     /// %r - %r => %r `sub`
@@ -77,7 +127,7 @@ pub enum Instruction {
 
     // Immediate integer operations
     /// %r + c => %r `addI`
-    ImmAdd { src: Reg, konst: Val, dst: Reg },
+    ImmAdd { src: Reg, konst: V, dst: Reg },
     /// %r - c => %r `subI`
     ImmSub { src: Reg, konst: Val, dst: Reg },
     /// %r * c => %r `multI`
@@ -142,7 +192,7 @@ pub enum Instruction {
     CbrT { cond: Reg, loc: Loc },
     /// cbrne %r -> label `cbrne` conditional break if false
     CbrF { cond: Reg, loc: Loc },
-    CbrLT { a: Reg, b: Reg, loc: Loc },
+    CbrLT { a: Reg, b: Reg, loc: L },
     CbrLE { a: Reg, b: Reg, loc: Loc },
     CbrGT { a: Reg, b: Reg, loc: Loc },
     CbrGE { a: Reg, b: Reg, loc: Loc },
@@ -173,7 +223,7 @@ pub enum Instruction {
     /// `floadAO`
     FLoadAdd { src: Reg, add: Reg, dst: Reg },
     /// `fstore`
-    FStore { src_a: Reg, src_b: Reg, dst: Reg },
+    FStore { src: Reg, dst: Reg },
     /// `fstoreAI`
     FStoreAddImm { src: Reg, add: Val, dst: Reg },
     /// `fstoreAO`
@@ -274,10 +324,1220 @@ pub enum Instruction {
     Label(String),
 }
 
+impl Hash for Instruction {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        let variant = discriminant(self);
+        match self {
+            Instruction::I2I { src, dst } => (src, dst, variant).hash(state),
+            Instruction::Add { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::Sub { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::Mult { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::LShift { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::RShift { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::Mod { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::And { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::Or { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::Not { src, dst } => (src, dst, variant).hash(state),
+            Instruction::ImmAdd { src, konst, dst } => (src, konst, dst, variant).hash(state),
+            Instruction::ImmSub { src, konst, dst } => (src, konst, dst, variant).hash(state),
+            Instruction::ImmMult { src, konst, dst } => (src, konst, dst, variant).hash(state),
+            Instruction::ImmLShift { src, konst, dst } => (src, konst, dst, variant).hash(state),
+            Instruction::ImmRShift { src, konst, dst } => (src, konst, dst, variant).hash(state),
+            Instruction::ImmLoad { src, dst } => (src, dst, variant).hash(state),
+            Instruction::Load { src, dst } => (src, dst, variant).hash(state),
+            Instruction::LoadAddImm { src, add, dst } => (src, add, dst, variant).hash(state),
+            Instruction::LoadAdd { src, add, dst } => (src, add, dst, variant).hash(state),
+            Instruction::Store { src, dst } => (src, dst, variant).hash(state),
+            Instruction::StoreAddImm { src, add, dst } => (src, add, dst, variant).hash(state),
+            Instruction::StoreAdd { src, add, dst } => (src, add, dst, variant).hash(state),
+            Instruction::CmpLT { a, b, dst } => (a, b, dst, variant).hash(state),
+            Instruction::CmpLE { a, b, dst } => (a, b, dst, variant).hash(state),
+            Instruction::CmpGT { a, b, dst } => (a, b, dst, variant).hash(state),
+            Instruction::CmpGE { a, b, dst } => (a, b, dst, variant).hash(state),
+            Instruction::CmpEQ { a, b, dst } => (a, b, dst, variant).hash(state),
+            Instruction::CmpNE { a, b, dst } => (a, b, dst, variant).hash(state),
+            Instruction::Comp { a, b, dst } => (a, b, dst, variant).hash(state),
+            Instruction::TestEQ { test, dst } => (test, dst, variant).hash(state),
+            Instruction::TestNE { test, dst } => (test, dst, variant).hash(state),
+            Instruction::TestGT { test, dst } => (test, dst, variant).hash(state),
+            Instruction::TestGE { test, dst } => (test, dst, variant).hash(state),
+            Instruction::TestLT { test, dst } => (test, dst, variant).hash(state),
+            Instruction::TestLE { test, dst } => (test, dst, variant).hash(state),
+            Instruction::ImmJump(s) => (s, variant).hash(state),
+            Instruction::Jump(s) => (s, variant).hash(state),
+            Instruction::Call { name, args } => (name, args, variant).hash(state),
+            Instruction::ImmCall { name, args, ret } => (name, args, ret, variant).hash(state),
+            Instruction::ImmRCall { reg, args, ret } => (reg, args, ret, variant).hash(state),
+            Instruction::ImmRet(s) => (s, variant).hash(state),
+            Instruction::CbrT { cond, loc } => (cond, loc, variant).hash(state),
+            Instruction::CbrF { cond, loc } => (cond, loc, variant).hash(state),
+            Instruction::CbrLT { a, b, loc } => (a, b, loc, variant).hash(state),
+            Instruction::CbrLE { a, b, loc } => (a, b, loc, variant).hash(state),
+            Instruction::CbrGT { a, b, loc } => (a, b, loc, variant).hash(state),
+            Instruction::CbrGE { a, b, loc } => (a, b, loc, variant).hash(state),
+            Instruction::CbrEQ { a, b, loc } => (a, b, loc, variant).hash(state),
+            Instruction::CbrNE { a, b, loc } => (a, b, loc, variant).hash(state),
+            Instruction::F2I { src, dst } => (src, dst, variant).hash(state),
+            Instruction::I2F { src, dst } => (src, dst, variant).hash(state),
+            Instruction::F2F { src, dst } => (src, dst, variant).hash(state),
+            Instruction::FAdd { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::FSub { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::FMult { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::FDiv { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::FComp { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::FLoad { src, dst } => (src, dst, variant).hash(state),
+            Instruction::FLoadAddImm { src, add, dst } => (src, add, dst, variant).hash(state),
+            Instruction::FLoadAdd { src, add, dst } => (src, add, dst, variant).hash(state),
+            Instruction::FStore { src, dst } => (src, dst, variant).hash(state),
+            Instruction::FStoreAddImm { src, add, dst } => (src, add, dst, variant).hash(state),
+            Instruction::FStoreAdd { src, add, dst } => (src, add, dst, variant).hash(state),
+            Instruction::FRead(s) => (s, variant).hash(state),
+            Instruction::IRead(s) => (s, variant).hash(state),
+            Instruction::FWrite(s) => (s, variant).hash(state),
+            Instruction::IWrite(s) => (s, variant).hash(state),
+            Instruction::SWrite(s) => (s, variant).hash(state),
+            Instruction::Push(s) => (s, variant).hash(state),
+            Instruction::PushR(s) => (s, variant).hash(state),
+            Instruction::Pop
+            | Instruction::Ret
+            | Instruction::StAdd
+            | Instruction::StSub
+            | Instruction::StMul
+            | Instruction::StDiv
+            | Instruction::StLShift
+            | Instruction::StRShift
+            | Instruction::StComp
+            | Instruction::StAnd
+            | Instruction::StOr
+            | Instruction::StNot
+            | Instruction::StLoad
+            | Instruction::StStore
+            | Instruction::StTestEQ
+            | Instruction::StTestNE
+            | Instruction::StTestGT
+            | Instruction::StTestGE
+            | Instruction::StTestLT
+            | Instruction::StTestLE
+            | Instruction::StFAdd
+            | Instruction::StFSub
+            | Instruction::StFMul
+            | Instruction::StFDiv
+            | Instruction::StFComp
+            | Instruction::StFLoad
+            | Instruction::StFStore
+            | Instruction::StFRead
+            | Instruction::StIRead
+            | Instruction::StFWrite
+            | Instruction::StIWrite
+            | Instruction::StSwrite
+            | Instruction::StJump
+            | Instruction::Data
+            | Instruction::Text => variant.hash(state),
+            Instruction::Frame { name, size, params } => (name, size, params, variant).hash(state),
+            Instruction::Global { name, size, align } => (name, size, align, variant).hash(state),
+            Instruction::String { name, content } => (name, content, variant).hash(state),
+            Instruction::Float { name, content } => (name, content.to_bits(), variant).hash(state),
+            Instruction::Label(s) => (variant, s).hash(state),
+        };
+    }
+}
+
+impl PartialEq for Instruction {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::I2I {
+                    src: l_src,
+                    dst: l_dst,
+                },
+                Self::I2I {
+                    src: r_src,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_dst == r_dst,
+            (
+                Self::Add {
+                    src_a: l_src_a,
+                    src_b: l_src_b,
+                    dst: l_dst,
+                },
+                Self::Add {
+                    src_a: r_src_a,
+                    src_b: r_src_b,
+                    dst: r_dst,
+                },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::Sub {
+                    src_a: l_src_a,
+                    src_b: l_src_b,
+                    dst: l_dst,
+                },
+                Self::Sub {
+                    src_a: r_src_a,
+                    src_b: r_src_b,
+                    dst: r_dst,
+                },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::Mult {
+                    src_a: l_src_a,
+                    src_b: l_src_b,
+                    dst: l_dst,
+                },
+                Self::Mult {
+                    src_a: r_src_a,
+                    src_b: r_src_b,
+                    dst: r_dst,
+                },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::LShift {
+                    src_a: l_src_a,
+                    src_b: l_src_b,
+                    dst: l_dst,
+                },
+                Self::LShift {
+                    src_a: r_src_a,
+                    src_b: r_src_b,
+                    dst: r_dst,
+                },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::RShift {
+                    src_a: l_src_a,
+                    src_b: l_src_b,
+                    dst: l_dst,
+                },
+                Self::RShift {
+                    src_a: r_src_a,
+                    src_b: r_src_b,
+                    dst: r_dst,
+                },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::Mod {
+                    src_a: l_src_a,
+                    src_b: l_src_b,
+                    dst: l_dst,
+                },
+                Self::Mod {
+                    src_a: r_src_a,
+                    src_b: r_src_b,
+                    dst: r_dst,
+                },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::And {
+                    src_a: l_src_a,
+                    src_b: l_src_b,
+                    dst: l_dst,
+                },
+                Self::And {
+                    src_a: r_src_a,
+                    src_b: r_src_b,
+                    dst: r_dst,
+                },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::Or {
+                    src_a: l_src_a,
+                    src_b: l_src_b,
+                    dst: l_dst,
+                },
+                Self::Or {
+                    src_a: r_src_a,
+                    src_b: r_src_b,
+                    dst: r_dst,
+                },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::Not {
+                    src: l_src,
+                    dst: l_dst,
+                },
+                Self::Not {
+                    src: r_src,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_dst == r_dst,
+            (
+                Self::ImmAdd {
+                    src: l_src,
+                    konst: l_konst,
+                    dst: l_dst,
+                },
+                Self::ImmAdd {
+                    src: r_src,
+                    konst: r_konst,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
+            (
+                Self::ImmSub {
+                    src: l_src,
+                    konst: l_konst,
+                    dst: l_dst,
+                },
+                Self::ImmSub {
+                    src: r_src,
+                    konst: r_konst,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
+            (
+                Self::ImmMult {
+                    src: l_src,
+                    konst: l_konst,
+                    dst: l_dst,
+                },
+                Self::ImmMult {
+                    src: r_src,
+                    konst: r_konst,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
+            (
+                Self::ImmLShift {
+                    src: l_src,
+                    konst: l_konst,
+                    dst: l_dst,
+                },
+                Self::ImmLShift {
+                    src: r_src,
+                    konst: r_konst,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
+            (
+                Self::ImmRShift {
+                    src: l_src,
+                    konst: l_konst,
+                    dst: l_dst,
+                },
+                Self::ImmRShift {
+                    src: r_src,
+                    konst: r_konst,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
+            (
+                Self::ImmLoad {
+                    src: l_src,
+                    dst: l_dst,
+                },
+                Self::ImmLoad {
+                    src: r_src,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_dst == r_dst,
+            (
+                Self::Load {
+                    src: l_src,
+                    dst: l_dst,
+                },
+                Self::Load {
+                    src: r_src,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_dst == r_dst,
+            (
+                Self::LoadAddImm {
+                    src: l_src,
+                    add: l_add,
+                    dst: l_dst,
+                },
+                Self::LoadAddImm {
+                    src: r_src,
+                    add: r_add,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
+            (
+                Self::LoadAdd {
+                    src: l_src,
+                    add: l_add,
+                    dst: l_dst,
+                },
+                Self::LoadAdd {
+                    src: r_src,
+                    add: r_add,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
+            (
+                Self::Store {
+                    src: l_src,
+                    dst: l_dst,
+                },
+                Self::Store {
+                    src: r_src,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_dst == r_dst,
+            (
+                Self::StoreAddImm {
+                    src: l_src,
+                    add: l_add,
+                    dst: l_dst,
+                },
+                Self::StoreAddImm {
+                    src: r_src,
+                    add: r_add,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
+            (
+                Self::StoreAdd {
+                    src: l_src,
+                    add: l_add,
+                    dst: l_dst,
+                },
+                Self::StoreAdd {
+                    src: r_src,
+                    add: r_add,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
+            (
+                Self::CmpLT {
+                    a: l_a,
+                    b: l_b,
+                    dst: l_dst,
+                },
+                Self::CmpLT {
+                    a: r_a,
+                    b: r_b,
+                    dst: r_dst,
+                },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+            (
+                Self::CmpLE {
+                    a: l_a,
+                    b: l_b,
+                    dst: l_dst,
+                },
+                Self::CmpLE {
+                    a: r_a,
+                    b: r_b,
+                    dst: r_dst,
+                },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+            (
+                Self::CmpGT {
+                    a: l_a,
+                    b: l_b,
+                    dst: l_dst,
+                },
+                Self::CmpGT {
+                    a: r_a,
+                    b: r_b,
+                    dst: r_dst,
+                },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+            (
+                Self::CmpGE {
+                    a: l_a,
+                    b: l_b,
+                    dst: l_dst,
+                },
+                Self::CmpGE {
+                    a: r_a,
+                    b: r_b,
+                    dst: r_dst,
+                },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+            (
+                Self::CmpEQ {
+                    a: l_a,
+                    b: l_b,
+                    dst: l_dst,
+                },
+                Self::CmpEQ {
+                    a: r_a,
+                    b: r_b,
+                    dst: r_dst,
+                },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+            (
+                Self::CmpNE {
+                    a: l_a,
+                    b: l_b,
+                    dst: l_dst,
+                },
+                Self::CmpNE {
+                    a: r_a,
+                    b: r_b,
+                    dst: r_dst,
+                },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+            (
+                Self::Comp {
+                    a: l_a,
+                    b: l_b,
+                    dst: l_dst,
+                },
+                Self::Comp {
+                    a: r_a,
+                    b: r_b,
+                    dst: r_dst,
+                },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+            (
+                Self::TestEQ {
+                    test: l_test,
+                    dst: l_dst,
+                },
+                Self::TestEQ {
+                    test: r_test,
+                    dst: r_dst,
+                },
+            ) => l_test == r_test && l_dst == r_dst,
+            (
+                Self::TestNE {
+                    test: l_test,
+                    dst: l_dst,
+                },
+                Self::TestNE {
+                    test: r_test,
+                    dst: r_dst,
+                },
+            ) => l_test == r_test && l_dst == r_dst,
+            (
+                Self::TestGT {
+                    test: l_test,
+                    dst: l_dst,
+                },
+                Self::TestGT {
+                    test: r_test,
+                    dst: r_dst,
+                },
+            ) => l_test == r_test && l_dst == r_dst,
+            (
+                Self::TestGE {
+                    test: l_test,
+                    dst: l_dst,
+                },
+                Self::TestGE {
+                    test: r_test,
+                    dst: r_dst,
+                },
+            ) => l_test == r_test && l_dst == r_dst,
+            (
+                Self::TestLT {
+                    test: l_test,
+                    dst: l_dst,
+                },
+                Self::TestLT {
+                    test: r_test,
+                    dst: r_dst,
+                },
+            ) => l_test == r_test && l_dst == r_dst,
+            (
+                Self::TestLE {
+                    test: l_test,
+                    dst: l_dst,
+                },
+                Self::TestLE {
+                    test: r_test,
+                    dst: r_dst,
+                },
+            ) => l_test == r_test && l_dst == r_dst,
+            (Self::ImmJump(l0), Self::ImmJump(r0)) => l0 == r0,
+            (Self::Jump(l0), Self::Jump(r0)) => l0 == r0,
+            (
+                Self::Call {
+                    name: l_name,
+                    args: l_args,
+                },
+                Self::Call {
+                    name: r_name,
+                    args: r_args,
+                },
+            ) => l_name == r_name && l_args == r_args,
+            (
+                Self::ImmCall {
+                    name: l_name,
+                    args: l_args,
+                    ret: l_ret,
+                },
+                Self::ImmCall {
+                    name: r_name,
+                    args: r_args,
+                    ret: r_ret,
+                },
+            ) => l_name == r_name && l_args == r_args && l_ret == r_ret,
+            (
+                Self::ImmRCall {
+                    reg: l_reg,
+                    args: l_args,
+                    ret: l_ret,
+                },
+                Self::ImmRCall {
+                    reg: r_reg,
+                    args: r_args,
+                    ret: r_ret,
+                },
+            ) => l_reg == r_reg && l_args == r_args && l_ret == r_ret,
+            (Self::ImmRet(l0), Self::ImmRet(r0)) => l0 == r0,
+            (
+                Self::CbrT {
+                    cond: l_cond,
+                    loc: l_loc,
+                },
+                Self::CbrT {
+                    cond: r_cond,
+                    loc: r_loc,
+                },
+            ) => l_cond == r_cond && l_loc == r_loc,
+            (
+                Self::CbrF {
+                    cond: l_cond,
+                    loc: l_loc,
+                },
+                Self::CbrF {
+                    cond: r_cond,
+                    loc: r_loc,
+                },
+            ) => l_cond == r_cond && l_loc == r_loc,
+            (
+                Self::CbrLT {
+                    a: l_a,
+                    b: l_b,
+                    loc: l_loc,
+                },
+                Self::CbrLT {
+                    a: r_a,
+                    b: r_b,
+                    loc: r_loc,
+                },
+            ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
+            (
+                Self::CbrLE {
+                    a: l_a,
+                    b: l_b,
+                    loc: l_loc,
+                },
+                Self::CbrLE {
+                    a: r_a,
+                    b: r_b,
+                    loc: r_loc,
+                },
+            ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
+            (
+                Self::CbrGT {
+                    a: l_a,
+                    b: l_b,
+                    loc: l_loc,
+                },
+                Self::CbrGT {
+                    a: r_a,
+                    b: r_b,
+                    loc: r_loc,
+                },
+            ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
+            (
+                Self::CbrGE {
+                    a: l_a,
+                    b: l_b,
+                    loc: l_loc,
+                },
+                Self::CbrGE {
+                    a: r_a,
+                    b: r_b,
+                    loc: r_loc,
+                },
+            ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
+            (
+                Self::CbrEQ {
+                    a: l_a,
+                    b: l_b,
+                    loc: l_loc,
+                },
+                Self::CbrEQ {
+                    a: r_a,
+                    b: r_b,
+                    loc: r_loc,
+                },
+            ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
+            (
+                Self::CbrNE {
+                    a: l_a,
+                    b: l_b,
+                    loc: l_loc,
+                },
+                Self::CbrNE {
+                    a: r_a,
+                    b: r_b,
+                    loc: r_loc,
+                },
+            ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
+            (
+                Self::F2I {
+                    src: l_src,
+                    dst: l_dst,
+                },
+                Self::F2I {
+                    src: r_src,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_dst == r_dst,
+            (
+                Self::I2F {
+                    src: l_src,
+                    dst: l_dst,
+                },
+                Self::I2F {
+                    src: r_src,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_dst == r_dst,
+            (
+                Self::F2F {
+                    src: l_src,
+                    dst: l_dst,
+                },
+                Self::F2F {
+                    src: r_src,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_dst == r_dst,
+            (
+                Self::FAdd {
+                    src_a: l_src_a,
+                    src_b: l_src_b,
+                    dst: l_dst,
+                },
+                Self::FAdd {
+                    src_a: r_src_a,
+                    src_b: r_src_b,
+                    dst: r_dst,
+                },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::FSub {
+                    src_a: l_src_a,
+                    src_b: l_src_b,
+                    dst: l_dst,
+                },
+                Self::FSub {
+                    src_a: r_src_a,
+                    src_b: r_src_b,
+                    dst: r_dst,
+                },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::FMult {
+                    src_a: l_src_a,
+                    src_b: l_src_b,
+                    dst: l_dst,
+                },
+                Self::FMult {
+                    src_a: r_src_a,
+                    src_b: r_src_b,
+                    dst: r_dst,
+                },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::FDiv {
+                    src_a: l_src_a,
+                    src_b: l_src_b,
+                    dst: l_dst,
+                },
+                Self::FDiv {
+                    src_a: r_src_a,
+                    src_b: r_src_b,
+                    dst: r_dst,
+                },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::FComp {
+                    src_a: l_src_a,
+                    src_b: l_src_b,
+                    dst: l_dst,
+                },
+                Self::FComp {
+                    src_a: r_src_a,
+                    src_b: r_src_b,
+                    dst: r_dst,
+                },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::FLoad {
+                    src: l_src,
+                    dst: l_dst,
+                },
+                Self::FLoad {
+                    src: r_src,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_dst == r_dst,
+            (
+                Self::FLoadAddImm {
+                    src: l_src,
+                    add: l_add,
+                    dst: l_dst,
+                },
+                Self::FLoadAddImm {
+                    src: r_src,
+                    add: r_add,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
+            (
+                Self::FLoadAdd {
+                    src: l_src,
+                    add: l_add,
+                    dst: l_dst,
+                },
+                Self::FLoadAdd {
+                    src: r_src,
+                    add: r_add,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
+            (
+                Self::FStore {
+                    src: l_src,
+                    dst: l_dst,
+                },
+                Self::FStore {
+                    src: r_src,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_dst == r_dst,
+            (
+                Self::FStoreAddImm {
+                    src: l_src,
+                    add: l_add,
+                    dst: l_dst,
+                },
+                Self::FStoreAddImm {
+                    src: r_src,
+                    add: r_add,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
+            (
+                Self::FStoreAdd {
+                    src: l_src,
+                    add: l_add,
+                    dst: l_dst,
+                },
+                Self::FStoreAdd {
+                    src: r_src,
+                    add: r_add,
+                    dst: r_dst,
+                },
+            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
+            (Self::FRead(l0), Self::FRead(r0)) => l0 == r0,
+            (Self::IRead(l0), Self::IRead(r0)) => l0 == r0,
+            (Self::FWrite(l0), Self::FWrite(r0)) => l0 == r0,
+            (Self::IWrite(l0), Self::IWrite(r0)) => l0 == r0,
+            (Self::SWrite(l0), Self::SWrite(r0)) => l0 == r0,
+            (Self::Push(l0), Self::Push(r0)) => l0 == r0,
+            (Self::PushR(l0), Self::PushR(r0)) => l0 == r0,
+            (
+                Self::Frame {
+                    name: l_name,
+                    size: l_size,
+                    params: l_params,
+                },
+                Self::Frame {
+                    name: r_name,
+                    size: r_size,
+                    params: r_params,
+                },
+            ) => l_name == r_name && l_size == r_size && l_params == r_params,
+            (
+                Self::Global {
+                    name: l_name,
+                    size: l_size,
+                    align: l_align,
+                },
+                Self::Global {
+                    name: r_name,
+                    size: r_size,
+                    align: r_align,
+                },
+            ) => l_name == r_name && l_size == r_size && l_align == r_align,
+            (
+                Self::String {
+                    name: l_name,
+                    content: l_content,
+                },
+                Self::String {
+                    name: r_name,
+                    content: r_content,
+                },
+            ) => l_name == r_name && l_content == r_content,
+            (
+                Self::Float {
+                    name: l_name,
+                    content: l_content,
+                },
+                Self::Float {
+                    name: r_name,
+                    content: r_content,
+                },
+            ) => l_name == r_name && l_content.to_bits() == r_content.to_bits(),
+            (Self::Label(l0), Self::Label(r0)) => l0 == r0,
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+impl Eq for Instruction {}
+impl fmt::Display for Instruction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Instruction::I2I { src, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
+            }
+            Instruction::Add { src_a, src_b, dst } => {
+                writeln!(
+                    f,
+                    "    {} {}, {} => {}",
+                    self.inst_name(),
+                    src_a,
+                    src_b,
+                    dst
+                )
+            }
+            Instruction::Sub { src_a, src_b, dst } => {
+                writeln!(
+                    f,
+                    "    {} {}, {} => {}",
+                    self.inst_name(),
+                    src_a,
+                    src_b,
+                    dst
+                )
+            }
+            Instruction::Mult { src_a, src_b, dst } => {
+                writeln!(
+                    f,
+                    "    {} {}, {} => {}",
+                    self.inst_name(),
+                    src_a,
+                    src_b,
+                    dst
+                )
+            }
+            Instruction::LShift { src_a, src_b, dst } => {
+                writeln!(
+                    f,
+                    "    {} {}, {} => {}",
+                    self.inst_name(),
+                    src_a,
+                    src_b,
+                    dst
+                )
+            }
+            Instruction::RShift { src_a, src_b, dst } => {
+                writeln!(
+                    f,
+                    "    {} {}, {} => {}",
+                    self.inst_name(),
+                    src_a,
+                    src_b,
+                    dst
+                )
+            }
+            Instruction::Mod { src_a, src_b, dst } => {
+                writeln!(
+                    f,
+                    "    {} {}, {} => {}",
+                    self.inst_name(),
+                    src_a,
+                    src_b,
+                    dst
+                )
+            }
+            Instruction::And { src_a, src_b, dst } => {
+                writeln!(
+                    f,
+                    "    {} {}, {} => {}",
+                    self.inst_name(),
+                    src_a,
+                    src_b,
+                    dst
+                )
+            }
+            Instruction::Or { src_a, src_b, dst } => {
+                writeln!(
+                    f,
+                    "    {} {}, {} => {}",
+                    self.inst_name(),
+                    src_a,
+                    src_b,
+                    dst
+                )
+            }
+            Instruction::Not { src, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
+            }
+            Instruction::ImmAdd { src, konst, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, konst, dst)
+            }
+            Instruction::ImmSub { src, konst, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, konst, dst)
+            }
+            Instruction::ImmMult { src, konst, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, konst, dst)
+            }
+            Instruction::ImmLShift { src, konst, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, konst, dst)
+            }
+            Instruction::ImmRShift { src, konst, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, konst, dst)
+            }
+            Instruction::ImmLoad { src, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
+            }
+            Instruction::Load { src, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
+            }
+            Instruction::LoadAddImm { src, add, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
+            }
+            Instruction::LoadAdd { src, add, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
+            }
+            Instruction::Store { src, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
+            }
+            Instruction::StoreAddImm { src, add, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
+            }
+            Instruction::StoreAdd { src, add, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
+            }
+            Instruction::CmpLT { a, b, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), a, b, dst)
+            }
+            Instruction::CmpLE { a, b, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), a, b, dst)
+            }
+            Instruction::CmpGT { a, b, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), a, b, dst)
+            }
+            Instruction::CmpGE { a, b, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), a, b, dst)
+            }
+            Instruction::CmpEQ { a, b, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), a, b, dst)
+            }
+            Instruction::CmpNE { a, b, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), a, b, dst)
+            }
+            Instruction::Comp { a, b, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), a, b, dst)
+            }
+            Instruction::TestEQ { test, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), test, dst)
+            }
+            Instruction::TestNE { test, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), test, dst)
+            }
+            Instruction::TestGT { test, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), test, dst)
+            }
+            Instruction::TestGE { test, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), test, dst)
+            }
+            Instruction::TestLT { test, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), test, dst)
+            }
+            Instruction::TestLE { test, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), test, dst)
+            }
+            Instruction::ImmJump(label) => writeln!(f, "    {} -> {}", self.inst_name(), label),
+            Instruction::Jump(reg) => writeln!(f, "    {} -> {}", self.inst_name(), reg),
+            Instruction::Call { name, args } => writeln!(
+                f,
+                "    {} {} {}",
+                self.inst_name(),
+                name,
+                args.iter()
+                    .map(|r| r.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+            Instruction::ImmCall { name, args, ret } => writeln!(
+                f,
+                "    {} {} {} => {}",
+                self.inst_name(),
+                name,
+                args.iter()
+                    .map(|r| r.to_string())
+                    .collect::<Vec<_>>()
+                    .join(","),
+                ret
+            ),
+            Instruction::ImmRCall { reg, args, ret } => writeln!(
+                f,
+                "    {} {} {} => {}",
+                self.inst_name(),
+                reg,
+                args.iter()
+                    .map(|r| r.to_string())
+                    .collect::<Vec<_>>()
+                    .join(","),
+                ret
+            ),
+            Instruction::ImmRet(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
+            Instruction::CbrT { cond, loc } => {
+                writeln!(f, "    {} {} -> {}", self.inst_name(), cond, loc)
+            }
+            Instruction::CbrF { cond, loc } => {
+                writeln!(f, "    {} {} -> {}", self.inst_name(), cond, loc)
+            }
+            Instruction::CbrLT { a, b, loc } => {
+                writeln!(f, "    {} {}, {} -> {}", self.inst_name(), a, b, loc)
+            }
+            Instruction::CbrLE { a, b, loc } => {
+                writeln!(f, "    {} {}, {} -> {}", self.inst_name(), a, b, loc)
+            }
+            Instruction::CbrGT { a, b, loc } => {
+                writeln!(f, "    {} {}, {} -> {}", self.inst_name(), a, b, loc)
+            }
+            Instruction::CbrGE { a, b, loc } => {
+                writeln!(f, "    {} {}, {} -> {}", self.inst_name(), a, b, loc)
+            }
+            Instruction::CbrEQ { a, b, loc } => {
+                writeln!(f, "    {} {}, {} -> {}", self.inst_name(), a, b, loc)
+            }
+            Instruction::CbrNE { a, b, loc } => {
+                writeln!(f, "    {} {}, {} -> {}", self.inst_name(), a, b, loc)
+            }
+            Instruction::F2I { src, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
+            }
+            Instruction::I2F { src, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
+            }
+            Instruction::F2F { src, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
+            }
+            Instruction::FAdd { src_a, src_b, dst } => {
+                writeln!(
+                    f,
+                    "    {} {}, {} => {}",
+                    self.inst_name(),
+                    src_a,
+                    src_b,
+                    dst
+                )
+            }
+            Instruction::FSub { src_a, src_b, dst } => {
+                writeln!(
+                    f,
+                    "    {} {}, {} => {}",
+                    self.inst_name(),
+                    src_a,
+                    src_b,
+                    dst
+                )
+            }
+            Instruction::FMult { src_a, src_b, dst } => {
+                writeln!(
+                    f,
+                    "    {} {}, {} => {}",
+                    self.inst_name(),
+                    src_a,
+                    src_b,
+                    dst
+                )
+            }
+            Instruction::FDiv { src_a, src_b, dst } => {
+                writeln!(
+                    f,
+                    "    {} {}, {} => {}",
+                    self.inst_name(),
+                    src_a,
+                    src_b,
+                    dst
+                )
+            }
+            Instruction::FComp { src_a, src_b, dst } => {
+                writeln!(
+                    f,
+                    "    {} {}, {} => {}",
+                    self.inst_name(),
+                    src_a,
+                    src_b,
+                    dst
+                )
+            }
+            Instruction::FLoad { src, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
+            }
+            Instruction::FLoadAddImm { src, add, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
+            }
+            Instruction::FLoadAdd { src, add, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
+            }
+            Instruction::FStore { src, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
+            }
+            Instruction::FStoreAddImm { src, add, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
+            }
+            Instruction::FStoreAdd { src, add, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
+            }
+            Instruction::FRead(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
+            Instruction::IRead(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
+            Instruction::FWrite(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
+            Instruction::IWrite(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
+            Instruction::SWrite(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
+            Instruction::Push(val) => writeln!(f, "    {} {}", self.inst_name(), val),
+            Instruction::PushR(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
+            Instruction::Frame { name, size, params } => {
+                writeln!(
+                    f,
+                    ".{} {} {} {}",
+                    self.inst_name(),
+                    name,
+                    size,
+                    params
+                        .iter()
+                        .map(|r| r.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+            }
+            Instruction::Global { name, size, align } => {
+                writeln!(f, "    .{} {} {} {}", self.inst_name(), name, size, align)
+            }
+            Instruction::String { name, content } => {
+                writeln!(f, "    .{} {} {}", self.inst_name(), name, content)
+            }
+            Instruction::Float { name, content } => {
+                writeln!(f, "    .{} {} {}", self.inst_name(), name, content)
+            }
+            Instruction::Label(label) => writeln!(f, "{}", label),
+            Instruction::Text | Instruction::Data => writeln!(f, "    .{}", self.inst_name()),
+            _ => writeln!(f, "    .{}", self.inst_name()),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Operand<'a> {
     Register(&'a Reg),
     Location(&'a Loc),
     Value(&'a Val),
+}
+
+impl Operand<'_> {
+    pub fn clone_to_reg(&self) -> Reg {
+        match self {
+            Operand::Register(r) => **r,
+            _ => panic!("`Operand<'_>` is not a register"),
+        }
+    }
 }
 
 impl Instruction {
@@ -290,16 +1550,308 @@ impl Instruction {
     // }
     /// Optional target register for 3 address instructions.
     pub fn target_reg(&self) -> Option<&Reg> {
-        todo!()
+        match self {
+            Instruction::I2I { dst, .. } => Some(dst),
+            Instruction::Add { dst, .. } => Some(dst),
+            Instruction::Sub { dst, .. } => Some(dst),
+            Instruction::Mult { dst, .. } => Some(dst),
+            Instruction::LShift { dst, .. } => Some(dst),
+            Instruction::RShift { dst, .. } => Some(dst),
+            Instruction::Mod { dst, .. } => Some(dst),
+            Instruction::And { dst, .. } => Some(dst),
+            Instruction::Or { dst, .. } => Some(dst),
+            Instruction::Not { dst, .. } => Some(dst),
+            Instruction::ImmAdd { dst, .. } => Some(dst),
+            Instruction::ImmSub { dst, .. } => Some(dst),
+            Instruction::ImmMult { dst, .. } => Some(dst),
+            Instruction::ImmLShift { dst, .. } => Some(dst),
+            Instruction::ImmRShift { dst, .. } => Some(dst),
+            Instruction::ImmLoad { dst, .. } => Some(dst),
+            Instruction::Load { dst, .. } => Some(dst),
+            Instruction::LoadAddImm { dst, .. } => Some(dst),
+            Instruction::LoadAdd { dst, .. } => Some(dst),
+            Instruction::Store { dst, .. } => Some(dst),
+            Instruction::StoreAddImm { dst, .. } => Some(dst),
+            Instruction::StoreAdd { dst, .. } => Some(dst),
+            Instruction::CmpLT { dst, .. } => Some(dst),
+            Instruction::CmpLE { dst, .. } => Some(dst),
+            Instruction::CmpGT { dst, .. } => Some(dst),
+            Instruction::CmpGE { dst, .. } => Some(dst),
+            Instruction::CmpEQ { dst, .. } => Some(dst),
+            Instruction::CmpNE { dst, .. } => Some(dst),
+            Instruction::Comp { dst, .. } => Some(dst),
+            Instruction::TestEQ { dst, .. } => Some(dst),
+            Instruction::TestNE { dst, .. } => Some(dst),
+            Instruction::TestGT { dst, .. } => Some(dst),
+            Instruction::TestGE { dst, .. } => Some(dst),
+            Instruction::TestLT { dst, .. } => Some(dst),
+            Instruction::TestLE { dst, .. } => Some(dst),
+            Instruction::F2I { dst, .. } => Some(dst),
+            Instruction::I2F { dst, .. } => Some(dst),
+            Instruction::F2F { dst, .. } => Some(dst),
+            Instruction::FAdd { dst, .. } => Some(dst),
+            Instruction::FSub { dst, .. } => Some(dst),
+            Instruction::FMult { dst, .. } => Some(dst),
+            Instruction::FDiv { dst, .. } => Some(dst),
+            Instruction::FComp { dst, .. } => Some(dst),
+            Instruction::FLoad { dst, .. } => Some(dst),
+            Instruction::FLoadAddImm { dst, .. } => Some(dst),
+            Instruction::FLoadAdd { dst, .. } => Some(dst),
+            Instruction::FStore { dst, .. } => Some(dst),
+            Instruction::FStoreAddImm { dst, .. } => Some(dst),
+            Instruction::FStoreAdd { dst, .. } => Some(dst),
+            _ => None,
+        }
     }
 
     /// The return value is (left, right) `Option<Operand<'_>>`.
     pub fn operands(&self) -> (Option<Operand<'_>>, Option<Operand<'_>>) {
-        todo!()
+        match self {
+            Instruction::I2I { src, .. } => (Some(Operand::Register(src)), None),
+            Instruction::Add { src_a, src_b, .. } => (
+                Some(Operand::Register(src_a)),
+                Some(Operand::Register(src_b)),
+            ),
+            Instruction::Sub { src_a, src_b, .. } => (
+                Some(Operand::Register(src_a)),
+                Some(Operand::Register(src_b)),
+            ),
+            Instruction::Mult { src_a, src_b, .. } => (
+                Some(Operand::Register(src_a)),
+                Some(Operand::Register(src_b)),
+            ),
+            Instruction::LShift { src_a, src_b, .. } => (
+                Some(Operand::Register(src_a)),
+                Some(Operand::Register(src_b)),
+            ),
+            Instruction::RShift { src_a, src_b, .. } => (
+                Some(Operand::Register(src_a)),
+                Some(Operand::Register(src_b)),
+            ),
+            Instruction::Mod { src_a, src_b, .. } => (
+                Some(Operand::Register(src_a)),
+                Some(Operand::Register(src_b)),
+            ),
+            Instruction::And { src_a, src_b, .. } => (
+                Some(Operand::Register(src_a)),
+                Some(Operand::Register(src_b)),
+            ),
+            Instruction::Or { src_a, src_b, .. } => (
+                Some(Operand::Register(src_a)),
+                Some(Operand::Register(src_b)),
+            ),
+            Instruction::Not { src, .. } => (Some(Operand::Register(src)), None),
+            Instruction::ImmAdd { src, konst, .. } => {
+                (Some(Operand::Register(src)), Some(Operand::Value(konst)))
+            }
+            Instruction::ImmSub { src, konst, .. } => {
+                (Some(Operand::Register(src)), Some(Operand::Value(konst)))
+            }
+            Instruction::ImmMult { src, konst, .. } => {
+                (Some(Operand::Register(src)), Some(Operand::Value(konst)))
+            }
+            Instruction::ImmLShift { src, konst, .. } => {
+                (Some(Operand::Register(src)), Some(Operand::Value(konst)))
+            }
+            Instruction::ImmRShift { src, konst, .. } => {
+                (Some(Operand::Register(src)), Some(Operand::Value(konst)))
+            }
+            Instruction::ImmLoad { src, .. } => (Some(Operand::Value(src)), None),
+            Instruction::Load { src, .. } => (Some(Operand::Register(src)), None),
+            Instruction::LoadAddImm { src, add, .. } => {
+                (Some(Operand::Register(src)), Some(Operand::Value(add)))
+            }
+            Instruction::LoadAdd { src, add, .. } => {
+                (Some(Operand::Register(src)), Some(Operand::Register(add)))
+            }
+            Instruction::Store { src, .. } => (Some(Operand::Register(src)), None),
+            Instruction::StoreAddImm { src, add, .. } => {
+                (Some(Operand::Register(src)), Some(Operand::Value(add)))
+            }
+            Instruction::StoreAdd { src, add, .. } => {
+                (Some(Operand::Register(src)), Some(Operand::Register(add)))
+            }
+            Instruction::CmpLT { a, b, .. } => {
+                (Some(Operand::Register(a)), Some(Operand::Register(b)))
+            }
+            Instruction::CmpLE { a, b, .. } => {
+                (Some(Operand::Register(a)), Some(Operand::Register(b)))
+            }
+            Instruction::CmpGT { a, b, .. } => {
+                (Some(Operand::Register(a)), Some(Operand::Register(b)))
+            }
+            Instruction::CmpGE { a, b, .. } => {
+                (Some(Operand::Register(a)), Some(Operand::Register(b)))
+            }
+            Instruction::CmpEQ { a, b, .. } => {
+                (Some(Operand::Register(a)), Some(Operand::Register(b)))
+            }
+            Instruction::CmpNE { a, b, .. } => {
+                (Some(Operand::Register(a)), Some(Operand::Register(b)))
+            }
+            Instruction::Comp { a, b, .. } => {
+                (Some(Operand::Register(a)), Some(Operand::Register(b)))
+            }
+            Instruction::TestEQ { test, .. } => (Some(Operand::Register(test)), None),
+            Instruction::TestNE { test, .. } => (Some(Operand::Register(test)), None),
+            Instruction::TestGT { test, .. } => (Some(Operand::Register(test)), None),
+            Instruction::TestGE { test, .. } => (Some(Operand::Register(test)), None),
+            Instruction::TestLT { test, .. } => (Some(Operand::Register(test)), None),
+            Instruction::TestLE { test, .. } => (Some(Operand::Register(test)), None),
+            Instruction::F2I { src, .. } => (Some(Operand::Register(src)), None),
+            Instruction::I2F { src, .. } => (Some(Operand::Register(src)), None),
+            Instruction::F2F { src, .. } => (Some(Operand::Register(src)), None),
+            Instruction::FAdd { src_a, src_b, .. } => (
+                Some(Operand::Register(src_a)),
+                Some(Operand::Register(src_b)),
+            ),
+            Instruction::FSub { src_a, src_b, .. } => (
+                Some(Operand::Register(src_a)),
+                Some(Operand::Register(src_b)),
+            ),
+            Instruction::FMult { src_a, src_b, .. } => (
+                Some(Operand::Register(src_a)),
+                Some(Operand::Register(src_b)),
+            ),
+            Instruction::FDiv { src_a, src_b, .. } => (
+                Some(Operand::Register(src_a)),
+                Some(Operand::Register(src_b)),
+            ),
+            Instruction::FComp { src_a, src_b, .. } => (
+                Some(Operand::Register(src_a)),
+                Some(Operand::Register(src_b)),
+            ),
+            Instruction::FLoad { src, .. } => todo!(),
+            Instruction::FLoadAddImm { src, add, .. } => {
+                (Some(Operand::Register(src)), Some(Operand::Value(add)))
+            }
+            Instruction::FLoadAdd { src, add, .. } => {
+                (Some(Operand::Register(src)), Some(Operand::Register(add)))
+            }
+            Instruction::FStore { src, .. } => (Some(Operand::Register(src)), None),
+            Instruction::FStoreAddImm { src, add, .. } => {
+                (Some(Operand::Register(src)), Some(Operand::Value(add)))
+            }
+            Instruction::FStoreAdd { src, add, .. } => {
+                (Some(Operand::Register(src)), Some(Operand::Register(add)))
+            }
+            _ => (None, None),
+        }
     }
 
-    pub fn inst_name(&self) -> &str {
-        todo!()
+    pub const fn inst_name(&self) -> &'static str {
+        match self {
+            Instruction::I2I { .. } => "i2i",
+            Instruction::Add { .. } => "add",
+            Instruction::Sub { .. } => "sub",
+            Instruction::Mult { .. } => "mult",
+            Instruction::LShift { .. } => "lshift",
+            Instruction::RShift { .. } => "rshift",
+            Instruction::Mod { .. } => "mod",
+            Instruction::And { .. } => "and",
+            Instruction::Or { .. } => "or",
+            Instruction::Not { .. } => "not",
+            Instruction::ImmAdd { .. } => "addI",
+            Instruction::ImmSub { .. } => "subI",
+            Instruction::ImmMult { .. } => "multI",
+            Instruction::ImmLShift { .. } => "lshiftI",
+            Instruction::ImmRShift { .. } => "rshiftI",
+            Instruction::ImmLoad { .. } => "loadI",
+            Instruction::Load { .. } => "load",
+            Instruction::LoadAddImm { .. } => "loadAI",
+            Instruction::LoadAdd { .. } => "loadAO",
+            Instruction::Store { .. } => "store",
+            Instruction::StoreAddImm { .. } => "storeAI",
+            Instruction::StoreAdd { .. } => "storeAO",
+            Instruction::CmpLT { .. } => "cmp_LT",
+            Instruction::CmpLE { .. } => "cmp_LE",
+            Instruction::CmpGT { .. } => "cmp_GT",
+            Instruction::CmpGE { .. } => "cmp_GE",
+            Instruction::CmpEQ { .. } => "cmp_EQ",
+            Instruction::CmpNE { .. } => "cmp_NE",
+            Instruction::Comp { .. } => "comp",
+            Instruction::TestEQ { .. } => "testeq",
+            Instruction::TestNE { .. } => "testne",
+            Instruction::TestGT { .. } => "testgt",
+            Instruction::TestGE { .. } => "testge",
+            Instruction::TestLT { .. } => "testlt",
+            Instruction::TestLE { .. } => "testle",
+            Instruction::ImmJump(_) => "jumpI",
+            Instruction::Jump(_) => "jump",
+            Instruction::Call { .. } => "call",
+            Instruction::ImmCall { .. } => "icall",
+            Instruction::ImmRCall { .. } => "ircall",
+            Instruction::Ret => "ret",
+            Instruction::ImmRet(_) => "iret",
+            Instruction::CbrT { .. } => "cbr",
+            Instruction::CbrF { .. } => "cbrne",
+            Instruction::CbrLT { .. } => "cbr_LT",
+            Instruction::CbrLE { .. } => "cbr_LE",
+            Instruction::CbrGT { .. } => "cbr_GT",
+            Instruction::CbrGE { .. } => "cbr_GE",
+            Instruction::CbrEQ { .. } => "cbr_EQ",
+            Instruction::CbrNE { .. } => "cbr_NE",
+            Instruction::F2I { .. } => "f2i",
+            Instruction::I2F { .. } => "i2f",
+            Instruction::F2F { .. } => "f2f",
+            Instruction::FAdd { .. } => "fadd",
+            Instruction::FSub { .. } => "fsub",
+            Instruction::FMult { .. } => "fmult",
+            Instruction::FDiv { .. } => "fdiv",
+            Instruction::FComp { .. } => "fcomp",
+            Instruction::FLoad { .. } => "fload",
+            Instruction::FLoadAddImm { .. } => "floadAI",
+            Instruction::FLoadAdd { .. } => "floadAO",
+            Instruction::FStore { .. } => "fstore",
+            Instruction::FStoreAddImm { .. } => "fstoreAI",
+            Instruction::FStoreAdd { .. } => "fstoreAO",
+            Instruction::FRead(_) => "fread",
+            Instruction::IRead(_) => "iread",
+            Instruction::FWrite(_) => "fwrite",
+            Instruction::IWrite(_) => "iwrite",
+            Instruction::SWrite(_) => "swrite",
+            Instruction::Push(_) => "push",
+            Instruction::PushR(_) => "pushr",
+            Instruction::Pop => "pop",
+            Instruction::StAdd => "stadd",
+            Instruction::StSub => "stsub",
+            Instruction::StMul => "stmul",
+            Instruction::StDiv => "stdiv",
+            Instruction::StLShift => "stlshift",
+            Instruction::StRShift => "strshift",
+            Instruction::StComp => "stcomp",
+            Instruction::StAnd => "stand",
+            Instruction::StOr => "stor",
+            Instruction::StNot => "stnot",
+            Instruction::StLoad => "stload",
+            Instruction::StStore => "ststore",
+            Instruction::StTestEQ => "sttesteq",
+            Instruction::StTestNE => "sttestne",
+            Instruction::StTestGT => "sttestgt",
+            Instruction::StTestGE => "sttestge",
+            Instruction::StTestLT => "sttestlt",
+            Instruction::StTestLE => "sttestle",
+            Instruction::StFAdd => "stfadd",
+            Instruction::StFSub => "stfsub",
+            Instruction::StFMul => "stfmul",
+            Instruction::StFDiv => "stfdiv",
+            Instruction::StFComp => "stfcomp",
+            Instruction::StFLoad => "stfload",
+            Instruction::StFStore => "stfstore",
+            Instruction::StFRead => "stfread",
+            Instruction::StIRead => "stiread",
+            Instruction::StFWrite => "stfwrite",
+            Instruction::StIWrite => "stiwrite",
+            Instruction::StSwrite => "stswrite",
+            Instruction::StJump => "stjump",
+            Instruction::Data => "data",
+            Instruction::Text => "text",
+            Instruction::Frame { .. } => "frame",
+            Instruction::Global { .. } => "global",
+            Instruction::String { .. } => "string",
+            Instruction::Float { .. } => "float",
+            Instruction::Label(_) => "label",
+        }
     }
 }
 
@@ -690,7 +2242,7 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
     Ok(instructions)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Block {
     pub label: String,
     /// Keep the instruction around for easy `to_string`ing.
@@ -706,12 +2258,67 @@ pub struct Function {
     pub blk: Vec<Block>,
 }
 
+impl Function {
+    pub fn flatten_block_iter(&self) -> impl Iterator<Item = &Instruction> + '_ {
+        struct Iter<'a> {
+            iter: &'a [Block],
+            inst: Option<&'a Instruction>,
+            blk_idx: usize,
+            inst_idx: usize,
+            first_blk: bool,
+        }
+        impl<'a> Iterator for Iter<'a> {
+            type Item = &'a Instruction;
+            fn next(&mut self) -> Option<Self::Item> {
+                if self.inst.is_some() {
+                    let res = self.inst.take();
+                    self.inst = if self.first_blk {
+                        self.first_blk = false;
+                        self.iter.get(self.blk_idx).map(|b| &b.inst)
+                    } else {
+                        None
+                    };
+                    res
+                } else if let Some(blk) = self.iter.get(self.blk_idx) {
+                    if let Some(inst) = blk.instructions.get(self.inst_idx) {
+                        self.inst_idx += 1;
+                        Some(inst)
+                    } else {
+                        self.blk_idx += 1;
+                        self.inst_idx = 0;
+
+                        self.inst = self.iter.get(self.blk_idx).map(|b| &b.inst);
+                        self.iter.get(self.blk_idx)?.instructions.get(self.inst_idx)
+                    }
+                } else {
+                    None
+                }
+            }
+        }
+        Iter {
+            iter: &self.blk,
+            inst: Some(&self.inst),
+            blk_idx: 0,
+            inst_idx: 0,
+            first_blk: true,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct IlocProgram {
     /// The .text and .data segments of an iloc program.
     pub preamble: Vec<Instruction>,
     /// Basic blocks.
     pub functions: Vec<Function>,
+}
+
+impl IlocProgram {
+    pub fn instruction_iter(&self) -> impl Iterator<Item = &Instruction> {
+        self.preamble
+            .iter()
+            .chain(self.functions.iter().flat_map(|f| f.flatten_block_iter()))
+    }
 }
 
 pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
@@ -731,7 +2338,7 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
                 inst: inst.clone(),
                 blk: vec![Block {
                     label: format!(".L_{}", name),
-                    inst: inst.clone(),
+                    inst: Instruction::Label(format!(".L_{}", name)),
                     instructions: vec![],
                 }],
             });

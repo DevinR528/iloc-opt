@@ -10,6 +10,7 @@
 	.string	.string_const_0, "SUCCESS"
 	.text
 	.frame	main, 0
+
 	loadI	1  => %vr6
 	i2i	%vr6  => %vr4
 	loadI	10  => %vr7
