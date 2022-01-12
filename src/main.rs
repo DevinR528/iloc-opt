@@ -34,6 +34,7 @@ fn main() {
 
         let mut buf = String::new();
         for inst in blocks.instruction_iter() {
+            // println!("{:?}", inst);
             buf.push_str(&inst.to_string())
         }
 

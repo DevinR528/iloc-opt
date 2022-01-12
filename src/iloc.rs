@@ -2287,8 +2287,11 @@ impl Function {
                         self.blk_idx += 1;
                         self.inst_idx = 0;
 
-                        self.inst = self.iter.get(self.blk_idx).map(|b| &b.inst);
-                        self.iter.get(self.blk_idx)?.instructions.get(self.inst_idx)
+                        if let Some(label) = self.iter.get(self.blk_idx).map(|b| &b.inst) {
+                            Some(label)
+                        } else {
+                            self.iter.get(self.blk_idx)?.instructions.get(self.inst_idx)
+                        }
                     }
                 } else {
                     None

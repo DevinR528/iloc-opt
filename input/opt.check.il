@@ -17,7 +17,6 @@
     comp %vr4, %vr7 => %vr8
     testgt %vr8 => %vr9
     cbr %vr9 -> .L0
-    loadI 0 => %vr10
 .L1:
     loadI 0 => %vr10
     comp %vr4, %vr10 => %vr11
@@ -27,7 +26,6 @@
     loadI 0 => %vr10
     mod %vr7, %vr10 => %vr13
     i2i %vr13 => %vr5
-    loadI 1 => %vr6
 .L2:
     loadI 1 => %vr6
     add %vr4, %vr6 => %vr14
@@ -36,7 +34,6 @@
     comp %vr4, %vr7 => %vr8
     testle %vr8 => %vr9
     cbr %vr9 -> .L1
-    loadI .string_const_0 => %vr15
 .L0:
     loadI .string_const_0 => %vr15
     swrite %vr15

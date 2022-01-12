@@ -1,6 +1,6 @@
     .text
 .frame main 8 
-.frame main 8 
+.L_main
     add %vr0, %vr7 => %vr8
     subI %vr2, 1 => %vr7
     add %vr0, %vr7 => %vr9
