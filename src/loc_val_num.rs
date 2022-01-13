@@ -43,6 +43,8 @@ pub fn number_basic_block(mut blk: Block) -> Option<Vec<Instruction>> {
     let mut value_map = HashMap::new();
     let mut back_val_map = HashMap::new();
 
+    // TODO: this will never happen since each new dst/target is a new tmp for the block
+    // as long as the register is an expression register
     let mut changed_dst = HashSet::new();
     let mut used_ops = HashSet::new();
 
@@ -51,22 +53,18 @@ pub fn number_basic_block(mut blk: Block) -> Option<Vec<Instruction>> {
         let dst = expr.target_reg();
 
         match (l, r, dst) {
+            // EXPRESSION REGISTERS
             // Some operation +,-,*,/,>>,etc
             (Some(left), Some(right), Some(dst)) => {
                 // Get value numbers for left and right
                 let l_val = get_value_number(&mut lvn_id, left, &mut value_map, &mut back_val_map);
                 let r_val = get_value_number(&mut lvn_id, right, &mut value_map, &mut back_val_map);
 
-                match expr_map.get(&(l_val, r_val, expr.inst_name())) {
-                    Some(value)
-                        if operands_not_mutated(&l_val, &r_val, &changed_dst, &used_ops) =>
-                    {
-                        reduced.push((*back_val_map.get(value).unwrap(), idx));
-                        value_map.insert(Operand::Register(dst), *value);
-                        back_val_map.insert(*value, Operand::Register(dst));
-                        continue;
-                    }
-                    _ => (),
+                if let Some(value) = expr_map.get(&(l_val, Some(r_val), expr.inst_name())) {
+                    reduced.push((*back_val_map.get(value).unwrap(), idx));
+                    value_map.insert(Operand::Register(dst), *value);
+                    back_val_map.insert(*value, Operand::Register(dst));
+                    continue;
                 }
 
                 // We used these values so if they are mutated they are not candidate's for dedup
@@ -81,31 +79,35 @@ pub fn number_basic_block(mut blk: Block) -> Option<Vec<Instruction>> {
                 // These values have been mutated, eliminating them from potential dedup
                 changed_dst.insert(dst_val);
 
-                expr_map.insert((l_val, r_val, expr.inst_name()), dst_val);
+                expr_map.insert((l_val, Some(r_val), expr.inst_name()), dst_val);
             }
+            // USUALLY VAR REGISTERS
             // This is basically a move/copy
             (Some(src), None, Some(dst)) => {
                 let l_val = get_value_number(&mut lvn_id, src, &mut value_map, &mut back_val_map);
 
-                if operand_not_mutated(&l_val, &changed_dst, &used_ops) {
-                    let dst_val = get_value_number(
-                        &mut lvn_id,
-                        Operand::Register(dst),
-                        &mut value_map,
-                        &mut back_val_map,
-                    );
-
-                    if l_val == dst_val {
-                        // TODO: This can be a second pass dedup'er
-                        eprintln!("We have a redundant copy expression, this is a second pass kinda think")
-                    }
-
-                    // Although the above is a future optimization, keeping track of each local value is needed still
-                    // since the target/destination can be mutated.
-                    changed_dst.insert(dst_val);
+                if let Some(value) = expr_map.get(&(l_val, None, expr.inst_name())) {
+                    reduced.push((*back_val_map.get(value).unwrap(), idx));
+                    value_map.insert(Operand::Register(dst), *value);
+                    back_val_map.insert(*value, Operand::Register(dst));
+                    continue;
                 }
 
+                // if operand_not_mutated(&l_val, &changed_dst, &used_ops) {
+                let dst_val = get_value_number(
+                    &mut lvn_id,
+                    Operand::Register(dst),
+                    &mut value_map,
+                    &mut back_val_map,
+                );
+
+                // Although the above is a future optimization, keeping track of each local value is needed still
+                // since the target/destination can be mutated.
+                changed_dst.insert(dst_val);
                 used_ops.insert(l_val);
+
+                expr_map.insert((l_val, None, expr.inst_name()), dst_val);
+                // }
             }
             // Jumps, rets, push, and I/O instructions
             (Some(src), None, None) => {}
@@ -123,17 +125,25 @@ pub fn number_basic_block(mut blk: Block) -> Option<Vec<Instruction>> {
     let mut new_instr = blk.instructions.clone();
 
     for (copy_prev_result_reg, idx) in &reduced {
+        let inst = new_instr[*idx].inst_name();
+        if inst == "store" {
+            continue;
+        }
         let dst = *new_instr[*idx].target_reg().unwrap();
         let src = copy_prev_result_reg.clone_to_reg();
-        new_instr[*idx] = Instruction::Load { src, dst }
+        if src == dst {
+            new_instr[*idx] = Instruction::SKIP;
+            continue;
+        }
+        new_instr[*idx] = Instruction::I2I { src, dst }
     }
 
-    println!("values: {:?}", value_map);
-    println!("back: {:?}", back_val_map);
-    println!("expr: {:?}", expr_map);
-    println!("reduced: {:?}", reduced);
-    println!("orig inst: {:?}", blk.instructions);
-    println!("opt inst: {:?}", new_instr);
+    // println!("orig inst: {:?}", blk);
+    // println!("values: {:?}", value_map);
+    // println!("back: {:?}", back_val_map);
+    // println!("expr: {:?}", expr_map);
+    // println!("reduced: {:?}", reduced);
+    // println!("opt inst: {:?}", new_instr);
 
     Some(new_instr)
 }

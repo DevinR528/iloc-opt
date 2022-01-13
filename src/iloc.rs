@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt,
     hash::{self, Hash},
     mem::discriminant,
@@ -322,6 +322,9 @@ pub enum Instruction<R = Reg, V = Val, L = Loc> {
     // TODO: hmm should this not be
     /// Labeled block.
     Label(String),
+
+    /// This is a signal to the output generator to skip this instruction.
+    SKIP,
 }
 
 impl Hash for Instruction {
@@ -398,46 +401,13 @@ impl Hash for Instruction {
             Instruction::SWrite(s) => (s, variant).hash(state),
             Instruction::Push(s) => (s, variant).hash(state),
             Instruction::PushR(s) => (s, variant).hash(state),
-            Instruction::Pop
-            | Instruction::Ret
-            | Instruction::StAdd
-            | Instruction::StSub
-            | Instruction::StMul
-            | Instruction::StDiv
-            | Instruction::StLShift
-            | Instruction::StRShift
-            | Instruction::StComp
-            | Instruction::StAnd
-            | Instruction::StOr
-            | Instruction::StNot
-            | Instruction::StLoad
-            | Instruction::StStore
-            | Instruction::StTestEQ
-            | Instruction::StTestNE
-            | Instruction::StTestGT
-            | Instruction::StTestGE
-            | Instruction::StTestLT
-            | Instruction::StTestLE
-            | Instruction::StFAdd
-            | Instruction::StFSub
-            | Instruction::StFMul
-            | Instruction::StFDiv
-            | Instruction::StFComp
-            | Instruction::StFLoad
-            | Instruction::StFStore
-            | Instruction::StFRead
-            | Instruction::StIRead
-            | Instruction::StFWrite
-            | Instruction::StIWrite
-            | Instruction::StSwrite
-            | Instruction::StJump
-            | Instruction::Data
-            | Instruction::Text => variant.hash(state),
             Instruction::Frame { name, size, params } => (name, size, params, variant).hash(state),
             Instruction::Global { name, size, align } => (name, size, align, variant).hash(state),
             Instruction::String { name, content } => (name, content, variant).hash(state),
             Instruction::Float { name, content } => (name, content.to_bits(), variant).hash(state),
             Instruction::Label(s) => (variant, s).hash(state),
+            // Unit variants
+            _ => variant.hash(state),
         };
     }
 }
@@ -1182,6 +1152,7 @@ impl PartialEq for Instruction {
                 },
             ) => l_name == r_name && l_content.to_bits() == r_content.to_bits(),
             (Self::Label(l0), Self::Label(r0)) => l0 == r0,
+            // Unit variants
             _ => core::mem::discriminant(self) == core::mem::discriminant(other),
         }
     }
@@ -1517,8 +1488,15 @@ impl fmt::Display for Instruction {
             Instruction::Float { name, content } => {
                 writeln!(f, "    .{} {}, {}", self.inst_name(), name, content)
             }
-            Instruction::Label(label) => writeln!(f, "{}", label),
+            Instruction::Label(label) => {
+                if label == ".L_main:" {
+                    Ok(())
+                } else {
+                    writeln!(f, "{} nop", label)
+                }
+            }
             Instruction::Text | Instruction::Data => writeln!(f, "    .{}", self.inst_name()),
+            Instruction::SKIP => Ok(()),
             _ => writeln!(f, "    {}", self.inst_name()),
         }
     }
@@ -1851,6 +1829,22 @@ impl Instruction {
             Instruction::String { .. } => "string",
             Instruction::Float { .. } => "float",
             Instruction::Label(_) => "label",
+            Instruction::SKIP => panic!("should never print a skip instruction"),
+        }
+    }
+
+    pub fn uses_label(&self) -> Option<&str> {
+        match self {
+            Instruction::ImmJump(loc) => Some(&loc.0),
+            Instruction::CbrT { loc, .. } => Some(&loc.0),
+            Instruction::CbrF { loc, .. } => Some(&loc.0),
+            Instruction::CbrLT { loc, .. } => Some(&loc.0),
+            Instruction::CbrLE { loc, .. } => Some(&loc.0),
+            Instruction::CbrGT { loc, .. } => Some(&loc.0),
+            Instruction::CbrGE { loc, .. } => Some(&loc.0),
+            Instruction::CbrEQ { loc, .. } => Some(&loc.0),
+            Instruction::CbrNE { loc, .. } => Some(&loc.0),
+            _ => None,
         }
     }
 }
@@ -2248,6 +2242,7 @@ pub struct Block {
     /// Keep the instruction around for easy `to_string`ing.
     inst: Instruction,
     pub instructions: Vec<Instruction>,
+    pub can_merge: bool,
 }
 
 #[derive(Debug)]
@@ -2331,20 +2326,29 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
         .unwrap_or_default();
     let (preamble, rest) = iloc.split_at(fn_start);
 
+    let mut used_labels = HashSet::new();
+    let mut all_labels = HashSet::new();
+
     let mut functions = vec![];
     let mut fn_idx = 0;
     let mut blk_idx = 0;
     for inst in rest {
         if let Instruction::Frame { name, .. } = inst {
+            let label = format!(".L_{}:", name);
             functions.push(Function {
                 label: name.to_string(),
                 inst: inst.clone(),
                 blk: vec![Block {
-                    label: format!(".L_{}:", name),
-                    inst: Instruction::Label(format!(".L_{}:", name)),
+                    label: label.clone(),
+                    inst: Instruction::Label(label.clone()),
                     instructions: vec![],
+                    can_merge: false,
                 }],
             });
+
+            all_labels.insert(label.clone());
+            used_labels.insert(label);
+
             fn_idx = functions.len().saturating_sub(1);
             blk_idx = 0;
         } else if let Instruction::Label(label) = inst {
@@ -2352,12 +2356,31 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
                 label: label.to_string(),
                 inst: inst.clone(),
                 instructions: vec![],
+                can_merge: false,
             });
+
+            all_labels.insert(label.to_string());
+
             blk_idx = functions[fn_idx].blk.len().saturating_sub(1);
         } else {
+            if let Some(label) = inst.uses_label() {
+                let mut s = label.to_string();
+                s.push(':');
+                used_labels.insert(s);
+            }
             functions[fn_idx].blk[blk_idx]
                 .instructions
                 .push(inst.clone());
+        }
+    }
+
+    // TODO: pretty sure this will NEVER happen
+    let unused = all_labels.difference(&used_labels).collect::<HashSet<_>>();
+    for func in &mut functions {
+        for blk in &mut func.blk {
+            if matches!(&blk.inst, Instruction::Label(label) if unused.contains(label)) {
+                blk.can_merge = true;
+            }
         }
     }
 
