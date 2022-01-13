@@ -9,7 +9,6 @@
     .string .string_rformat, "%s"
     .text
 .frame main, 3960 
-.L_main:
     loadI 30 => %vr8
     i2i %vr8 => %vr5
     i2i %vr5 => %vr4

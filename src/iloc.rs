@@ -1326,9 +1326,10 @@ impl fmt::Display for Instruction {
             Instruction::Jump(reg) => writeln!(f, "    {} -> {}", self.inst_name(), reg),
             Instruction::Call { name, args } => writeln!(
                 f,
-                "    {} {} {}",
+                "    {} {}{} {}",
                 self.inst_name(),
                 name,
+                if args.is_empty() { "" } else { "," },
                 args.iter()
                     .map(|r| r.to_string())
                     .collect::<Vec<_>>()
@@ -1336,7 +1337,7 @@ impl fmt::Display for Instruction {
             ),
             Instruction::ImmCall { name, args, ret } => writeln!(
                 f,
-                "    {} {} {} => {}",
+                "    {} {}, {} => {}",
                 self.inst_name(),
                 name,
                 args.iter()
@@ -1347,7 +1348,7 @@ impl fmt::Display for Instruction {
             ),
             Instruction::ImmRCall { reg, args, ret } => writeln!(
                 f,
-                "    {} {} {} => {}",
+                "    {} {}, {} => {}",
                 self.inst_name(),
                 reg,
                 args.iter()
@@ -1468,10 +1469,11 @@ impl fmt::Display for Instruction {
             Instruction::Frame { name, size, params } => {
                 writeln!(
                     f,
-                    ".{} {}, {} {}",
+                    ".{} {}, {}{} {}",
                     self.inst_name(),
                     name,
                     size,
+                    if params.is_empty() { "" } else { "," },
                     params
                         .iter()
                         .map(|r| r.to_string())
@@ -1480,7 +1482,7 @@ impl fmt::Display for Instruction {
                 )
             }
             Instruction::Global { name, size, align } => {
-                writeln!(f, "    .{} {}, {} {}", self.inst_name(), name, size, align)
+                writeln!(f, "    .{} {}, {}, {}", self.inst_name(), name, size, align)
             }
             Instruction::String { name, content } => {
                 writeln!(f, "    .{} {}, {}", self.inst_name(), name, content)
@@ -1699,7 +1701,7 @@ impl Instruction {
                 Some(Operand::Register(src_a)),
                 Some(Operand::Register(src_b)),
             ),
-            Instruction::FLoad { src, .. } => todo!(),
+            Instruction::FLoad { src, .. } => (Some(Operand::Register(src)), None),
             Instruction::FLoadAddImm { src, add, .. } => {
                 (Some(Operand::Register(src)), Some(Operand::Value(add)))
             }
@@ -1846,6 +1848,136 @@ impl Instruction {
             Instruction::CbrNE { loc, .. } => Some(&loc.0),
             _ => None,
         }
+    }
+
+    pub fn as_new_move_instruction(&self, src: Reg, dst: Reg) -> Instruction {
+        match self {
+            Instruction::I2I { .. }
+            | Instruction::Add { .. }
+            | Instruction::Sub { .. }
+            | Instruction::Mult { .. }
+            | Instruction::LShift { .. }
+            | Instruction::RShift { .. }
+            | Instruction::Mod { .. }
+            | Instruction::And { .. }
+            | Instruction::Or { .. }
+            | Instruction::Not { .. }
+            | Instruction::ImmAdd { .. }
+            | Instruction::ImmSub { .. }
+            | Instruction::ImmMult { .. }
+            | Instruction::ImmLShift { .. }
+            | Instruction::ImmRShift { .. }
+            | Instruction::ImmLoad { .. }
+            | Instruction::Load { .. }
+            | Instruction::LoadAddImm { .. }
+            | Instruction::LoadAdd { .. }
+            | Instruction::Store { .. }
+            | Instruction::StoreAddImm { .. }
+            | Instruction::StoreAdd { .. } => Instruction::I2I { src, dst },
+            Instruction::CmpLT { a, b, dst } => todo!(),
+            Instruction::CmpLE { a, b, dst } => todo!(),
+            Instruction::CmpGT { a, b, dst } => todo!(),
+            Instruction::CmpGE { a, b, dst } => todo!(),
+            Instruction::CmpEQ { a, b, dst } => todo!(),
+            Instruction::CmpNE { a, b, dst } => todo!(),
+            Instruction::Comp { a, b, dst } => todo!(),
+            Instruction::TestEQ { test, dst } => todo!(),
+            Instruction::TestNE { test, dst } => todo!(),
+            Instruction::TestGT { test, dst } => todo!(),
+            Instruction::TestGE { test, dst } => todo!(),
+            Instruction::TestLT { test, dst } => todo!(),
+            Instruction::TestLE { test, dst } => todo!(),
+            Instruction::ImmJump(_) => todo!(),
+            Instruction::Jump(_) => todo!(),
+            Instruction::Call { name, args } => todo!(),
+            Instruction::ImmCall { name, args, ret } => todo!(),
+            Instruction::ImmRCall { reg, args, ret } => todo!(),
+            Instruction::Ret => todo!(),
+            Instruction::ImmRet(_) => todo!(),
+            Instruction::CbrT { cond, loc } => todo!(),
+            Instruction::CbrF { cond, loc } => todo!(),
+            Instruction::CbrLT { a, b, loc } => todo!(),
+            Instruction::CbrLE { a, b, loc } => todo!(),
+            Instruction::CbrGT { a, b, loc } => todo!(),
+            Instruction::CbrGE { a, b, loc } => todo!(),
+            Instruction::CbrEQ { a, b, loc } => todo!(),
+            Instruction::CbrNE { a, b, loc } => todo!(),
+            Instruction::F2I { .. } => todo!(),
+            Instruction::I2F { .. } => todo!(),
+            Instruction::F2F { .. } => todo!(),
+            Instruction::FAdd { src_a, src_b, dst } => todo!(),
+            Instruction::FSub { src_a, src_b, dst } => todo!(),
+            Instruction::FMult { src_a, src_b, dst } => todo!(),
+            Instruction::FDiv { src_a, src_b, dst } => todo!(),
+            Instruction::FComp { src_a, src_b, dst } => todo!(),
+            Instruction::FLoad { .. } => todo!(),
+            Instruction::FLoadAddImm { src, add, dst } => todo!(),
+            Instruction::FLoadAdd { src, add, dst } => todo!(),
+            Instruction::FStore { .. } => todo!(),
+            Instruction::FStoreAddImm { src, add, dst } => todo!(),
+            Instruction::FStoreAdd { src, add, dst } => todo!(),
+            Instruction::FRead(_) => todo!(),
+            Instruction::IRead(_) => todo!(),
+            Instruction::FWrite(_) => todo!(),
+            Instruction::IWrite(_) => todo!(),
+            Instruction::SWrite(_) => todo!(),
+            Instruction::Push(_) => todo!(),
+            Instruction::PushR(_) => todo!(),
+            Instruction::Pop => todo!(),
+            Instruction::StAdd => todo!(),
+            Instruction::StSub => todo!(),
+            Instruction::StMul => todo!(),
+            Instruction::StDiv => todo!(),
+            Instruction::StLShift => todo!(),
+            Instruction::StRShift => todo!(),
+            Instruction::StComp => todo!(),
+            Instruction::StAnd => todo!(),
+            Instruction::StOr => todo!(),
+            Instruction::StNot => todo!(),
+            Instruction::StLoad => todo!(),
+            Instruction::StStore => todo!(),
+            Instruction::StTestEQ => todo!(),
+            Instruction::StTestNE => todo!(),
+            Instruction::StTestGT => todo!(),
+            Instruction::StTestGE => todo!(),
+            Instruction::StTestLT => todo!(),
+            Instruction::StTestLE => todo!(),
+            Instruction::StFAdd => todo!(),
+            Instruction::StFSub => todo!(),
+            Instruction::StFMul => todo!(),
+            Instruction::StFDiv => todo!(),
+            Instruction::StFComp => todo!(),
+            Instruction::StFLoad => todo!(),
+            Instruction::StFStore => todo!(),
+            Instruction::StFRead => todo!(),
+            Instruction::StIRead => todo!(),
+            Instruction::StFWrite => todo!(),
+            Instruction::StIWrite => todo!(),
+            Instruction::StSwrite => todo!(),
+            Instruction::StJump => todo!(),
+            Instruction::Data => todo!(),
+            Instruction::Text => todo!(),
+            Instruction::Frame { name, size, params } => todo!(),
+            Instruction::Global { name, size, align } => todo!(),
+            Instruction::String { name, content } => todo!(),
+            Instruction::Float { name, content } => todo!(),
+            Instruction::Label(_) => todo!(),
+            Instruction::SKIP => todo!(),
+        }
+    }
+
+    pub fn is_store(&self) -> bool {
+        matches!(
+            self,
+            Self::Store { .. }
+                | Self::StoreAddImm { .. }
+                | Self::StoreAddImm { .. }
+                | Self::FStore { .. }
+                | Self::FStoreAddImm { .. }
+                | Self::FStoreAdd { .. }
+                | Self::IRead(_)
+                | Self::FRead(_)
+        )
     }
 }
 
@@ -2265,15 +2397,9 @@ impl Function {
         impl<'a> Iterator for Iter<'a> {
             type Item = &'a Instruction;
             fn next(&mut self) -> Option<Self::Item> {
+                // We are at a block or a function frame label
                 if self.inst.is_some() {
-                    let res = self.inst.take();
-                    self.inst = if self.first_blk {
-                        self.first_blk = false;
-                        self.iter.get(self.blk_idx).map(|b| &b.inst)
-                    } else {
-                        None
-                    };
-                    res
+                    self.inst.take()
                 } else if let Some(blk) = self.iter.get(self.blk_idx) {
                     if let Some(inst) = blk.instructions.get(self.inst_idx) {
                         self.inst_idx += 1;

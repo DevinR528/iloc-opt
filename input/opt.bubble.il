@@ -9,7 +9,6 @@
     .string .string_rformat, "%s"
     .text
 .frame main, 60 
-.L_main:
     loadI 32 => %vr8
     loadI 1 => %vr9
     i2i %vr0 => %vr10
@@ -41,7 +40,7 @@
     sub %vr31, %vr9 => %vr32
     mult %vr32, %vr14 => %vr33
     sub %vr12, %vr33 => %vr34
-    store %vr17 => %vr34
+    i2i %vr21 => %vr34
     loadI 44 => %vr35
     loadI 6 => %vr36
     sub %vr36, %vr9 => %vr37
@@ -58,7 +57,7 @@
     sub %vr45, %vr9 => %vr46
     mult %vr46, %vr14 => %vr47
     sub %vr12, %vr47 => %vr48
-    store %vr40 => %vr48
+    i2i %vr44 => %vr48
     loadI 22 => %vr49
     loadI 9 => %vr50
     sub %vr50, %vr9 => %vr51
