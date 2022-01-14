@@ -101,6 +101,7 @@ impl fmt::Display for Loc {
 }
 
 #[rustfmt::skip]
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Clone, Debug)]
 pub enum Instruction<R = Reg, V = Val, L = Loc> {
     // Integer arithmetic operations
@@ -1512,10 +1513,17 @@ pub enum Operand<'a> {
 }
 
 impl Operand<'_> {
-    pub fn clone_to_reg(&self) -> Reg {
+    pub fn copy_to_register(&self) -> Reg {
         match self {
             Operand::Register(r) => **r,
-            _ => panic!("`Operand<'_>` is not a register"),
+            _ => panic!("`Operand<'_>` is not a register {:?}", self),
+        }
+    }
+
+    pub fn copy_to_value(&self) -> Val {
+        match self {
+            Operand::Value(v) => (*v).clone(),
+            _ => panic!("`Operand<'_>` is not a register {:?}", self),
         }
     }
 }
@@ -1851,6 +1859,7 @@ impl Instruction {
     }
 
     pub fn as_new_move_instruction(&self, src: Reg, dst: Reg) -> Instruction {
+        println!("HEY");
         match self {
             Instruction::I2I { .. }
             | Instruction::Add { .. }
@@ -1870,99 +1879,30 @@ impl Instruction {
             | Instruction::ImmLoad { .. }
             | Instruction::Load { .. }
             | Instruction::LoadAddImm { .. }
-            | Instruction::LoadAdd { .. }
-            | Instruction::Store { .. }
-            | Instruction::StoreAddImm { .. }
-            | Instruction::StoreAdd { .. } => Instruction::I2I { src, dst },
-            Instruction::CmpLT { a, b, dst } => todo!(),
-            Instruction::CmpLE { a, b, dst } => todo!(),
-            Instruction::CmpGT { a, b, dst } => todo!(),
-            Instruction::CmpGE { a, b, dst } => todo!(),
-            Instruction::CmpEQ { a, b, dst } => todo!(),
-            Instruction::CmpNE { a, b, dst } => todo!(),
-            Instruction::Comp { a, b, dst } => todo!(),
-            Instruction::TestEQ { test, dst } => todo!(),
-            Instruction::TestNE { test, dst } => todo!(),
-            Instruction::TestGT { test, dst } => todo!(),
-            Instruction::TestGE { test, dst } => todo!(),
-            Instruction::TestLT { test, dst } => todo!(),
-            Instruction::TestLE { test, dst } => todo!(),
-            Instruction::ImmJump(_) => todo!(),
-            Instruction::Jump(_) => todo!(),
-            Instruction::Call { name, args } => todo!(),
-            Instruction::ImmCall { name, args, ret } => todo!(),
-            Instruction::ImmRCall { reg, args, ret } => todo!(),
-            Instruction::Ret => todo!(),
-            Instruction::ImmRet(_) => todo!(),
-            Instruction::CbrT { cond, loc } => todo!(),
-            Instruction::CbrF { cond, loc } => todo!(),
-            Instruction::CbrLT { a, b, loc } => todo!(),
-            Instruction::CbrLE { a, b, loc } => todo!(),
-            Instruction::CbrGT { a, b, loc } => todo!(),
-            Instruction::CbrGE { a, b, loc } => todo!(),
-            Instruction::CbrEQ { a, b, loc } => todo!(),
-            Instruction::CbrNE { a, b, loc } => todo!(),
-            Instruction::F2I { .. } => todo!(),
-            Instruction::I2F { .. } => todo!(),
-            Instruction::F2F { .. } => todo!(),
-            Instruction::FAdd { src_a, src_b, dst } => todo!(),
-            Instruction::FSub { src_a, src_b, dst } => todo!(),
-            Instruction::FMult { src_a, src_b, dst } => todo!(),
-            Instruction::FDiv { src_a, src_b, dst } => todo!(),
-            Instruction::FComp { src_a, src_b, dst } => todo!(),
-            Instruction::FLoad { .. } => todo!(),
-            Instruction::FLoadAddImm { src, add, dst } => todo!(),
-            Instruction::FLoadAdd { src, add, dst } => todo!(),
-            Instruction::FStore { .. } => todo!(),
-            Instruction::FStoreAddImm { src, add, dst } => todo!(),
-            Instruction::FStoreAdd { src, add, dst } => todo!(),
-            Instruction::FRead(_) => todo!(),
-            Instruction::IRead(_) => todo!(),
-            Instruction::FWrite(_) => todo!(),
-            Instruction::IWrite(_) => todo!(),
-            Instruction::SWrite(_) => todo!(),
-            Instruction::Push(_) => todo!(),
-            Instruction::PushR(_) => todo!(),
-            Instruction::Pop => todo!(),
-            Instruction::StAdd => todo!(),
-            Instruction::StSub => todo!(),
-            Instruction::StMul => todo!(),
-            Instruction::StDiv => todo!(),
-            Instruction::StLShift => todo!(),
-            Instruction::StRShift => todo!(),
-            Instruction::StComp => todo!(),
-            Instruction::StAnd => todo!(),
-            Instruction::StOr => todo!(),
-            Instruction::StNot => todo!(),
-            Instruction::StLoad => todo!(),
-            Instruction::StStore => todo!(),
-            Instruction::StTestEQ => todo!(),
-            Instruction::StTestNE => todo!(),
-            Instruction::StTestGT => todo!(),
-            Instruction::StTestGE => todo!(),
-            Instruction::StTestLT => todo!(),
-            Instruction::StTestLE => todo!(),
-            Instruction::StFAdd => todo!(),
-            Instruction::StFSub => todo!(),
-            Instruction::StFMul => todo!(),
-            Instruction::StFDiv => todo!(),
-            Instruction::StFComp => todo!(),
-            Instruction::StFLoad => todo!(),
-            Instruction::StFStore => todo!(),
-            Instruction::StFRead => todo!(),
-            Instruction::StIRead => todo!(),
-            Instruction::StFWrite => todo!(),
-            Instruction::StIWrite => todo!(),
-            Instruction::StSwrite => todo!(),
-            Instruction::StJump => todo!(),
-            Instruction::Data => todo!(),
-            Instruction::Text => todo!(),
-            Instruction::Frame { name, size, params } => todo!(),
-            Instruction::Global { name, size, align } => todo!(),
-            Instruction::String { name, content } => todo!(),
-            Instruction::Float { name, content } => todo!(),
-            Instruction::Label(_) => todo!(),
-            Instruction::SKIP => todo!(),
+            | Instruction::LoadAdd { .. } => Instruction::I2I { src, dst },
+            Instruction::F2I { .. }
+            | Instruction::I2F { .. }
+            | Instruction::F2F { .. }
+            | Instruction::FAdd { .. }
+            | Instruction::FSub { .. }
+            | Instruction::FMult { .. }
+            | Instruction::FDiv { .. }
+            | Instruction::FComp { .. }
+            | Instruction::FLoad { .. }
+            | Instruction::FLoadAddImm { .. }
+            | Instruction::FLoadAdd { .. } => Instruction::F2F { src, dst },
+            Self::Store { .. }
+            | Self::StoreAddImm { .. }
+            | Self::StoreAddImm { .. }
+            | Self::FStore { .. }
+            | Self::FStoreAddImm { .. }
+            | Self::FStoreAdd { .. }
+            | Self::IRead(_)
+            | Self::FRead(_) => unreachable!("cannot simplify store instruction"),
+            _ => unreachable!(
+                "stack, text/data section stuff, calls, jumps, and comp/test stuff {:?}",
+                self
+            ),
         }
     }
 
@@ -1978,6 +1918,10 @@ impl Instruction {
                 | Self::IRead(_)
                 | Self::FRead(_)
         )
+    }
+
+    pub fn is_load_imm(&self) -> bool {
+        matches!(self, Self::ImmLoad { .. })
     }
 }
 
@@ -2505,6 +2449,7 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
     for func in &mut functions {
         for blk in &mut func.blk {
             if matches!(&blk.inst, Instruction::Label(label) if unused.contains(label)) {
+                println!("{:?}", blk);
                 blk.can_merge = true;
             }
         }
