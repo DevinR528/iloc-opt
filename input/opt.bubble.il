@@ -40,7 +40,7 @@
     sub %vr31, %vr9 => %vr32
     mult %vr32, %vr14 => %vr33
     sub %vr12, %vr33 => %vr34
-    i2i %vr21 => %vr34
+    store %vr17 => %vr34
     loadI 44 => %vr35
     loadI 6 => %vr36
     sub %vr36, %vr9 => %vr37
@@ -57,7 +57,7 @@
     sub %vr45, %vr9 => %vr46
     mult %vr46, %vr14 => %vr47
     sub %vr12, %vr47 => %vr48
-    i2i %vr44 => %vr48
+    store %vr40 => %vr48
     loadI 22 => %vr49
     loadI 9 => %vr50
     sub %vr50, %vr9 => %vr51
@@ -105,20 +105,15 @@
     cbr %vr84 -> .L0
 .L1: nop
     i2i %vr4 => %vr7
-    loadI 1 => %vr9
     add %vr4, %vr9 => %vr85
     i2i %vr85 => %vr5
-    loadI 15 => %vr79
     comp %vr5, %vr79 => %vr86
     testgt %vr86 => %vr87
     cbr %vr87 -> .L2
 .L3: nop
     i2i %vr0 => %vr10
-    loadI -4 => %vr11
     add %vr10, %vr11 => %vr12
-    loadI 1 => %vr9
     sub %vr5, %vr9 => %vr88
-    loadI 4 => %vr14
     mult %vr88, %vr14 => %vr89
     sub %vr12, %vr89 => %vr90
     load %vr90 => %vr91
@@ -131,20 +126,15 @@
     cbrne %vr97 -> .L4
     i2i %vr5 => %vr7
 .L4: nop
-    loadI 1 => %vr9
     add %vr5, %vr9 => %vr98
     i2i %vr98 => %vr5
-    loadI 15 => %vr79
     comp %vr5, %vr79 => %vr86
     testle %vr86 => %vr87
     cbr %vr87 -> .L3
 .L2: nop
     i2i %vr0 => %vr10
-    loadI -4 => %vr11
     add %vr10, %vr11 => %vr12
-    loadI 1 => %vr9
     sub %vr4, %vr9 => %vr99
-    loadI 4 => %vr14
     mult %vr99, %vr14 => %vr100
     sub %vr12, %vr100 => %vr101
     load %vr101 => %vr102
@@ -157,31 +147,24 @@
     store %vr6 => %vr94
     add %vr4, %vr9 => %vr85
     i2i %vr85 => %vr4
-    loadI 14 => %vr74
     comp %vr4, %vr74 => %vr83
     testle %vr83 => %vr84
     cbr %vr84 -> .L1
 .L0: nop
-    loadI 1 => %vr9
     i2i %vr9 => %vr4
-    loadI 15 => %vr79
     comp %vr4, %vr79 => %vr103
     testgt %vr103 => %vr104
     cbr %vr104 -> .L5
 .L6: nop
     i2i %vr0 => %vr10
-    loadI -4 => %vr11
     add %vr10, %vr11 => %vr12
-    loadI 1 => %vr9
     sub %vr4, %vr9 => %vr99
-    loadI 4 => %vr14
     mult %vr99, %vr14 => %vr100
     sub %vr12, %vr100 => %vr101
     load %vr101 => %vr102
     iwrite %vr102
     add %vr4, %vr9 => %vr85
     i2i %vr85 => %vr4
-    loadI 15 => %vr79
     comp %vr4, %vr79 => %vr103
     testle %vr103 => %vr104
     cbr %vr104 -> .L6

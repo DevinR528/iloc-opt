@@ -25,9 +25,7 @@
     cbr %vr10 -> .L0
 .L1: nop
     i2i %vr0 => %vr11
-    loadI -4 => %vr5
     add %vr11, %vr5 => %vr12
-    loadI 1 => %vr7
     sub %vr4, %vr7 => %vr13
     loadI 4 => %vr14
     mult %vr13, %vr14 => %vr15
@@ -38,12 +36,10 @@
     call inc, %vr16
     add %vr4, %vr7 => %vr19
     i2i %vr19 => %vr4
-    loadI 10 => %vr8
     comp %vr4, %vr8 => %vr9
     testle %vr9 => %vr10
     cbr %vr10 -> .L1
 .L0: nop
-    loadI -4 => %vr5
     add %vr0, %vr5 => %vr6
     call writearray, %vr6
     ret
@@ -63,7 +59,6 @@
     i2f %vr5 => %vr17
     fadd %vr16, %vr17 => %vr18
     f2i %vr18 => %vr19
-    loadI 1 => %vr9
     sub %vr4, %vr9 => %vr20
     loadI 4 => %vr21
     mult %vr20, %vr21 => %vr22
@@ -73,7 +68,6 @@
     i2i %vr24 => %vr4
     add %vr5, %vr9 => %vr25
     i2i %vr25 => %vr5
-    loadI 10 => %vr10
     comp %vr4, %vr10 => %vr11
     testle %vr11 => %vr12
     cbr %vr12 -> .L3
