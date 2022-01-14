@@ -21,7 +21,7 @@
     comp %vr4, %vr10 => %vr11
     testlt %vr11 => %vr12
     cbrne %vr12 -> .L2
-    mod %vr7, %vr10 => %vr13
+    loadI 0 => %vr13
     i2i %vr13 => %vr5
 .L2: nop
     add %vr4, %vr6 => %vr14
