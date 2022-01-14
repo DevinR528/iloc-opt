@@ -12,6 +12,26 @@ pub enum Val {
     Float(f64),
     Location(String),
 }
+
+impl Val {
+    fn to_int(&self) -> Option<isize> {
+        if let Self::Integer(int) = self {
+            return Some(*int);
+        }
+        None
+    }
+    fn to_float(&self) -> Option<f64> {
+        if let Self::Float(fl) = self {
+            return Some(*fl);
+        }
+        None
+    }
+
+    pub fn add(&self, other: &Self) -> Option<Self> {
+        Some(Self::Integer(self.to_int()? + other.to_int()?))
+    }
+}
+
 impl Hash for Val {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
         match self {
@@ -412,7 +432,6 @@ impl Hash for Instruction {
         };
     }
 }
-
 impl PartialEq for Instruction {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -1859,7 +1878,6 @@ impl Instruction {
     }
 
     pub fn as_new_move_instruction(&self, src: Reg, dst: Reg) -> Instruction {
-        println!("HEY");
         match self {
             Instruction::I2I { .. }
             | Instruction::Add { .. }
@@ -1903,6 +1921,105 @@ impl Instruction {
                 "stack, text/data section stuff, calls, jumps, and comp/test stuff {:?}",
                 self
             ),
+        }
+    }
+
+    pub fn fold(&self, a: &Val, b: &Val) -> Option<Instruction> {
+        Some(match (a, b) {
+            (Val::Integer(a), Val::Integer(b)) => match self {
+                Instruction::Add { dst, .. } => Instruction::ImmLoad {
+                    src: Val::Integer(a + b),
+                    dst: *dst,
+                },
+                Instruction::Sub { dst, .. } => Instruction::ImmLoad {
+                    src: Val::Integer(a - b),
+                    dst: *dst,
+                },
+                Instruction::Mult { dst, .. } => Instruction::ImmLoad {
+                    src: Val::Integer(a * b),
+                    dst: *dst,
+                },
+                Instruction::LShift { dst, .. } => Instruction::ImmLoad {
+                    src: Val::Integer(a << b),
+                    dst: *dst,
+                },
+                Instruction::RShift { dst, .. } => Instruction::ImmLoad {
+                    src: Val::Integer(a >> b),
+                    dst: *dst,
+                },
+                Instruction::Mod { dst, .. } => Instruction::ImmLoad {
+                    src: Val::Integer(a % b),
+                    dst: *dst,
+                },
+                Instruction::And { dst, .. } => Instruction::ImmLoad {
+                    src: Val::Integer(a & b),
+                    dst: *dst,
+                },
+                Instruction::Or { dst, .. } => Instruction::ImmLoad {
+                    src: Val::Integer(a | b),
+                    dst: *dst,
+                },
+                _ => {
+                    return None;
+                }
+            },
+            (Val::Float(_), Val::Float(_)) => match self {
+                Instruction::F2F { dst, .. }
+                | Instruction::FAdd { dst, .. }
+                | Instruction::FSub { dst, .. }
+                | Instruction::FMult { dst, .. }
+                | Instruction::FDiv { dst, .. }
+                | Instruction::FComp { dst, .. } => todo!(),
+                _ => {
+                    return None;
+                }
+            },
+            _ => {
+                return None;
+            }
+        })
+    }
+
+    pub fn is_identity(&self) -> bool {
+        match (a, b) {
+            (Val::Integer(a), Val::Integer(b)) => match self {
+                Instruction::Add { .. } | Instruction::FAdd { .. } => match self.operands() {
+                    (Some(Operand::Value(val)), _) | (_, Some(Operand::Value(val))) => {
+                        val.is_zero()
+                    }
+                    _ => false,
+                },
+                Instruction::Sub { .. } | Instruction::FSub { .. } => match self.operands() {
+                    (_, Some(Operand::Value(val))) => val.is_zero(),
+                    _ => false,
+                },
+                Instruction::Mult { .. } | Instruction::FMult { .. } => match self.operands() {
+                    (Some(Operand::Value(val)), _) | (_, Some(Operand::Value(val))) => val.is_one(),
+                    _ => false,
+                },
+                Instruction::LShift { dst, .. } => todo!(),
+                Instruction::RShift { dst, .. } => todo!(),
+                Instruction::Mod { dst, .. } => todo!(),
+                Instruction::And { dst, .. } => todo!(),
+                Instruction::Or { dst, .. } => todo!(),
+                _ => {
+                    return false;
+                }
+            },
+            (Val::Float(_), Val::Float(_)) => match self {
+                Instruction::F2F { dst, .. }
+                | Instruction::FAdd { dst, .. }
+                | Instruction::FSub { dst, .. }
+                | Instruction::FMult { dst, .. }
+                | Instruction::FDiv { dst, .. }
+                | Instruction::FComp { dst, .. } => todo!(),
+                _ => {
+                    return false;
+                }
+            },
+            _ => {
+                return false;
+            }
         }
     }
 
