@@ -1,9 +1,11 @@
+#![feature(stdio_locked)]
 #![allow(unused)]
 
 use std::{collections::HashSet, env, fs, io::Write, path::PathBuf};
 
 // Our Instruction definition
 mod iloc;
+mod interp;
 
 // Each pass of our optimizing compiler
 //
@@ -21,6 +23,19 @@ const JAVA_ILOC_BENCH: &[&str] = &[
 fn main() {
     let files = env::args().skip(1).collect::<Vec<_>>();
 
+    if let ["debug", files @ ..] = files
+        .iter()
+        .map(|s| s.as_str())
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        for file in files {
+            let input = fs::read_to_string(&file).unwrap();
+            let mut iloc = make_blks(parse_text(&input).unwrap());
+            interp::run_interpreter(iloc).unwrap();
+        }
+    }
+
     for file in files {
         println!("performing optimization on: {}", file);
 
@@ -28,24 +43,10 @@ fn main() {
         let mut iloc = parse_text(&input).unwrap();
         let mut blocks = make_blks(iloc);
         for func in &mut blocks.functions {
-            let mut instr_sets = vec![];
-
-            let mut const_tmp = HashSet::new();
             for blk in &mut func.blk {
-                if let Some(insts) = loc_val_num::number_basic_block(blk, &mut const_tmp) {
-                    instr_sets.push(insts);
-                } else {
-                    instr_sets.push(vec![]);
+                if let Some(insts) = loc_val_num::number_basic_block(blk) {
+                    blk.instructions = insts;
                 }
-            }
-
-            // TODO: stupid lifetimes, I'm sure there is a better way around this but I'm tired
-            for blk in &mut func.blk {
-                let instructions = instr_sets.remove(0);
-                if instructions.is_empty() {
-                    continue;
-                }
-                blk.instructions = instructions;
             }
         }
 
@@ -79,9 +80,11 @@ fn main() {
             .unwrap();
 
         if !cmd.stderr.is_empty() {
-            eprintln!("{}", String::from_utf8_lossy(&cmd.stderr));
+            eprint!("{}", String::from_utf8_lossy(&cmd.stderr));
         } else {
-            println!("{}", String::from_utf8_lossy(&cmd.stdout));
+            print!("{}", String::from_utf8_lossy(&cmd.stdout));
         }
+
+        // println!("{}", 10 % 0);
     }
 }

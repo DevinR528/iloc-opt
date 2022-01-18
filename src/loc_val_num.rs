@@ -2,45 +2,103 @@ use std::collections::{HashMap, HashSet};
 
 use crate::iloc::{Block, Function, IlocProgram, Instruction, Loc, Operand, Reg, Val};
 
-pub fn number_basic_block<'a>(
-    mut blk: &'a Block,
-    fn_const_tmp_loads: &mut HashSet<(Operand<'a>, Reg)>,
-) -> Option<Vec<Instruction>> {
+pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
     let mut expr_map: HashMap<_, Reg> = HashMap::new();
     let mut const_map: HashMap<Operand<'_>, Val> = HashMap::new();
 
     let mut transformed_block = false;
     let mut new_instr = blk.instructions.clone();
     for (idx, expr) in blk.instructions.iter().enumerate() {
+        if expr.is_call_instruction() {
+            // expr_map.clear();
+            continue;
+        }
+
         let (l, r) = expr.operands();
         let dst = expr.target_reg();
-
         match (l, r, dst) {
             // EXPRESSION REGISTERS
             // Some operation +,-,*,/,>>,etc
             (Some(left), Some(right), Some(dst)) => {
-                // Is this just the identity function
-                if expr.is_identity() {}
                 // Can we fold this
                 match (const_map.get(&left), const_map.get(&right)) {
                     (Some(l), Some(r)) => {
                         if let Some(folded) = expr.fold(l, r) {
+                            transformed_block = true;
+
                             const_map.insert(
                                 Operand::Register(dst),
-                                folded.operands().0.unwrap().copy_to_value(),
+                                folded.operands().0.unwrap().clone_to_value(),
                             );
 
                             new_instr[idx] = folded;
                             continue;
                         }
                     }
-                    (Some(l), None) => {
-                        if matches!(right, Operand::Value(_)) {
-                            // TODO: this catches things like below
-                            // addI %vr3, 10 => %vr8
+                    (Some(c), None) => {
+                        if let Some(id) = expr.identity_with_const_prop_left(c) {
+                            transformed_block = true;
+
+                            // modify instruction with a move
+                            new_instr[idx] = expr.as_new_move_instruction(*id, *dst);
+                            continue;
+                        } else if matches!(
+                            expr,
+                            Instruction::Mult { .. } | Instruction::FMult { .. }
+                        ) && c.is_zero()
+                        {
+                            transformed_block = true;
+
+                            new_instr[idx] = Instruction::ImmLoad {
+                                src: Val::Integer(0),
+                                dst: *dst,
+                            };
+                            const_map.insert(Operand::Register(dst), Val::Integer(0));
+                            continue;
+                        } else if let Some(op_imm) = expr.as_immediate_instruction_left(c) {
+                            transformed_block = true;
+                            new_instr[idx] = op_imm;
+                            continue;
                         }
                     }
-                    _ => {}
+                    (None, Some(c)) => {
+                        if let Some(id) = expr.identity_with_const_prop_right(c) {
+                            transformed_block = true;
+
+                            // modify instruction with a move
+                            new_instr[idx] = expr.as_new_move_instruction(*id, *dst);
+                            continue;
+                        } else if matches!(
+                            expr,
+                            Instruction::Mult { .. } | Instruction::FMult { .. }
+                        ) && c.is_zero()
+                        {
+                            transformed_block = true;
+
+                            new_instr[idx] = Instruction::ImmLoad {
+                                src: Val::Integer(0),
+                                dst: *dst,
+                            };
+                            const_map.insert(Operand::Register(dst), Val::Integer(0));
+                            continue;
+                        } else if let Some(op_imm) = expr.as_immediate_instruction_right(c) {
+                            transformed_block = true;
+                            new_instr[idx] = op_imm;
+                            continue;
+                        }
+                    }
+                    _ => {
+                        // Is this instruction identity
+                        // This catches things like:
+                        // `addI %vr3, 0 => %vr8`
+                        if let Some(id) = expr.identity_register() {
+                            transformed_block = true;
+
+                            // modify instruction with a move
+                            new_instr[idx] = expr.as_new_move_instruction(*id, *dst);
+                            continue;
+                        }
+                    }
                 }
 
                 // Have we seen this before in this block
@@ -59,7 +117,7 @@ pub fn number_basic_block<'a>(
                         new_instr[idx] = expr.as_new_move_instruction(*value, *dst);
                         continue;
                     }
-                    _ => (),
+                    _ => {}
                 }
 
                 expr_map.insert((left, Some(right), expr.inst_name()), *dst);
@@ -67,11 +125,6 @@ pub fn number_basic_block<'a>(
             // USUALLY VAR REGISTERS
             // This is basically a move/copy
             (Some(src), None, Some(dst)) => {
-                // Keep track of all registers that are constants
-                if expr.is_load_imm() {
-                    const_map.insert(Operand::Register(dst), src.copy_to_value());
-                }
-
                 match expr_map.get(&(src, None, expr.inst_name())) {
                     Some(value) if !expr.is_store() => {
                         transformed_block = true;
@@ -87,16 +140,20 @@ pub fn number_basic_block<'a>(
                         new_instr[idx] = expr.as_new_move_instruction(*value, *dst);
                         continue;
                     }
-                    _ if fn_const_tmp_loads.contains(&(src, *dst)) => {
-                        transformed_block = true;
-                        new_instr[idx] = Instruction::SKIP;
-                        continue;
-                    }
                     _ => {}
                 }
 
+                // TODO: this may do nothing..
+                if let Some(val) = const_map.get(&src) {
+                    if let Some(folded) = expr.fold_two_address(val) {
+                        new_instr[idx] = folded;
+                        continue;
+                    }
+                }
+
+                // Keep track of all registers that are constants
                 if expr.is_load_imm() {
-                    fn_const_tmp_loads.insert((src, *dst));
+                    const_map.insert(Operand::Register(dst), src.clone_to_value());
                 }
 
                 expr_map.insert((src, None, expr.inst_name()), *dst);
@@ -106,7 +163,17 @@ pub fn number_basic_block<'a>(
             // No operands or target
             (None, None, None) => {}
             // All other combinations are invalid
-            _ => todo!(),
+            _ => unreachable!(),
+        }
+    }
+
+    let skips = track_used(&new_instr);
+    for idx in skips {
+        if new_instr[idx]
+            .target_reg()
+            .map_or(false, |r| const_map.contains_key(&Operand::Register(r)))
+        {
+            new_instr[idx] = Instruction::SKIP;
         }
     }
 
@@ -119,4 +186,53 @@ pub fn number_basic_block<'a>(
     // println!("expr: {:?}", expr_map);
     // println!("reduced: {:?}", reduced);
     // println!("opt inst: {:?}", new_instr);
+}
+
+pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
+    let mut target_instruction_idx = HashMap::new();
+    let mut target_reg = HashSet::new();
+    let mut used_reg = HashSet::new();
+
+    for (idx, expr) in instructions.iter().enumerate() {
+        let (l, r) = expr.operands();
+        let dst = expr.target_reg();
+
+        // Don't modify any memory operations
+        if expr.is_store() {
+            for op in l
+                .iter()
+                .chain(r.iter())
+                .chain(dst.map(Operand::Register).iter())
+            {
+                target_reg.remove(op);
+            }
+            continue;
+        }
+
+        match (l, r, dst) {
+            (Some(left), Some(right), Some(dst)) => {
+                target_instruction_idx.insert(Operand::Register(dst), idx);
+                target_reg.insert(Operand::Register(dst));
+                used_reg.insert(left);
+                used_reg.insert(right);
+            }
+            (Some(src), None, Some(dst)) => {
+                target_instruction_idx.insert(Operand::Register(dst), idx);
+                target_reg.insert(Operand::Register(dst));
+                used_reg.insert(src);
+            }
+            // Jumps, rets, push, and I/O instructions
+            (Some(src), None, None) => {}
+            // No operands or target
+            (None, None, None) => {}
+            // All other combinations are invalid
+            _ => unreachable!(),
+        }
+    }
+
+    target_reg
+        .difference(&used_reg)
+        .flat_map(|r| target_instruction_idx.get(r))
+        .copied()
+        .collect()
 }

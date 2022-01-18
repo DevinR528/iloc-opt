@@ -11,6 +11,8 @@ pub enum Val {
     Integer(isize),
     Float(f64),
     Location(String),
+    String(String),
+    Null,
 }
 
 impl Val {
@@ -30,6 +32,120 @@ impl Val {
     pub fn add(&self, other: &Self) -> Option<Self> {
         Some(Self::Integer(self.to_int()? + other.to_int()?))
     }
+
+    pub fn sub(&self, other: &Self) -> Option<Self> {
+        Some(Self::Integer(self.to_int()? - other.to_int()?))
+    }
+
+    pub fn mult(&self, other: &Self) -> Option<Self> {
+        Some(Self::Integer(self.to_int()? * other.to_int()?))
+    }
+
+    pub fn lshift(&self, other: &Self) -> Option<Self> {
+        Some(Self::Integer(self.to_int()? << other.to_int()?))
+    }
+
+    pub fn rshift(&self, other: &Self) -> Option<Self> {
+        Some(Self::Integer(self.to_int()? >> other.to_int()?))
+    }
+
+    pub fn modulus(&self, other: &Self) -> Option<Self> {
+        Some(Self::Integer(self.to_int()? % other.to_int()?))
+    }
+
+    pub fn and(&self, other: &Self) -> Option<Self> {
+        Some(Self::Integer(self.to_int()? & other.to_int()?))
+    }
+
+    pub fn or(&self, other: &Self) -> Option<Self> {
+        Some(Self::Integer(self.to_int()? | other.to_int()?))
+    }
+
+    pub fn fadd(&self, other: &Self) -> Option<Self> {
+        Some(Self::Float(self.to_float()? + other.to_float()?))
+    }
+
+    pub fn fsub(&self, other: &Self) -> Option<Self> {
+        Some(Self::Float(self.to_float()? - other.to_float()?))
+    }
+
+    pub fn fmult(&self, other: &Self) -> Option<Self> {
+        Some(Self::Float(self.to_float()? * other.to_float()?))
+    }
+
+    pub fn fdiv(&self, other: &Self) -> Option<Self> {
+        Some(Self::Float(self.to_float()? / other.to_float()?))
+    }
+
+    pub fn is_zero(&self) -> bool {
+        match self {
+            Self::Integer(0) => true,
+            Self::Float(num) => *num == 0.0,
+            _ => false,
+        }
+    }
+    pub fn is_one(&self) -> bool {
+        match self {
+            Self::Integer(1) => true,
+            Self::Float(num) => *num == 1.0,
+            _ => false,
+        }
+    }
+
+    pub fn cmp_eq(&self, other: &Self) -> Option<Self> {
+        Some(match (self, other) {
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a == b { 1 } else { 0 }),
+            (Self::Float(a), Self::Float(b)) => Self::Float(if a == b { 1.0 } else { 0.0 }),
+            _ => {
+                return None;
+            }
+        })
+    }
+    pub fn cmp_ne(&self, other: &Self) -> Option<Self> {
+        Some(match (self, other) {
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a != b { 1 } else { 0 }),
+            (Self::Float(a), Self::Float(b)) => Self::Float(if a != b { 1.0 } else { 0.0 }),
+            _ => {
+                return None;
+            }
+        })
+    }
+    pub fn cmp_lt(&self, other: &Self) -> Option<Self> {
+        Some(match (self, other) {
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a < b { 1 } else { 0 }),
+            (Self::Float(a), Self::Float(b)) => Self::Float(if a < b { 1.0 } else { 0.0 }),
+            _ => {
+                return None;
+            }
+        })
+    }
+    pub fn cmp_le(&self, other: &Self) -> Option<Self> {
+        Some(match (self, other) {
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a <= b { 1 } else { 0 }),
+            (Self::Float(a), Self::Float(b)) => Self::Float(if a <= b { 1.0 } else { 0.0 }),
+            _ => {
+                return None;
+            }
+        })
+    }
+    pub fn cmp_gt(&self, other: &Self) -> Option<Self> {
+        Some(match (self, other) {
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a > b { 1 } else { 0 }),
+            (Self::Float(a), Self::Float(b)) => Self::Float(if a > b { 1.0 } else { 0.0 }),
+            _ => {
+                return None;
+            }
+        })
+    }
+    pub fn cmp_ge(&self, other: &Self) -> Option<Self> {
+        Some(match (self, other) {
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a >= b { 1 } else { 0 }),
+            (Self::Float(a), Self::Float(b)) => Self::Float(if a >= b { 1.0 } else { 0.0 }),
+            _ => {
+                return None;
+            }
+        })
+    }
 }
 
 impl Hash for Val {
@@ -37,7 +153,9 @@ impl Hash for Val {
         match self {
             Self::Integer(int) => int.hash(state),
             Self::Float(float) => float.to_bits().hash(state),
-            Self::Location(int) => int.hash(state),
+            Self::Location(s) => s.hash(state),
+            Self::String(s) => s.hash(state),
+            Self::Null => discriminant(self).hash(state),
         }
     }
 }
@@ -71,6 +189,8 @@ impl fmt::Display for Val {
             Val::Integer(int) => int.fmt(f),
             Val::Float(flt) => flt.fmt(f),
             Val::Location(loc) => loc.fmt(f),
+            Val::String(s) => s.fmt(f),
+            Val::Null => write!(f, "null"),
         }
     }
 }
@@ -105,7 +225,7 @@ impl fmt::Display for Reg {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct Loc(String);
+pub struct Loc(pub String);
 
 impl FromStr for Loc {
     type Err = &'static str;
@@ -123,10 +243,10 @@ impl fmt::Display for Loc {
 #[rustfmt::skip]
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Clone, Debug)]
-pub enum Instruction<R = Reg, V = Val, L = Loc> {
+pub enum Instruction {
     // Integer arithmetic operations
     /// %r => %r `i2i`
-    I2I { src: R, dst: R },
+    I2I { src: Reg, dst: Reg },
     /// %r + %r => %r `add`
     Add { src_a: Reg, src_b: Reg, dst: Reg },
     /// %r - %r => %r `sub`
@@ -148,7 +268,7 @@ pub enum Instruction<R = Reg, V = Val, L = Loc> {
 
     // Immediate integer operations
     /// %r + c => %r `addI`
-    ImmAdd { src: Reg, konst: V, dst: Reg },
+    ImmAdd { src: Reg, konst: Val, dst: Reg },
     /// %r - c => %r `subI`
     ImmSub { src: Reg, konst: Val, dst: Reg },
     /// %r * c => %r `multI`
@@ -213,7 +333,7 @@ pub enum Instruction<R = Reg, V = Val, L = Loc> {
     CbrT { cond: Reg, loc: Loc },
     /// cbrne %r -> label `cbrne` conditional break if false
     CbrF { cond: Reg, loc: Loc },
-    CbrLT { a: Reg, b: Reg, loc: L },
+    CbrLT { a: Reg, b: Reg, loc: Loc },
     CbrLE { a: Reg, b: Reg, loc: Loc },
     CbrGT { a: Reg, b: Reg, loc: Loc },
     CbrGE { a: Reg, b: Reg, loc: Loc },
@@ -1532,6 +1652,7 @@ pub enum Operand<'a> {
 }
 
 impl Operand<'_> {
+    /// Copy the `Operand<'_>` to register, panic if this is not a `Reg`.
     pub fn copy_to_register(&self) -> Reg {
         match self {
             Operand::Register(r) => **r,
@@ -1539,7 +1660,8 @@ impl Operand<'_> {
         }
     }
 
-    pub fn copy_to_value(&self) -> Val {
+    /// Clone the `Operand<'_>` to value, panic if this is not a `Val`.
+    pub fn clone_to_value(&self) -> Val {
         match self {
             Operand::Value(v) => (*v).clone(),
             _ => panic!("`Operand<'_>` is not a register {:?}", self),
@@ -1947,7 +2069,7 @@ impl Instruction {
                     src: Val::Integer(a >> b),
                     dst: *dst,
                 },
-                Instruction::Mod { dst, .. } => Instruction::ImmLoad {
+                Instruction::Mod { dst, .. } if *b != 0 => Instruction::ImmLoad {
                     src: Val::Integer(a % b),
                     dst: *dst,
                 },
@@ -1980,47 +2102,210 @@ impl Instruction {
         })
     }
 
-    pub fn is_identity(&self) -> bool {
-        match (a, b) {
-            (Val::Integer(a), Val::Integer(b)) => match self {
-                Instruction::Add { .. } | Instruction::FAdd { .. } => match self.operands() {
-                    (Some(Operand::Value(val)), _) | (_, Some(Operand::Value(val))) => {
-                        val.is_zero()
-                    }
-                    _ => false,
-                },
-                Instruction::Sub { .. } | Instruction::FSub { .. } => match self.operands() {
-                    (_, Some(Operand::Value(val))) => val.is_zero(),
-                    _ => false,
-                },
-                Instruction::Mult { .. } | Instruction::FMult { .. } => match self.operands() {
-                    (Some(Operand::Value(val)), _) | (_, Some(Operand::Value(val))) => val.is_one(),
-                    _ => false,
-                },
-                Instruction::LShift { dst, .. } => todo!(),
-                Instruction::RShift { dst, .. } => todo!(),
-                Instruction::Mod { dst, .. } => todo!(),
-                Instruction::And { dst, .. } => todo!(),
-                Instruction::Or { dst, .. } => todo!(),
-                _ => {
-                    return false;
-                }
-            },
-            (Val::Float(_), Val::Float(_)) => match self {
-                Instruction::F2F { dst, .. }
-                | Instruction::FAdd { dst, .. }
-                | Instruction::FSub { dst, .. }
-                | Instruction::FMult { dst, .. }
-                | Instruction::FDiv { dst, .. }
-                | Instruction::FComp { dst, .. } => todo!(),
-                _ => {
-                    return false;
-                }
+    pub fn fold_two_address(&self, a: &Val) -> Option<Instruction> {
+        Some(match self {
+            Instruction::Load { dst, .. } => Instruction::ImmLoad {
+                src: a.clone(),
+                dst: *dst,
             },
             _ => {
-                return false;
+                return None;
             }
-        }
+        })
+    }
+
+    /// If this operation is an identity operation, return the register that would be unchanged.
+    ///
+    /// `add %vr2, 0 => %vr3` is the same as `i2i %vr2 => %vr3`
+    pub fn identity_register(&self) -> Option<&Reg> {
+        Some(match self {
+            Instruction::Add { .. } | Instruction::FAdd { .. } => match self.operands() {
+                // TODO: can they be swapped or just `op %vr2, 10 => %vr3`
+                (Some(Operand::Value(val)), Some(Operand::Register(reg)))
+                | (Some(Operand::Register(reg)), Some(Operand::Value(val)))
+                    if val.is_zero() =>
+                {
+                    reg
+                }
+                _ => {
+                    return None;
+                }
+            },
+            Instruction::Sub { .. } | Instruction::FSub { .. } => match self.operands() {
+                (Some(Operand::Register(reg)), Some(Operand::Value(val))) if val.is_zero() => reg,
+                _ => {
+                    return None;
+                }
+            },
+            Instruction::Mult { .. } | Instruction::FMult { .. } => match self.operands() {
+                (Some(Operand::Value(val)), Some(Operand::Register(reg)))
+                | (Some(Operand::Register(reg)), Some(Operand::Value(val)))
+                    if val.is_one() =>
+                {
+                    reg
+                }
+                _ => {
+                    return None;
+                }
+            },
+            Instruction::FDiv { .. } => match self.operands() {
+                (Some(Operand::Register(reg)), Some(Operand::Value(val))) if val.is_one() => reg,
+                _ => {
+                    return None;
+                }
+            },
+            Instruction::LShift { .. } | Instruction::RShift { .. } => match self.operands() {
+                (Some(Operand::Value(val)), Some(Operand::Register(reg)))
+                | (Some(Operand::Register(reg)), Some(Operand::Value(val)))
+                    if val.is_zero() =>
+                {
+                    reg
+                }
+                _ => {
+                    return None;
+                }
+            },
+            // TODO: hmm is this right
+            Instruction::Mod { .. } => match self.operands() {
+                (Some(Operand::Value(val)), Some(Operand::Register(reg)))
+                | (Some(Operand::Register(reg)), Some(Operand::Value(val)))
+                    if val.is_one() =>
+                {
+                    reg
+                }
+                _ => {
+                    return None;
+                }
+            },
+            // Instruction::And { .. } => todo!(),
+            // Instruction::Or { dst, .. } => todo!(),
+            _ => {
+                return None;
+            }
+        })
+    }
+
+    /// If this operation is an identity operation, return the register that would be unchanged.
+    /// `val` is always the left operand, subtraction is __never__ a valid identity op for this call.
+    ///
+    /// `add %vr2, 0 => %vr3` is the same as `i2i %vr2 => %vr3`
+    pub fn identity_with_const_prop_left(&self, val: &Val) -> Option<&Reg> {
+        Some(match self {
+            Instruction::Add { src_b, .. } | Instruction::FAdd { src_b, .. } if val.is_zero() => {
+                src_b
+            }
+            Instruction::Mult { src_b, .. } | Instruction::FMult { src_b, .. } if val.is_one() => {
+                src_b
+            }
+            Instruction::And { .. } => todo!(),
+            Instruction::Or { dst, .. } => todo!(),
+            _ => {
+                return None;
+            }
+        })
+    }
+
+    /// If this operation is an identity operation, return the register that would be unchanged.
+    /// `val` is always the right operand, subtraction is a valid identity op.
+    ///
+    /// `add %vr2, 0 => %vr3` is the same as `i2i %vr2 => %vr3`
+    pub fn identity_with_const_prop_right(&self, val: &Val) -> Option<&Reg> {
+        Some(match self {
+            Instruction::Add { src_a, .. } | Instruction::FAdd { src_a, .. } if val.is_zero() => {
+                src_a
+            }
+            Instruction::Sub { src_a, .. } | Instruction::FSub { src_a, .. } if val.is_zero() => {
+                src_a
+            }
+            Instruction::Mult { src_a, .. } | Instruction::FMult { src_a, .. } if val.is_one() => {
+                src_a
+            }
+            Instruction::FDiv { src_a, .. } if val.is_one() => src_a,
+            Instruction::Mod { src_a, .. } if val.is_one() => src_a,
+            Instruction::LShift { src_a, .. } if val.is_zero() => src_a,
+            Instruction::RShift { src_a, .. } if val.is_zero() => src_a,
+            Instruction::And { .. } => todo!(),
+            Instruction::Or { dst, .. } => todo!(),
+            _ => {
+                return None;
+            }
+        })
+    }
+
+    pub fn as_immediate_instruction_right(&self, a: &Val) -> Option<Instruction> {
+        Some(match self {
+            Instruction::Add { src_a, dst, .. } => Instruction::ImmAdd {
+                src: *src_a,
+                konst: a.clone(),
+                dst: *dst,
+            },
+            Instruction::Sub { src_a, dst, .. } => Instruction::ImmSub {
+                src: *src_a,
+                konst: a.clone(),
+                dst: *dst,
+            },
+            Instruction::Mult { src_a, dst, .. } => Instruction::ImmMult {
+                src: *src_a,
+                konst: a.clone(),
+                dst: *dst,
+            },
+            Instruction::LShift { src_a, dst, .. } => Instruction::ImmLShift {
+                src: *src_a,
+                konst: a.clone(),
+                dst: *dst,
+            },
+            Instruction::RShift { src_a, dst, .. } => Instruction::ImmRShift {
+                src: *src_a,
+                konst: a.clone(),
+                dst: *dst,
+            },
+            Instruction::F2F { dst, .. }
+            | Instruction::FAdd { dst, .. }
+            | Instruction::FSub { dst, .. }
+            | Instruction::FMult { dst, .. }
+            | Instruction::FDiv { dst, .. }
+            | Instruction::FComp { dst, .. } => todo!(),
+            _ => {
+                return None;
+            }
+        })
+    }
+
+    pub fn as_immediate_instruction_left(&self, a: &Val) -> Option<Instruction> {
+        Some(match self {
+            Instruction::Add { src_b, dst, .. } => Instruction::ImmAdd {
+                src: *src_b,
+                konst: a.clone(),
+                dst: *dst,
+            },
+            Instruction::Mult { src_b, dst, .. } => Instruction::ImmMult {
+                src: *src_b,
+                konst: a.clone(),
+                dst: *dst,
+            },
+            Instruction::ImmAdd { konst, dst, .. } => Instruction::ImmLoad {
+                src: a.add(konst)?,
+                dst: *dst,
+            },
+            Instruction::ImmMult { konst, dst, .. } => Instruction::ImmLoad {
+                src: a.mult(konst)?,
+                dst: *dst,
+            },
+            Instruction::RShift { src_a, dst, .. } => Instruction::ImmRShift {
+                src: *src_a,
+                konst: a.clone(),
+                dst: *dst,
+            },
+            Instruction::F2F { dst, .. }
+            | Instruction::FAdd { dst, .. }
+            | Instruction::FSub { dst, .. }
+            | Instruction::FMult { dst, .. }
+            | Instruction::FDiv { dst, .. }
+            | Instruction::FComp { dst, .. } => todo!(),
+            _ => {
+                return None;
+            }
+        })
     }
 
     pub fn is_store(&self) -> bool {
@@ -2034,6 +2319,13 @@ impl Instruction {
                 | Self::FStoreAdd { .. }
                 | Self::IRead(_)
                 | Self::FRead(_)
+        )
+    }
+
+    pub fn is_call_instruction(&self) -> bool {
+        matches!(
+            self,
+            Self::Call { .. } | Self::ImmCall { .. } | Self::ImmRCall { .. } // | Self::FCall { .. }
         )
     }
 
