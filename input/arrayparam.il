@@ -10,7 +10,7 @@
 	.float	.float_const_0, 0.01
 	.global	main_fp, 4, 4
 	.text
-	.frame	main, 40
+.frame	main, 40
 	loadI	main_fp  => %vr4
 	store	%vr0  => %vr4
 	loadI	-4  => %vr5
@@ -66,7 +66,7 @@
 	add	%vr0, %vr5 => %vr6
 	call	writearray, %vr6
 	ret
-	.frame	init, 0, %vr8
+.frame	init, 0, %vr8
 	loadI	1  => %vr9
 	i2i	%vr9  => %vr4
 	loadI	10  => %vr10
@@ -101,7 +101,7 @@
 	cbr	%vr12  -> .L3
 .L2:	nop
 	ret
-	.frame	writearray, 0, %vr4
+.frame	writearray, 0, %vr4
 	loadI	1  => %vr5
 	loadI	1  => %vr5
 	sub	%vr5, %vr5 => %vr6
@@ -183,7 +183,7 @@
 	load	%vr53  => %vr54
 	iwrite	%vr54
 	ret
-	.frame	inc, 0, %vr4
+.frame	inc, 0, %vr4
 	load	%vr4  => %vr5
 	loadI	1  => %vr6
 	add	%vr5, %vr6 => %vr7

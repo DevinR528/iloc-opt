@@ -25,8 +25,9 @@
     i2i %vr13 => %vr5
     i2i %vr7 => %vr6
     i2i %vr5 => %vr7
-    add %vr4, %vr8 => %vr14
+    addI %vr4, 1 => %vr14
     i2i %vr14 => %vr4
+    loadI 20 => %vr10
     comp %vr4, %vr10 => %vr11
     testle %vr11 => %vr12
     cbr %vr12 -> .L1
