@@ -16,13 +16,13 @@ pub enum Val {
 }
 
 impl Val {
-    fn to_int(&self) -> Option<isize> {
+    pub fn to_int(&self) -> Option<isize> {
         if let Self::Integer(int) = self {
             return Some(*int);
         }
         None
     }
-    fn to_float(&self) -> Option<f64> {
+    pub fn to_float(&self) -> Option<f64> {
         if let Self::Float(fl) = self {
             return Some(*fl);
         }
@@ -2727,7 +2727,6 @@ pub struct Block {
     /// Keep the instruction around for easy `to_string`ing.
     inst: Instruction,
     pub instructions: Vec<Instruction>,
-    pub can_merge: bool,
 }
 
 #[derive(Debug)]
@@ -2821,7 +2820,6 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
                     label: label.clone(),
                     inst: Instruction::Label(label.clone()),
                     instructions: vec![],
-                    can_merge: false,
                 }],
             });
 
@@ -2835,7 +2833,6 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
                 label: label.to_string(),
                 inst: inst.clone(),
                 instructions: vec![],
-                can_merge: false,
             });
 
             all_labels.insert(label.to_string());
@@ -2850,17 +2847,6 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
             functions[fn_idx].blk[blk_idx]
                 .instructions
                 .push(inst.clone());
-        }
-    }
-
-    // TODO: pretty sure this will NEVER happen
-    let unused = all_labels.difference(&used_labels).collect::<HashSet<_>>();
-    for func in &mut functions {
-        for blk in &mut func.blk {
-            if matches!(&blk.inst, Instruction::Label(label) if unused.contains(label)) {
-                println!("{:?}", blk);
-                blk.can_merge = true;
-            }
         }
     }
 

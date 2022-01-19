@@ -14,6 +14,7 @@
 	.text
 .frame	main, 92
 	loadI	main_fp  => %vr4
+    iwrite %vr4
 	store	%vr0  => %vr4
 	loadI	0  => %vr5
 	loadI	1  => %vr6

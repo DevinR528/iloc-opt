@@ -12,6 +12,7 @@
 	loadI	32  => %vr8
 	loadI	1  => %vr9
 	i2i	%vr0  => %vr10
+    iwrite %vr10
 	loadI	-4  => %vr11
 	add	%vr10, %vr11 => %vr12
 	loadI	1  => %vr9

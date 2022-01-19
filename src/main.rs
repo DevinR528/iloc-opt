@@ -34,6 +34,7 @@ fn main() {
             let mut iloc = make_blks(parse_text(&input).unwrap());
             interp::run_interpreter(iloc).unwrap();
         }
+        return;
     }
 
     for file in files {

@@ -12,8 +12,9 @@
     .float .float_const_0, 1.7
     .global main_fp, 4, 4
     .text
-.frame main, 92 
+.frame main, 92
     loadI main_fp => %vr4
+    iwrite %vr4
     store %vr0 => %vr4
     loadI 1 => %vr6
     loadI -1 => %vr7
@@ -25,8 +26,8 @@
     addI %vr8, -4 => %vr10
     subI %vr10, 80 => %vr19
     store %vr15 => %vr19
-    call readarray 
-    call writearray 
+    call readarray
+    call writearray
     addI %vr0, -4 => %vr20
     addI %vr0, -88 => %vr22
     store %vr6 => %vr22
@@ -34,9 +35,9 @@
     addI %vr0, -92 => %vr25
     store %vr23 => %vr25
     call quicksort, %vr20,%vr22,%vr25
-    call writearray 
+    call writearray
     ret
-.frame readarray, 0 
+.frame readarray, 0
     loadI .string_const_0 => %vr5
     swrite %vr5
     loadI 1 => %vr6
@@ -61,7 +62,7 @@
     cbr %vr9 -> .L1
 .L0: nop
     ret
-.frame writearray, 0 
+.frame writearray, 0
     loadI .string_const_1 => %vr5
     swrite %vr5
     loadI 1 => %vr6
