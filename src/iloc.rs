@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     collections::{HashMap, HashSet},
     fmt,
     hash::{self, Hash},
@@ -91,7 +92,23 @@ impl Val {
             _ => false,
         }
     }
-
+    pub fn comp(&self, other: &Self) -> Option<Self> {
+        Some(match (self, other) {
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(match a.cmp(b) {
+                Ordering::Greater => 1,
+                Ordering::Less => -1,
+                Ordering::Equal => 0,
+            }),
+            (Self::Float(a), Self::Float(b)) => Self::Float(match a.partial_cmp(b)? {
+                Ordering::Greater => 1.0,
+                Ordering::Less => -1.0,
+                Ordering::Equal => 0.0,
+            }),
+            _ => {
+                return None;
+            }
+        })
+    }
     pub fn cmp_eq(&self, other: &Self) -> Option<Self> {
         Some(match (self, other) {
             (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a == b { 1 } else { 0 }),
@@ -195,7 +212,7 @@ impl fmt::Display for Val {
     }
 }
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Reg {
     Expr(usize),
     Var(usize),

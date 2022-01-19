@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     io::BufRead,
     str::FromStr,
 };
@@ -9,9 +9,6 @@ use crate::iloc::{parse_text, Block, Function, IlocProgram, Instruction, Loc, Re
 const STACK_SIZE: usize = 4096;
 
 fn set_stack(stack: &mut Vec<Val>, idx: usize, val: Val) {
-    if stack.len().saturating_sub(1) <= idx {
-        stack.extend(std::iter::repeat(Val::Null).take(idx.max(1)));
-    }
     stack[idx] = val;
 }
 
@@ -279,7 +276,8 @@ impl Interpreter {
             Instruction::Comp { a, b, dst } => {
                 let a = self.registers.get(a)?;
                 let b = self.registers.get(b)?;
-                let val = a.sub(b)?;
+
+                let val = a.comp(b)?;
                 self.registers.insert(*dst, val);
             }
             Instruction::TestEQ { test, dst } => {
@@ -463,9 +461,26 @@ impl Interpreter {
                     return Some(true);
                 }
             }
-            Instruction::F2I { src, dst } => todo!(),
-            Instruction::I2F { src, dst } => todo!(),
-            Instruction::F2F { src, dst } => todo!(),
+            Instruction::F2I { src, dst } => {
+                let int_from_float = if let Val::Float(f) = self.registers.get(src).cloned()? {
+                    unsafe { f.to_int_unchecked::<isize>() }
+                } else {
+                    todo!("float error")
+                };
+                self.registers.insert(*dst, Val::Integer(int_from_float));
+            }
+            Instruction::I2F { src, dst } => {
+                let float_from_int = if let Val::Integer(i) = self.registers.get(src).cloned()? {
+                    i as f64
+                } else {
+                    todo!("integer error")
+                };
+                self.registers.insert(*dst, Val::Float(float_from_int));
+            }
+            Instruction::F2F { src, dst } => {
+                self.registers
+                    .insert(*dst, self.registers.get(src).cloned()?);
+            }
             Instruction::FAdd { src_a, src_b, dst } => {
                 let a = self.registers.get(src_a)?;
                 let b = self.registers.get(src_b)?;
@@ -501,7 +516,12 @@ impl Interpreter {
                 let val = a.fsub(b)?;
                 self.registers.insert(*dst, val);
             }
-            Instruction::FLoad { src, dst } => todo!(),
+            Instruction::FLoad { src, dst } => {
+                let stack_idx = self.registers.get(src)?;
+                let val = stack[stack_idx.to_int()? as usize].clone();
+
+                self.registers.insert(*dst, val);
+            }
             Instruction::FLoadAddImm { src, add, dst } => todo!(),
             Instruction::FLoadAdd { src, add, dst } => todo!(),
             Instruction::FStore { src, dst } => todo!(),
@@ -605,11 +625,17 @@ pub fn run_interpreter(iloc: IlocProgram) -> Result<(), &'static str> {
             }
             Some(false) => {}
             None => {
+                let mut regs = interpreter
+                    .registers
+                    .iter()
+                    .map(|(r, v)| (r, v))
+                    .collect::<Vec<_>>();
+
+                regs.sort_by(|a, b| a.0.cmp(b.0));
+
                 println!(
                     "registers: {}",
-                    interpreter
-                        .registers
-                        .iter()
+                    regs.into_iter()
                         .map(|(r, v)| format!("({:?} {:?})", r, v))
                         .collect::<Vec<_>>()
                         .join(", ")
