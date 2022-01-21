@@ -8,17 +8,27 @@ use crate::iloc::{parse_text, Block, Function, IlocProgram, Instruction, Loc, Re
 
 const STACK_SIZE: usize = 4096;
 
-fn set_stack(stack: &mut Vec<Val>, idx: usize, val: Val) {
-    stack[idx] = val;
+struct CallStackEntry {
+    name: Loc,
+    clobber_map: HashMap<Reg, Val>,
+    ret_val: Option<Reg>,
+}
+
+impl CallStackEntry {
+    fn new(s: &str) -> Self {
+        Self { name: Loc(s.to_string()), clobber_map: HashMap::default(), ret_val: None }
+    }
 }
 
 pub struct Interpreter {
     /// The data segment of a program.
     ///
-    /// Name to value.
+    /// Name to index into the stack.
     data: HashMap<Loc, Val>,
     /// Instructions broken up into functions and blocks.
     functions: HashMap<Loc, Vec<(usize, Instruction)>>,
+    /// A map of function names to stack size and parameter list.
+    fn_decl: HashMap<Loc, (usize, Vec<Reg>)>,
     /// A mapping of labels names to the index of the first instruction to execute after the label.
     label_map: HashMap<Loc, usize>,
     /// A map of register to value.
@@ -26,7 +36,12 @@ pub struct Interpreter {
     /// The index of which instruction we are on within a block.
     inst_idx: usize,
     /// The function call stack.
-    call_stack: Vec<(Loc, Vec<Val>)>,
+    ///
+    /// A tuple of function name and any smashed registers that will need to be restored on return.
+    call_stack: Vec<CallStackEntry>,
+    /// The program stack, this includes the `.data` segment so we can refer to labels like
+    /// pointers.
+    stack: Vec<Val>,
     /// The index of the instruction to return to after a call returns.
     ret_idx: Vec<usize>,
 }
@@ -34,19 +49,31 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new(iloc: IlocProgram) -> Self {
         let mut preamble_lines = iloc.preamble.len();
-
+        let mut stack = vec![Val::Null; STACK_SIZE];
         let data = iloc
             .preamble
             .into_iter()
-            .flat_map(|inst| match inst {
-                Instruction::Global { name, size, align } => Some((Loc(name), Val::Integer(0))),
-                Instruction::String { name, content } => Some((Loc(name), Val::String(content))),
-                Instruction::Float { name, content } => Some((Loc(name), Val::Float(content))),
+            .enumerate()
+            .flat_map(|(idx, inst)| match inst {
+                Instruction::Global { name, size, align } => {
+                    stack.insert(idx, Val::Null);
+                    Some((Loc(name), Val::Integer(idx as isize)))
+                }
+                Instruction::String { name, content } => {
+                    stack.insert(idx, Val::String(content));
+                    Some((Loc(name), Val::Integer(idx as isize)))
+                }
+                Instruction::Float { name, content } => {
+                    stack.insert(idx, Val::Float(content));
+                    Some((Loc(name), Val::Integer(idx as isize)))
+                }
                 _ => None,
             })
             .collect::<HashMap<_, _>>();
 
+        let mut registers = HashMap::new();
         let mut label_map = HashMap::new();
+        let mut fn_decl_map = HashMap::new();
         let functions = iloc
             .functions
             .into_iter()
@@ -60,46 +87,61 @@ impl Interpreter {
                     instrs.push((preamble_lines, inst.clone()));
                 }
 
+                if func.label == "main" {
+                    // This is the data stack pointer, in a real program it would be a pointer to
+                    // the memory address of the beginning of the program
+                    // itself, since our stack is separate it's just the 0th
+                    // index of the stack
+                    registers.insert(Reg::Var(0), Val::Integer(func.stack_size as isize));
+                }
+
+                fn_decl_map.insert(Loc(func.label.clone()), (func.stack_size, func.params));
                 (Loc(func.label), instrs)
             })
             .collect();
 
-        let mut registers = HashMap::new();
-        // This is the data stack pointer, in a real program it would be a pointer to the memory
-        // address of the beginning of the program itself, since our stack is separate it's just the 0th
-        // index of the stack
-        registers.insert(Reg::Var(0), Val::Integer(STACK_SIZE as isize));
-
-        let call_stack = vec![(Loc("main".to_string()), vec![Val::Null; STACK_SIZE])];
         Self {
             data,
             functions,
+            fn_decl: fn_decl_map,
             label_map,
             registers,
             inst_idx: 0,
-            call_stack,
+            call_stack: vec![CallStackEntry::new("main")],
+            stack,
             ret_idx: vec![0],
         }
     }
 
-    pub fn run_next_instruction(&mut self) -> Option<bool> {
+    pub fn run_next_instruction(&mut self, count: &mut usize) -> Option<bool> {
         if self.call_stack.is_empty() {
             return Some(false);
         }
 
-        let (func, stack) = self.call_stack.last_mut().unwrap();
+        // println!(
+        //     "// line    {}  {}",
+        //     self.curr_line().unwrap(),
+        //     self.curr_instruction().unwrap()
+        // );
+
+        let CallStackEntry { name: func, clobber_map: smashed, ret_val } =
+            self.call_stack.last_mut().unwrap();
+
+        let stack = &mut self.stack;
         let instrs = self.functions.get(func).unwrap();
 
         // Skip these instructions
         match instrs[self.inst_idx].1 {
-            Instruction::Frame { .. } | Instruction::Label(..) => self.inst_idx += 1,
+            Instruction::Frame { .. } | Instruction::Label(..) => {
+                *count += 1;
+                self.inst_idx += 1
+            }
             _ => {}
         }
 
         match &instrs[self.inst_idx].1 {
             Instruction::I2I { src, dst } => {
-                self.registers
-                    .insert(*dst, self.registers.get(src).cloned()?);
+                self.registers.insert(*dst, self.registers.get(src).cloned()?);
             }
             Instruction::Add { src_a, src_b, dst } => {
                 let a = self.registers.get(src_a)?;
@@ -222,12 +264,12 @@ impl Interpreter {
             Instruction::Store { src, dst } => {
                 let val = self.registers.get(src)?.clone();
                 let stack_idx = self.registers.get(dst)?.to_int()? as usize;
-                set_stack(stack, stack_idx, val);
+                stack[stack_idx] = val;
             }
             Instruction::StoreAddImm { src, add, dst } => {
                 let val = self.registers.get(src)?.clone();
                 let stack_idx = self.registers.get(dst)?.to_int()? as usize;
-                set_stack(stack, stack_idx + (add.to_int()? as usize), val);
+                stack[stack_idx + (add.to_int()? as usize)] = val;
             }
             Instruction::StoreAdd { src, add, dst } => {
                 let val = self.registers.get(src)?.clone();
@@ -235,7 +277,7 @@ impl Interpreter {
                 let add = self.registers.get(add)?.to_int()? as usize;
                 let stack_idx = self.registers.get(dst)?.to_int()? as usize;
 
-                set_stack(stack, stack_idx + add, val);
+                stack[stack_idx + add] = val;
             }
             Instruction::CmpLT { a, b, dst } => {
                 let a = self.registers.get(a)?;
@@ -283,14 +325,12 @@ impl Interpreter {
             Instruction::TestEQ { test, dst } => {
                 let a = self.registers.get(test)?;
                 let is_eq = a.is_zero();
-                self.registers
-                    .insert(*dst, Val::Integer(if is_eq { 1 } else { 0 }));
+                self.registers.insert(*dst, Val::Integer(if is_eq { 1 } else { 0 }));
             }
             Instruction::TestNE { test, dst } => {
                 let a = self.registers.get(test)?;
                 let is_ne = !a.is_zero();
-                self.registers
-                    .insert(*dst, Val::Integer(if is_ne { 1 } else { 0 }));
+                self.registers.insert(*dst, Val::Integer(if is_ne { 1 } else { 0 }));
             }
             Instruction::TestGT { test, dst } => {
                 let a = self.registers.get(test)?;
@@ -336,20 +376,98 @@ impl Interpreter {
             Instruction::Jump(reg) => todo!(),
             Instruction::Call { name, args } => {
                 self.ret_idx.push(self.inst_idx + 1);
-                self.call_stack
-                    .push((Loc(name.to_owned()), vec![Val::Null; STACK_SIZE]));
                 self.inst_idx = 0;
+                let (size, params) = self.fn_decl.get(&Loc(name.to_owned())).unwrap();
+
+                self.call_stack.push(CallStackEntry {
+                    name: Loc(name.to_owned()),
+                    // Save all the call clobbered registers
+                    clobber_map: params
+                        .iter()
+                        .chain(std::iter::once(&Reg::Var(0)))
+                        .filter_map(|r| Some((*r, self.registers.get(r)?.clone())))
+                        .collect(),
+                    ret_val: None,
+                });
+
+                assert_eq!(params.len(), args.len());
+                for (param, arg) in params.iter().zip(args) {
+                    self.registers.insert(*param, self.registers.get(arg).unwrap().clone());
+                }
+
+                let new_ip = self
+                    .registers
+                    .get(&Reg::Var(0))
+                    .unwrap()
+                    .clone()
+                    .sub(&Val::Integer(*size as isize))
+                    .unwrap();
+                self.registers.insert(Reg::Var(0), new_ip);
 
                 return Some(true);
             }
-            Instruction::ImmCall { name, args, ret } => todo!(),
+            Instruction::ImmCall { name, args, ret } => {
+                self.ret_idx.push(self.inst_idx + 1);
+                self.inst_idx = 0;
+                let (size, params) = self.fn_decl.get(&Loc(name.to_owned())).unwrap();
+
+                self.call_stack.push(CallStackEntry {
+                    name: Loc(name.to_owned()),
+                    // Save all the call clobbered registers
+                    clobber_map: params
+                        .iter()
+                        .chain(std::iter::once(&Reg::Var(0)))
+                        .filter_map(|r| Some((*r, self.registers.get(r)?.clone())))
+                        .collect(),
+                    ret_val: Some(*ret),
+                });
+
+                assert_eq!(params.len(), args.len());
+                for (param, arg) in params.iter().zip(args) {
+                    self.registers.insert(*param, self.registers.get(arg).unwrap().clone());
+                }
+
+                let new_ip = self
+                    .registers
+                    .get(&Reg::Var(0))
+                    .unwrap()
+                    .clone()
+                    .sub(&Val::Integer(*size as isize))
+                    .unwrap();
+                self.registers.insert(Reg::Var(0), new_ip);
+
+                return Some(true);
+            }
             Instruction::ImmRCall { reg, args, ret } => todo!(),
             Instruction::Ret => {
                 self.inst_idx = self.ret_idx.pop()?;
-                self.call_stack.pop();
+                let CallStackEntry { name, clobber_map, ret_val } = self.call_stack.pop()?;
+
+                // Restore the call clobbered registers
+                for (reg, val) in clobber_map {
+                    self.registers.insert(reg, val);
+                }
+
+                assert!(ret_val.is_none());
+
                 return Some(true);
             }
-            Instruction::ImmRet(_) => todo!(),
+            Instruction::ImmRet(ret_reg) => {
+                self.inst_idx = self.ret_idx.pop()?;
+                let CallStackEntry { name, clobber_map, ret_val } = self.call_stack.pop()?;
+
+                // Restore the call clobbered registers
+                for (reg, val) in clobber_map {
+                    self.registers.insert(reg, val);
+                }
+
+                let dst = ret_val.unwrap();
+                let val = self.registers.get(ret_reg).unwrap().clone();
+                self.registers.insert(dst, val);
+
+                return Some(true);
+            }
+            // cbr
             Instruction::CbrT { cond, loc } => {
                 let a = self.registers.get(cond)?;
                 let should_jump = match a {
@@ -363,15 +481,16 @@ impl Interpreter {
                     return Some(true);
                 }
             }
+            // cbrne
             Instruction::CbrF { cond, loc } => {
                 let a = self.registers.get(cond)?;
                 let should_jump = match a {
-                    Val::Integer(i) if *i == 1 => true,
-                    Val::Float(f) if *f == 1.0 => true,
+                    Val::Integer(i) if *i == 0 => true,
+                    Val::Float(f) if *f == 0.0 => true,
                     _ => false,
                 };
                 // This is conditional branch if NOT equal
-                if !should_jump {
+                if should_jump {
                     let jmp_idx = self.label_map.get(loc)?;
                     self.inst_idx = *jmp_idx;
                     return Some(true);
@@ -434,6 +553,8 @@ impl Interpreter {
                 }
             }
             Instruction::CbrEQ { a, b, loc } => {
+                todo!();
+
                 let a = self.registers.get(a)?;
                 let b = self.registers.get(b)?;
                 let should_jump = match a.cmp_eq(b)? {
@@ -448,6 +569,7 @@ impl Interpreter {
                 }
             }
             Instruction::CbrNE { a, b, loc } => {
+                todo!();
                 let a = self.registers.get(a)?;
                 let b = self.registers.get(b)?;
                 let should_jump = match a.cmp_ne(b)? {
@@ -478,8 +600,7 @@ impl Interpreter {
                 self.registers.insert(*dst, Val::Float(float_from_int));
             }
             Instruction::F2F { src, dst } => {
-                self.registers
-                    .insert(*dst, self.registers.get(src).cloned()?);
+                self.registers.insert(*dst, self.registers.get(src).cloned()?);
             }
             Instruction::FAdd { src_a, src_b, dst } => {
                 let a = self.registers.get(src_a)?;
@@ -531,18 +652,23 @@ impl Interpreter {
                 let mut buf = String::new();
                 let mut handle = std::io::stdin_locked();
                 handle.read_line(&mut buf).unwrap();
-                self.registers
-                    .insert(*r, Val::Float(buf.parse::<f64>().unwrap()));
+
+                self.registers.insert(*r, Val::Float(buf.trim().parse::<f64>().unwrap()));
             }
             Instruction::IRead(r) => {
                 let mut buf = String::new();
                 let mut handle = std::io::stdin_locked();
                 handle.read_line(&mut buf).unwrap();
-                self.registers.insert(*r, Val::Float(buf.parse().unwrap()));
+
+                let stack_idx = self.registers.get(r)?;
+                stack[stack_idx.to_int().unwrap() as usize] =
+                    Val::Integer(buf.trim().parse().unwrap());
             }
-            Instruction::FWrite(r) => println!("{:?}", self.registers.get(r)),
-            Instruction::IWrite(r) => println!("{:?}", self.registers.get(r)),
-            Instruction::SWrite(r) => println!("{:?}", self.registers.get(r)),
+            Instruction::FWrite(r) => println!("{:?}", self.registers.get(r)?.to_float()?),
+            Instruction::IWrite(r) => println!("{:?}", self.registers.get(r)?.to_int()?),
+            Instruction::SWrite(r) => {
+                println!("{:?}", stack[self.registers.get(r)?.to_int()? as usize])
+            }
             _ => todo!("{:?}", instrs[self.inst_idx]),
         }
         self.inst_idx += 1;
@@ -550,19 +676,20 @@ impl Interpreter {
     }
 
     pub fn curr_instruction(&self) -> Option<&Instruction> {
-        let (func, stack) = self.call_stack.last()?;
+        let func = &self.call_stack.last()?.name;
         let instrs = self.functions.get(func)?;
         instrs.get(self.inst_idx).map(|(_, instr)| instr)
     }
 
     pub fn curr_line(&self) -> Option<usize> {
-        let (func, stack) = self.call_stack.last()?;
+        let func = &self.call_stack.last()?.name;
         let instrs = self.functions.get(func)?;
         instrs.get(self.inst_idx).map(|(i, _)| *i)
     }
 }
 
 pub fn run_interpreter(iloc: IlocProgram) -> Result<(), &'static str> {
+    let mut instruction_count = 0;
     let mut interpreter = Interpreter::new(iloc);
 
     let mut break_points = HashSet::new();
@@ -570,7 +697,7 @@ pub fn run_interpreter(iloc: IlocProgram) -> Result<(), &'static str> {
     let mut continue_flag = false;
     // Now we can get input from the user
     loop {
-        match interpreter.run_next_instruction() {
+        match interpreter.run_next_instruction(&mut instruction_count) {
             Some(true) => {
                 let line = if let Some(l) = interpreter.curr_line() {
                     l
@@ -578,6 +705,7 @@ pub fn run_interpreter(iloc: IlocProgram) -> Result<(), &'static str> {
                     break;
                 };
 
+                instruction_count += 1;
                 if continue_flag && !break_points.contains(&line) {
                     continue;
                 }
@@ -586,18 +714,37 @@ pub fn run_interpreter(iloc: IlocProgram) -> Result<(), &'static str> {
                     let mut handle = std::io::stdin_locked();
                     handle.read_line(&mut buf).unwrap();
                     match buf.split_whitespace().collect::<Vec<_>>().as_slice() {
-                        ["step"] | [] => {
+                        ["step" | "s"] | [] => {
                             break 'dbg;
                         }
-                        ["cont"] => {
+                        ["cont" | "c"] => {
                             continue_flag = true;
                             break 'dbg;
                         }
-                        ["printi"] => {
+                        ["printi" | "pi"] => {
                             println!("{:?}", interpreter.curr_instruction());
                         }
-                        ["print", reg] => {
-                            if let Ok(r) = Reg::from_str(reg) {
+                        ["printc" | "pc"] => {
+                            println!(
+                                "{:?}",
+                                interpreter
+                                    .call_stack
+                                    .iter()
+                                    .map(|cse| cse.name.0.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            );
+                        }
+                        ["prints" | "ps", idx] => {
+                            println!("{:?}", interpreter.stack[idx.parse::<usize>().unwrap()]);
+                        }
+                        ["print" | "p", reg] => {
+                            let reg = if !reg.starts_with("%vr") {
+                                format!("%vr{}", reg)
+                            } else {
+                                reg.to_string()
+                            };
+                            if let Ok(r) = Reg::from_str(&reg) {
                                 if let Some(v) = interpreter.registers.get(&r) {
                                     println!("{:?}", v)
                                 }
@@ -625,11 +772,8 @@ pub fn run_interpreter(iloc: IlocProgram) -> Result<(), &'static str> {
             }
             Some(false) => {}
             None => {
-                let mut regs = interpreter
-                    .registers
-                    .iter()
-                    .map(|(r, v)| (r, v))
-                    .collect::<Vec<_>>();
+                let mut regs =
+                    interpreter.registers.iter().map(|(r, v)| (r, v)).collect::<Vec<_>>();
 
                 regs.sort_by(|a, b| a.0.cmp(b.0));
 
@@ -653,5 +797,6 @@ pub fn run_interpreter(iloc: IlocProgram) -> Result<(), &'static str> {
         }
     }
 
+    println!("number of instructions executed: {}", instruction_count);
     Ok(())
 }

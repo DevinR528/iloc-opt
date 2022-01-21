@@ -2751,6 +2751,8 @@ pub struct Function {
     pub label: String,
     /// Keep the instruction around for easy `to_string`ing.
     inst: Instruction,
+    pub stack_size: usize,
+    pub params: Vec<Reg>,
     pub blk: Vec<Block>,
 }
 
@@ -2828,10 +2830,12 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
     let mut fn_idx = 0;
     let mut blk_idx = 0;
     for inst in rest {
-        if let Instruction::Frame { name, .. } = inst {
+        if let Instruction::Frame { name, size, params } = inst {
             let label = format!(".L_{}:", name);
             functions.push(Function {
                 label: name.to_string(),
+                stack_size: *size,
+                params: params.clone(),
                 inst: inst.clone(),
                 blk: vec![Block {
                     label: label.clone(),

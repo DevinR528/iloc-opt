@@ -9,7 +9,7 @@
 	.string	.string_rformat, "%s"
 	.global	main_fp, 4, 4
 	.text
-	.frame	main, 8
+.frame	main, 8
 	loadI	main_fp  => %vr4
 	store	%vr0  => %vr4
 	loadI	-4  => %vr5
@@ -64,7 +64,7 @@
 	cbr	%vr16  -> .L1
 .L0:	nop
 	ret
-	.frame	gcd, 4, %vr4, %vr5
+.frame	gcd, 4, %vr4, %vr5
 	load	%vr5  => %vr6
 	loadI	0  => %vr7
 	comp	%vr6, %vr7 => %vr8
