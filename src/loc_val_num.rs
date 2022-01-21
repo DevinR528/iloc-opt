@@ -49,10 +49,8 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                         {
                             transformed_block = true;
 
-                            new_instr[idx] = Instruction::ImmLoad {
-                                src: Val::Integer(0),
-                                dst: *dst,
-                            };
+                            new_instr[idx] =
+                                Instruction::ImmLoad { src: Val::Integer(0), dst: *dst };
                             const_map.insert(Operand::Register(dst), Val::Integer(0));
                             continue;
                         } else if let Some(op_imm) = expr.as_immediate_instruction_left(c) {
@@ -75,10 +73,8 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                         {
                             transformed_block = true;
 
-                            new_instr[idx] = Instruction::ImmLoad {
-                                src: Val::Integer(0),
-                                dst: *dst,
-                            };
+                            new_instr[idx] =
+                                Instruction::ImmLoad { src: Val::Integer(0), dst: *dst };
                             const_map.insert(Operand::Register(dst), Val::Integer(0));
                             continue;
                         } else if let Some(op_imm) = expr.as_immediate_instruction_right(c) {
@@ -121,6 +117,9 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                 }
 
                 expr_map.insert((left, Some(right), expr.inst_name()), *dst);
+                if expr.is_commutative() {
+                    expr_map.insert((right, Some(left), expr.inst_name()), *dst);
+                }
             }
             // USUALLY VAR REGISTERS
             // This is basically a move/copy
@@ -199,11 +198,7 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
 
         // Don't modify any memory operations
         if expr.is_store() {
-            for op in l
-                .iter()
-                .chain(r.iter())
-                .chain(dst.map(Operand::Register).iter())
-            {
+            for op in l.iter().chain(r.iter()).chain(dst.map(Operand::Register).iter()) {
                 target_reg.remove(op);
             }
             continue;
@@ -230,9 +225,5 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
         }
     }
 
-    target_reg
-        .difference(&used_reg)
-        .flat_map(|r| target_instruction_idx.get(r))
-        .copied()
-        .collect()
+    target_reg.difference(&used_reg).flat_map(|r| target_instruction_idx.get(r)).copied().collect()
 }

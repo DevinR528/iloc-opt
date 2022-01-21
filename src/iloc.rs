@@ -572,690 +572,237 @@ impl Hash for Instruction {
 impl PartialEq for Instruction {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
+            (Self::I2I { src: l_src, dst: l_dst }, Self::I2I { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
             (
-                Self::I2I {
-                    src: l_src,
-                    dst: l_dst,
-                },
-                Self::I2I {
-                    src: r_src,
-                    dst: r_dst,
-                },
+                Self::Add { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
+                Self::Add { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::Sub { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
+                Self::Sub { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::Mult { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
+                Self::Mult { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::LShift { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
+                Self::LShift { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::RShift { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
+                Self::RShift { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::Mod { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
+                Self::Mod { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::And { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
+                Self::And { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (
+                Self::Or { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
+                Self::Or { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
+            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (Self::Not { src: l_src, dst: l_dst }, Self::Not { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
+            (
+                Self::ImmAdd { src: l_src, konst: l_konst, dst: l_dst },
+                Self::ImmAdd { src: r_src, konst: r_konst, dst: r_dst },
+            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
+            (
+                Self::ImmSub { src: l_src, konst: l_konst, dst: l_dst },
+                Self::ImmSub { src: r_src, konst: r_konst, dst: r_dst },
+            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
+            (
+                Self::ImmMult { src: l_src, konst: l_konst, dst: l_dst },
+                Self::ImmMult { src: r_src, konst: r_konst, dst: r_dst },
+            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
+            (
+                Self::ImmLShift { src: l_src, konst: l_konst, dst: l_dst },
+                Self::ImmLShift { src: r_src, konst: r_konst, dst: r_dst },
+            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
+            (
+                Self::ImmRShift { src: l_src, konst: l_konst, dst: l_dst },
+                Self::ImmRShift { src: r_src, konst: r_konst, dst: r_dst },
+            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
+            (
+                Self::ImmLoad { src: l_src, dst: l_dst },
+                Self::ImmLoad { src: r_src, dst: r_dst },
             ) => l_src == r_src && l_dst == r_dst,
+            (Self::Load { src: l_src, dst: l_dst }, Self::Load { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
             (
-                Self::Add {
-                    src_a: l_src_a,
-                    src_b: l_src_b,
-                    dst: l_dst,
-                },
-                Self::Add {
-                    src_a: r_src_a,
-                    src_b: r_src_b,
-                    dst: r_dst,
-                },
-            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
-            (
-                Self::Sub {
-                    src_a: l_src_a,
-                    src_b: l_src_b,
-                    dst: l_dst,
-                },
-                Self::Sub {
-                    src_a: r_src_a,
-                    src_b: r_src_b,
-                    dst: r_dst,
-                },
-            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
-            (
-                Self::Mult {
-                    src_a: l_src_a,
-                    src_b: l_src_b,
-                    dst: l_dst,
-                },
-                Self::Mult {
-                    src_a: r_src_a,
-                    src_b: r_src_b,
-                    dst: r_dst,
-                },
-            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
-            (
-                Self::LShift {
-                    src_a: l_src_a,
-                    src_b: l_src_b,
-                    dst: l_dst,
-                },
-                Self::LShift {
-                    src_a: r_src_a,
-                    src_b: r_src_b,
-                    dst: r_dst,
-                },
-            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
-            (
-                Self::RShift {
-                    src_a: l_src_a,
-                    src_b: l_src_b,
-                    dst: l_dst,
-                },
-                Self::RShift {
-                    src_a: r_src_a,
-                    src_b: r_src_b,
-                    dst: r_dst,
-                },
-            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
-            (
-                Self::Mod {
-                    src_a: l_src_a,
-                    src_b: l_src_b,
-                    dst: l_dst,
-                },
-                Self::Mod {
-                    src_a: r_src_a,
-                    src_b: r_src_b,
-                    dst: r_dst,
-                },
-            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
-            (
-                Self::And {
-                    src_a: l_src_a,
-                    src_b: l_src_b,
-                    dst: l_dst,
-                },
-                Self::And {
-                    src_a: r_src_a,
-                    src_b: r_src_b,
-                    dst: r_dst,
-                },
-            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
-            (
-                Self::Or {
-                    src_a: l_src_a,
-                    src_b: l_src_b,
-                    dst: l_dst,
-                },
-                Self::Or {
-                    src_a: r_src_a,
-                    src_b: r_src_b,
-                    dst: r_dst,
-                },
-            ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
-            (
-                Self::Not {
-                    src: l_src,
-                    dst: l_dst,
-                },
-                Self::Not {
-                    src: r_src,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_dst == r_dst,
-            (
-                Self::ImmAdd {
-                    src: l_src,
-                    konst: l_konst,
-                    dst: l_dst,
-                },
-                Self::ImmAdd {
-                    src: r_src,
-                    konst: r_konst,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
-            (
-                Self::ImmSub {
-                    src: l_src,
-                    konst: l_konst,
-                    dst: l_dst,
-                },
-                Self::ImmSub {
-                    src: r_src,
-                    konst: r_konst,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
-            (
-                Self::ImmMult {
-                    src: l_src,
-                    konst: l_konst,
-                    dst: l_dst,
-                },
-                Self::ImmMult {
-                    src: r_src,
-                    konst: r_konst,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
-            (
-                Self::ImmLShift {
-                    src: l_src,
-                    konst: l_konst,
-                    dst: l_dst,
-                },
-                Self::ImmLShift {
-                    src: r_src,
-                    konst: r_konst,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
-            (
-                Self::ImmRShift {
-                    src: l_src,
-                    konst: l_konst,
-                    dst: l_dst,
-                },
-                Self::ImmRShift {
-                    src: r_src,
-                    konst: r_konst,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_konst == r_konst && l_dst == r_dst,
-            (
-                Self::ImmLoad {
-                    src: l_src,
-                    dst: l_dst,
-                },
-                Self::ImmLoad {
-                    src: r_src,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_dst == r_dst,
-            (
-                Self::Load {
-                    src: l_src,
-                    dst: l_dst,
-                },
-                Self::Load {
-                    src: r_src,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_dst == r_dst,
-            (
-                Self::LoadAddImm {
-                    src: l_src,
-                    add: l_add,
-                    dst: l_dst,
-                },
-                Self::LoadAddImm {
-                    src: r_src,
-                    add: r_add,
-                    dst: r_dst,
-                },
+                Self::LoadAddImm { src: l_src, add: l_add, dst: l_dst },
+                Self::LoadAddImm { src: r_src, add: r_add, dst: r_dst },
             ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
             (
-                Self::LoadAdd {
-                    src: l_src,
-                    add: l_add,
-                    dst: l_dst,
-                },
-                Self::LoadAdd {
-                    src: r_src,
-                    add: r_add,
-                    dst: r_dst,
-                },
+                Self::LoadAdd { src: l_src, add: l_add, dst: l_dst },
+                Self::LoadAdd { src: r_src, add: r_add, dst: r_dst },
+            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
+            (Self::Store { src: l_src, dst: l_dst }, Self::Store { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
+            (
+                Self::StoreAddImm { src: l_src, add: l_add, dst: l_dst },
+                Self::StoreAddImm { src: r_src, add: r_add, dst: r_dst },
             ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
             (
-                Self::Store {
-                    src: l_src,
-                    dst: l_dst,
-                },
-                Self::Store {
-                    src: r_src,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_dst == r_dst,
-            (
-                Self::StoreAddImm {
-                    src: l_src,
-                    add: l_add,
-                    dst: l_dst,
-                },
-                Self::StoreAddImm {
-                    src: r_src,
-                    add: r_add,
-                    dst: r_dst,
-                },
+                Self::StoreAdd { src: l_src, add: l_add, dst: l_dst },
+                Self::StoreAdd { src: r_src, add: r_add, dst: r_dst },
             ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
             (
-                Self::StoreAdd {
-                    src: l_src,
-                    add: l_add,
-                    dst: l_dst,
-                },
-                Self::StoreAdd {
-                    src: r_src,
-                    add: r_add,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
-            (
-                Self::CmpLT {
-                    a: l_a,
-                    b: l_b,
-                    dst: l_dst,
-                },
-                Self::CmpLT {
-                    a: r_a,
-                    b: r_b,
-                    dst: r_dst,
-                },
+                Self::CmpLT { a: l_a, b: l_b, dst: l_dst },
+                Self::CmpLT { a: r_a, b: r_b, dst: r_dst },
             ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
             (
-                Self::CmpLE {
-                    a: l_a,
-                    b: l_b,
-                    dst: l_dst,
-                },
-                Self::CmpLE {
-                    a: r_a,
-                    b: r_b,
-                    dst: r_dst,
-                },
+                Self::CmpLE { a: l_a, b: l_b, dst: l_dst },
+                Self::CmpLE { a: r_a, b: r_b, dst: r_dst },
             ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
             (
-                Self::CmpGT {
-                    a: l_a,
-                    b: l_b,
-                    dst: l_dst,
-                },
-                Self::CmpGT {
-                    a: r_a,
-                    b: r_b,
-                    dst: r_dst,
-                },
+                Self::CmpGT { a: l_a, b: l_b, dst: l_dst },
+                Self::CmpGT { a: r_a, b: r_b, dst: r_dst },
             ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
             (
-                Self::CmpGE {
-                    a: l_a,
-                    b: l_b,
-                    dst: l_dst,
-                },
-                Self::CmpGE {
-                    a: r_a,
-                    b: r_b,
-                    dst: r_dst,
-                },
+                Self::CmpGE { a: l_a, b: l_b, dst: l_dst },
+                Self::CmpGE { a: r_a, b: r_b, dst: r_dst },
             ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
             (
-                Self::CmpEQ {
-                    a: l_a,
-                    b: l_b,
-                    dst: l_dst,
-                },
-                Self::CmpEQ {
-                    a: r_a,
-                    b: r_b,
-                    dst: r_dst,
-                },
+                Self::CmpEQ { a: l_a, b: l_b, dst: l_dst },
+                Self::CmpEQ { a: r_a, b: r_b, dst: r_dst },
             ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
             (
-                Self::CmpNE {
-                    a: l_a,
-                    b: l_b,
-                    dst: l_dst,
-                },
-                Self::CmpNE {
-                    a: r_a,
-                    b: r_b,
-                    dst: r_dst,
-                },
+                Self::CmpNE { a: l_a, b: l_b, dst: l_dst },
+                Self::CmpNE { a: r_a, b: r_b, dst: r_dst },
             ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
             (
-                Self::Comp {
-                    a: l_a,
-                    b: l_b,
-                    dst: l_dst,
-                },
-                Self::Comp {
-                    a: r_a,
-                    b: r_b,
-                    dst: r_dst,
-                },
+                Self::Comp { a: l_a, b: l_b, dst: l_dst },
+                Self::Comp { a: r_a, b: r_b, dst: r_dst },
             ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
             (
-                Self::TestEQ {
-                    test: l_test,
-                    dst: l_dst,
-                },
-                Self::TestEQ {
-                    test: r_test,
-                    dst: r_dst,
-                },
+                Self::TestEQ { test: l_test, dst: l_dst },
+                Self::TestEQ { test: r_test, dst: r_dst },
             ) => l_test == r_test && l_dst == r_dst,
             (
-                Self::TestNE {
-                    test: l_test,
-                    dst: l_dst,
-                },
-                Self::TestNE {
-                    test: r_test,
-                    dst: r_dst,
-                },
+                Self::TestNE { test: l_test, dst: l_dst },
+                Self::TestNE { test: r_test, dst: r_dst },
             ) => l_test == r_test && l_dst == r_dst,
             (
-                Self::TestGT {
-                    test: l_test,
-                    dst: l_dst,
-                },
-                Self::TestGT {
-                    test: r_test,
-                    dst: r_dst,
-                },
+                Self::TestGT { test: l_test, dst: l_dst },
+                Self::TestGT { test: r_test, dst: r_dst },
             ) => l_test == r_test && l_dst == r_dst,
             (
-                Self::TestGE {
-                    test: l_test,
-                    dst: l_dst,
-                },
-                Self::TestGE {
-                    test: r_test,
-                    dst: r_dst,
-                },
+                Self::TestGE { test: l_test, dst: l_dst },
+                Self::TestGE { test: r_test, dst: r_dst },
             ) => l_test == r_test && l_dst == r_dst,
             (
-                Self::TestLT {
-                    test: l_test,
-                    dst: l_dst,
-                },
-                Self::TestLT {
-                    test: r_test,
-                    dst: r_dst,
-                },
+                Self::TestLT { test: l_test, dst: l_dst },
+                Self::TestLT { test: r_test, dst: r_dst },
             ) => l_test == r_test && l_dst == r_dst,
             (
-                Self::TestLE {
-                    test: l_test,
-                    dst: l_dst,
-                },
-                Self::TestLE {
-                    test: r_test,
-                    dst: r_dst,
-                },
+                Self::TestLE { test: l_test, dst: l_dst },
+                Self::TestLE { test: r_test, dst: r_dst },
             ) => l_test == r_test && l_dst == r_dst,
             (Self::ImmJump(l0), Self::ImmJump(r0)) => l0 == r0,
             (Self::Jump(l0), Self::Jump(r0)) => l0 == r0,
             (
-                Self::Call {
-                    name: l_name,
-                    args: l_args,
-                },
-                Self::Call {
-                    name: r_name,
-                    args: r_args,
-                },
+                Self::Call { name: l_name, args: l_args },
+                Self::Call { name: r_name, args: r_args },
             ) => l_name == r_name && l_args == r_args,
             (
-                Self::ImmCall {
-                    name: l_name,
-                    args: l_args,
-                    ret: l_ret,
-                },
-                Self::ImmCall {
-                    name: r_name,
-                    args: r_args,
-                    ret: r_ret,
-                },
+                Self::ImmCall { name: l_name, args: l_args, ret: l_ret },
+                Self::ImmCall { name: r_name, args: r_args, ret: r_ret },
             ) => l_name == r_name && l_args == r_args && l_ret == r_ret,
             (
-                Self::ImmRCall {
-                    reg: l_reg,
-                    args: l_args,
-                    ret: l_ret,
-                },
-                Self::ImmRCall {
-                    reg: r_reg,
-                    args: r_args,
-                    ret: r_ret,
-                },
+                Self::ImmRCall { reg: l_reg, args: l_args, ret: l_ret },
+                Self::ImmRCall { reg: r_reg, args: r_args, ret: r_ret },
             ) => l_reg == r_reg && l_args == r_args && l_ret == r_ret,
             (Self::ImmRet(l0), Self::ImmRet(r0)) => l0 == r0,
+            (Self::CbrT { cond: l_cond, loc: l_loc }, Self::CbrT { cond: r_cond, loc: r_loc }) => {
+                l_cond == r_cond && l_loc == r_loc
+            }
+            (Self::CbrF { cond: l_cond, loc: l_loc }, Self::CbrF { cond: r_cond, loc: r_loc }) => {
+                l_cond == r_cond && l_loc == r_loc
+            }
             (
-                Self::CbrT {
-                    cond: l_cond,
-                    loc: l_loc,
-                },
-                Self::CbrT {
-                    cond: r_cond,
-                    loc: r_loc,
-                },
-            ) => l_cond == r_cond && l_loc == r_loc,
-            (
-                Self::CbrF {
-                    cond: l_cond,
-                    loc: l_loc,
-                },
-                Self::CbrF {
-                    cond: r_cond,
-                    loc: r_loc,
-                },
-            ) => l_cond == r_cond && l_loc == r_loc,
-            (
-                Self::CbrLT {
-                    a: l_a,
-                    b: l_b,
-                    loc: l_loc,
-                },
-                Self::CbrLT {
-                    a: r_a,
-                    b: r_b,
-                    loc: r_loc,
-                },
+                Self::CbrLT { a: l_a, b: l_b, loc: l_loc },
+                Self::CbrLT { a: r_a, b: r_b, loc: r_loc },
             ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
             (
-                Self::CbrLE {
-                    a: l_a,
-                    b: l_b,
-                    loc: l_loc,
-                },
-                Self::CbrLE {
-                    a: r_a,
-                    b: r_b,
-                    loc: r_loc,
-                },
+                Self::CbrLE { a: l_a, b: l_b, loc: l_loc },
+                Self::CbrLE { a: r_a, b: r_b, loc: r_loc },
             ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
             (
-                Self::CbrGT {
-                    a: l_a,
-                    b: l_b,
-                    loc: l_loc,
-                },
-                Self::CbrGT {
-                    a: r_a,
-                    b: r_b,
-                    loc: r_loc,
-                },
+                Self::CbrGT { a: l_a, b: l_b, loc: l_loc },
+                Self::CbrGT { a: r_a, b: r_b, loc: r_loc },
             ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
             (
-                Self::CbrGE {
-                    a: l_a,
-                    b: l_b,
-                    loc: l_loc,
-                },
-                Self::CbrGE {
-                    a: r_a,
-                    b: r_b,
-                    loc: r_loc,
-                },
+                Self::CbrGE { a: l_a, b: l_b, loc: l_loc },
+                Self::CbrGE { a: r_a, b: r_b, loc: r_loc },
             ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
             (
-                Self::CbrEQ {
-                    a: l_a,
-                    b: l_b,
-                    loc: l_loc,
-                },
-                Self::CbrEQ {
-                    a: r_a,
-                    b: r_b,
-                    loc: r_loc,
-                },
+                Self::CbrEQ { a: l_a, b: l_b, loc: l_loc },
+                Self::CbrEQ { a: r_a, b: r_b, loc: r_loc },
             ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
             (
-                Self::CbrNE {
-                    a: l_a,
-                    b: l_b,
-                    loc: l_loc,
-                },
-                Self::CbrNE {
-                    a: r_a,
-                    b: r_b,
-                    loc: r_loc,
-                },
+                Self::CbrNE { a: l_a, b: l_b, loc: l_loc },
+                Self::CbrNE { a: r_a, b: r_b, loc: r_loc },
             ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
+            (Self::F2I { src: l_src, dst: l_dst }, Self::F2I { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
+            (Self::I2F { src: l_src, dst: l_dst }, Self::I2F { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
+            (Self::F2F { src: l_src, dst: l_dst }, Self::F2F { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
             (
-                Self::F2I {
-                    src: l_src,
-                    dst: l_dst,
-                },
-                Self::F2I {
-                    src: r_src,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_dst == r_dst,
-            (
-                Self::I2F {
-                    src: l_src,
-                    dst: l_dst,
-                },
-                Self::I2F {
-                    src: r_src,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_dst == r_dst,
-            (
-                Self::F2F {
-                    src: l_src,
-                    dst: l_dst,
-                },
-                Self::F2F {
-                    src: r_src,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_dst == r_dst,
-            (
-                Self::FAdd {
-                    src_a: l_src_a,
-                    src_b: l_src_b,
-                    dst: l_dst,
-                },
-                Self::FAdd {
-                    src_a: r_src_a,
-                    src_b: r_src_b,
-                    dst: r_dst,
-                },
+                Self::FAdd { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
+                Self::FAdd { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
             ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
             (
-                Self::FSub {
-                    src_a: l_src_a,
-                    src_b: l_src_b,
-                    dst: l_dst,
-                },
-                Self::FSub {
-                    src_a: r_src_a,
-                    src_b: r_src_b,
-                    dst: r_dst,
-                },
+                Self::FSub { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
+                Self::FSub { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
             ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
             (
-                Self::FMult {
-                    src_a: l_src_a,
-                    src_b: l_src_b,
-                    dst: l_dst,
-                },
-                Self::FMult {
-                    src_a: r_src_a,
-                    src_b: r_src_b,
-                    dst: r_dst,
-                },
+                Self::FMult { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
+                Self::FMult { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
             ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
             (
-                Self::FDiv {
-                    src_a: l_src_a,
-                    src_b: l_src_b,
-                    dst: l_dst,
-                },
-                Self::FDiv {
-                    src_a: r_src_a,
-                    src_b: r_src_b,
-                    dst: r_dst,
-                },
+                Self::FDiv { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
+                Self::FDiv { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
             ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
             (
-                Self::FComp {
-                    src_a: l_src_a,
-                    src_b: l_src_b,
-                    dst: l_dst,
-                },
-                Self::FComp {
-                    src_a: r_src_a,
-                    src_b: r_src_b,
-                    dst: r_dst,
-                },
+                Self::FComp { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
+                Self::FComp { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
             ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
+            (Self::FLoad { src: l_src, dst: l_dst }, Self::FLoad { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
             (
-                Self::FLoad {
-                    src: l_src,
-                    dst: l_dst,
-                },
-                Self::FLoad {
-                    src: r_src,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_dst == r_dst,
-            (
-                Self::FLoadAddImm {
-                    src: l_src,
-                    add: l_add,
-                    dst: l_dst,
-                },
-                Self::FLoadAddImm {
-                    src: r_src,
-                    add: r_add,
-                    dst: r_dst,
-                },
+                Self::FLoadAddImm { src: l_src, add: l_add, dst: l_dst },
+                Self::FLoadAddImm { src: r_src, add: r_add, dst: r_dst },
             ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
             (
-                Self::FLoadAdd {
-                    src: l_src,
-                    add: l_add,
-                    dst: l_dst,
-                },
-                Self::FLoadAdd {
-                    src: r_src,
-                    add: r_add,
-                    dst: r_dst,
-                },
+                Self::FLoadAdd { src: l_src, add: l_add, dst: l_dst },
+                Self::FLoadAdd { src: r_src, add: r_add, dst: r_dst },
+            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
+            (Self::FStore { src: l_src, dst: l_dst }, Self::FStore { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
+            (
+                Self::FStoreAddImm { src: l_src, add: l_add, dst: l_dst },
+                Self::FStoreAddImm { src: r_src, add: r_add, dst: r_dst },
             ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
             (
-                Self::FStore {
-                    src: l_src,
-                    dst: l_dst,
-                },
-                Self::FStore {
-                    src: r_src,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_dst == r_dst,
-            (
-                Self::FStoreAddImm {
-                    src: l_src,
-                    add: l_add,
-                    dst: l_dst,
-                },
-                Self::FStoreAddImm {
-                    src: r_src,
-                    add: r_add,
-                    dst: r_dst,
-                },
-            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
-            (
-                Self::FStoreAdd {
-                    src: l_src,
-                    add: l_add,
-                    dst: l_dst,
-                },
-                Self::FStoreAdd {
-                    src: r_src,
-                    add: r_add,
-                    dst: r_dst,
-                },
+                Self::FStoreAdd { src: l_src, add: l_add, dst: l_dst },
+                Self::FStoreAdd { src: r_src, add: r_add, dst: r_dst },
             ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
             (Self::FRead(l0), Self::FRead(r0)) => l0 == r0,
             (Self::IRead(l0), Self::IRead(r0)) => l0 == r0,
@@ -1265,48 +812,20 @@ impl PartialEq for Instruction {
             (Self::Push(l0), Self::Push(r0)) => l0 == r0,
             (Self::PushR(l0), Self::PushR(r0)) => l0 == r0,
             (
-                Self::Frame {
-                    name: l_name,
-                    size: l_size,
-                    params: l_params,
-                },
-                Self::Frame {
-                    name: r_name,
-                    size: r_size,
-                    params: r_params,
-                },
+                Self::Frame { name: l_name, size: l_size, params: l_params },
+                Self::Frame { name: r_name, size: r_size, params: r_params },
             ) => l_name == r_name && l_size == r_size && l_params == r_params,
             (
-                Self::Global {
-                    name: l_name,
-                    size: l_size,
-                    align: l_align,
-                },
-                Self::Global {
-                    name: r_name,
-                    size: r_size,
-                    align: r_align,
-                },
+                Self::Global { name: l_name, size: l_size, align: l_align },
+                Self::Global { name: r_name, size: r_size, align: r_align },
             ) => l_name == r_name && l_size == r_size && l_align == r_align,
             (
-                Self::String {
-                    name: l_name,
-                    content: l_content,
-                },
-                Self::String {
-                    name: r_name,
-                    content: r_content,
-                },
+                Self::String { name: l_name, content: l_content },
+                Self::String { name: r_name, content: r_content },
             ) => l_name == r_name && l_content == r_content,
             (
-                Self::Float {
-                    name: l_name,
-                    content: l_content,
-                },
-                Self::Float {
-                    name: r_name,
-                    content: r_content,
-                },
+                Self::Float { name: l_name, content: l_content },
+                Self::Float { name: r_name, content: r_content },
             ) => l_name == r_name && l_content.to_bits() == r_content.to_bits(),
             (Self::Label(l0), Self::Label(r0)) => l0 == r0,
             // Unit variants
@@ -1322,84 +841,28 @@ impl fmt::Display for Instruction {
                 writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
             }
             Instruction::Add { src_a, src_b, dst } => {
-                writeln!(
-                    f,
-                    "    {} {}, {} => {}",
-                    self.inst_name(),
-                    src_a,
-                    src_b,
-                    dst
-                )
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::Sub { src_a, src_b, dst } => {
-                writeln!(
-                    f,
-                    "    {} {}, {} => {}",
-                    self.inst_name(),
-                    src_a,
-                    src_b,
-                    dst
-                )
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::Mult { src_a, src_b, dst } => {
-                writeln!(
-                    f,
-                    "    {} {}, {} => {}",
-                    self.inst_name(),
-                    src_a,
-                    src_b,
-                    dst
-                )
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::LShift { src_a, src_b, dst } => {
-                writeln!(
-                    f,
-                    "    {} {}, {} => {}",
-                    self.inst_name(),
-                    src_a,
-                    src_b,
-                    dst
-                )
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::RShift { src_a, src_b, dst } => {
-                writeln!(
-                    f,
-                    "    {} {}, {} => {}",
-                    self.inst_name(),
-                    src_a,
-                    src_b,
-                    dst
-                )
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::Mod { src_a, src_b, dst } => {
-                writeln!(
-                    f,
-                    "    {} {}, {} => {}",
-                    self.inst_name(),
-                    src_a,
-                    src_b,
-                    dst
-                )
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::And { src_a, src_b, dst } => {
-                writeln!(
-                    f,
-                    "    {} {}, {} => {}",
-                    self.inst_name(),
-                    src_a,
-                    src_b,
-                    dst
-                )
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::Or { src_a, src_b, dst } => {
-                writeln!(
-                    f,
-                    "    {} {}, {} => {}",
-                    self.inst_name(),
-                    src_a,
-                    src_b,
-                    dst
-                )
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::Not { src, dst } => {
                 writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
@@ -1487,20 +950,14 @@ impl fmt::Display for Instruction {
                 self.inst_name(),
                 name,
                 if args.is_empty() { "" } else { "," },
-                args.iter()
-                    .map(|r| r.to_string())
-                    .collect::<Vec<_>>()
-                    .join(",")
+                args.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(",")
             ),
             Instruction::ImmCall { name, args, ret } => writeln!(
                 f,
                 "    {} {}, {} => {}",
                 self.inst_name(),
                 name,
-                args.iter()
-                    .map(|r| r.to_string())
-                    .collect::<Vec<_>>()
-                    .join(","),
+                args.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(","),
                 ret
             ),
             Instruction::ImmRCall { reg, args, ret } => writeln!(
@@ -1508,10 +965,7 @@ impl fmt::Display for Instruction {
                 "    {} {}, {} => {}",
                 self.inst_name(),
                 reg,
-                args.iter()
-                    .map(|r| r.to_string())
-                    .collect::<Vec<_>>()
-                    .join(","),
+                args.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(","),
                 ret
             ),
             Instruction::ImmRet(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
@@ -1549,54 +1003,19 @@ impl fmt::Display for Instruction {
                 writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
             }
             Instruction::FAdd { src_a, src_b, dst } => {
-                writeln!(
-                    f,
-                    "    {} {}, {} => {}",
-                    self.inst_name(),
-                    src_a,
-                    src_b,
-                    dst
-                )
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::FSub { src_a, src_b, dst } => {
-                writeln!(
-                    f,
-                    "    {} {}, {} => {}",
-                    self.inst_name(),
-                    src_a,
-                    src_b,
-                    dst
-                )
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::FMult { src_a, src_b, dst } => {
-                writeln!(
-                    f,
-                    "    {} {}, {} => {}",
-                    self.inst_name(),
-                    src_a,
-                    src_b,
-                    dst
-                )
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::FDiv { src_a, src_b, dst } => {
-                writeln!(
-                    f,
-                    "    {} {}, {} => {}",
-                    self.inst_name(),
-                    src_a,
-                    src_b,
-                    dst
-                )
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::FComp { src_a, src_b, dst } => {
-                writeln!(
-                    f,
-                    "    {} {}, {} => {}",
-                    self.inst_name(),
-                    src_a,
-                    src_b,
-                    dst
-                )
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::FLoad { src, dst } => {
                 writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
@@ -1631,11 +1050,7 @@ impl fmt::Display for Instruction {
                     name,
                     size,
                     if params.is_empty() { "" } else { "," },
-                    params
-                        .iter()
-                        .map(|r| r.to_string())
-                        .collect::<Vec<_>>()
-                        .join(",")
+                    params.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(",")
                 )
             }
             Instruction::Global { name, size, align } => {
@@ -1754,38 +1169,30 @@ impl Instruction {
     pub fn operands(&self) -> (Option<Operand<'_>>, Option<Operand<'_>>) {
         match self {
             Instruction::I2I { src, .. } => (Some(Operand::Register(src)), None),
-            Instruction::Add { src_a, src_b, .. } => (
-                Some(Operand::Register(src_a)),
-                Some(Operand::Register(src_b)),
-            ),
-            Instruction::Sub { src_a, src_b, .. } => (
-                Some(Operand::Register(src_a)),
-                Some(Operand::Register(src_b)),
-            ),
-            Instruction::Mult { src_a, src_b, .. } => (
-                Some(Operand::Register(src_a)),
-                Some(Operand::Register(src_b)),
-            ),
-            Instruction::LShift { src_a, src_b, .. } => (
-                Some(Operand::Register(src_a)),
-                Some(Operand::Register(src_b)),
-            ),
-            Instruction::RShift { src_a, src_b, .. } => (
-                Some(Operand::Register(src_a)),
-                Some(Operand::Register(src_b)),
-            ),
-            Instruction::Mod { src_a, src_b, .. } => (
-                Some(Operand::Register(src_a)),
-                Some(Operand::Register(src_b)),
-            ),
-            Instruction::And { src_a, src_b, .. } => (
-                Some(Operand::Register(src_a)),
-                Some(Operand::Register(src_b)),
-            ),
-            Instruction::Or { src_a, src_b, .. } => (
-                Some(Operand::Register(src_a)),
-                Some(Operand::Register(src_b)),
-            ),
+            Instruction::Add { src_a, src_b, .. } => {
+                (Some(Operand::Register(src_a)), Some(Operand::Register(src_b)))
+            }
+            Instruction::Sub { src_a, src_b, .. } => {
+                (Some(Operand::Register(src_a)), Some(Operand::Register(src_b)))
+            }
+            Instruction::Mult { src_a, src_b, .. } => {
+                (Some(Operand::Register(src_a)), Some(Operand::Register(src_b)))
+            }
+            Instruction::LShift { src_a, src_b, .. } => {
+                (Some(Operand::Register(src_a)), Some(Operand::Register(src_b)))
+            }
+            Instruction::RShift { src_a, src_b, .. } => {
+                (Some(Operand::Register(src_a)), Some(Operand::Register(src_b)))
+            }
+            Instruction::Mod { src_a, src_b, .. } => {
+                (Some(Operand::Register(src_a)), Some(Operand::Register(src_b)))
+            }
+            Instruction::And { src_a, src_b, .. } => {
+                (Some(Operand::Register(src_a)), Some(Operand::Register(src_b)))
+            }
+            Instruction::Or { src_a, src_b, .. } => {
+                (Some(Operand::Register(src_a)), Some(Operand::Register(src_b)))
+            }
             Instruction::Not { src, .. } => (Some(Operand::Register(src)), None),
             Instruction::ImmAdd { src, konst, .. } => {
                 (Some(Operand::Register(src)), Some(Operand::Value(konst)))
@@ -1847,26 +1254,21 @@ impl Instruction {
             Instruction::F2I { src, .. } => (Some(Operand::Register(src)), None),
             Instruction::I2F { src, .. } => (Some(Operand::Register(src)), None),
             Instruction::F2F { src, .. } => (Some(Operand::Register(src)), None),
-            Instruction::FAdd { src_a, src_b, .. } => (
-                Some(Operand::Register(src_a)),
-                Some(Operand::Register(src_b)),
-            ),
-            Instruction::FSub { src_a, src_b, .. } => (
-                Some(Operand::Register(src_a)),
-                Some(Operand::Register(src_b)),
-            ),
-            Instruction::FMult { src_a, src_b, .. } => (
-                Some(Operand::Register(src_a)),
-                Some(Operand::Register(src_b)),
-            ),
-            Instruction::FDiv { src_a, src_b, .. } => (
-                Some(Operand::Register(src_a)),
-                Some(Operand::Register(src_b)),
-            ),
-            Instruction::FComp { src_a, src_b, .. } => (
-                Some(Operand::Register(src_a)),
-                Some(Operand::Register(src_b)),
-            ),
+            Instruction::FAdd { src_a, src_b, .. } => {
+                (Some(Operand::Register(src_a)), Some(Operand::Register(src_b)))
+            }
+            Instruction::FSub { src_a, src_b, .. } => {
+                (Some(Operand::Register(src_a)), Some(Operand::Register(src_b)))
+            }
+            Instruction::FMult { src_a, src_b, .. } => {
+                (Some(Operand::Register(src_a)), Some(Operand::Register(src_b)))
+            }
+            Instruction::FDiv { src_a, src_b, .. } => {
+                (Some(Operand::Register(src_a)), Some(Operand::Register(src_b)))
+            }
+            Instruction::FComp { src_a, src_b, .. } => {
+                (Some(Operand::Register(src_a)), Some(Operand::Register(src_b)))
+            }
             Instruction::FLoad { src, .. } => (Some(Operand::Register(src)), None),
             Instruction::FLoadAddImm { src, add, .. } => {
                 (Some(Operand::Register(src)), Some(Operand::Value(add)))
@@ -2066,38 +1468,30 @@ impl Instruction {
     pub fn fold(&self, a: &Val, b: &Val) -> Option<Instruction> {
         Some(match (a, b) {
             (Val::Integer(a), Val::Integer(b)) => match self {
-                Instruction::Add { dst, .. } => Instruction::ImmLoad {
-                    src: Val::Integer(a + b),
-                    dst: *dst,
-                },
-                Instruction::Sub { dst, .. } => Instruction::ImmLoad {
-                    src: Val::Integer(a - b),
-                    dst: *dst,
-                },
-                Instruction::Mult { dst, .. } => Instruction::ImmLoad {
-                    src: Val::Integer(a * b),
-                    dst: *dst,
-                },
-                Instruction::LShift { dst, .. } => Instruction::ImmLoad {
-                    src: Val::Integer(a << b),
-                    dst: *dst,
-                },
-                Instruction::RShift { dst, .. } => Instruction::ImmLoad {
-                    src: Val::Integer(a >> b),
-                    dst: *dst,
-                },
-                Instruction::Mod { dst, .. } if *b != 0 => Instruction::ImmLoad {
-                    src: Val::Integer(a % b),
-                    dst: *dst,
-                },
-                Instruction::And { dst, .. } => Instruction::ImmLoad {
-                    src: Val::Integer(a & b),
-                    dst: *dst,
-                },
-                Instruction::Or { dst, .. } => Instruction::ImmLoad {
-                    src: Val::Integer(a | b),
-                    dst: *dst,
-                },
+                Instruction::Add { dst, .. } => {
+                    Instruction::ImmLoad { src: Val::Integer(a + b), dst: *dst }
+                }
+                Instruction::Sub { dst, .. } => {
+                    Instruction::ImmLoad { src: Val::Integer(a - b), dst: *dst }
+                }
+                Instruction::Mult { dst, .. } => {
+                    Instruction::ImmLoad { src: Val::Integer(a * b), dst: *dst }
+                }
+                Instruction::LShift { dst, .. } => {
+                    Instruction::ImmLoad { src: Val::Integer(a << b), dst: *dst }
+                }
+                Instruction::RShift { dst, .. } => {
+                    Instruction::ImmLoad { src: Val::Integer(a >> b), dst: *dst }
+                }
+                Instruction::Mod { dst, .. } if *b != 0 => {
+                    Instruction::ImmLoad { src: Val::Integer(a % b), dst: *dst }
+                }
+                Instruction::And { dst, .. } => {
+                    Instruction::ImmLoad { src: Val::Integer(a & b), dst: *dst }
+                }
+                Instruction::Or { dst, .. } => {
+                    Instruction::ImmLoad { src: Val::Integer(a | b), dst: *dst }
+                }
                 _ => {
                     return None;
                 }
@@ -2121,10 +1515,7 @@ impl Instruction {
 
     pub fn fold_two_address(&self, a: &Val) -> Option<Instruction> {
         Some(match self {
-            Instruction::Load { dst, .. } => Instruction::ImmLoad {
-                src: a.clone(),
-                dst: *dst,
-            },
+            Instruction::Load { dst, .. } => Instruction::ImmLoad { src: a.clone(), dst: *dst },
             _ => {
                 return None;
             }
@@ -2134,6 +1525,10 @@ impl Instruction {
     /// If this operation is an identity operation, return the register that would be unchanged.
     ///
     /// `add %vr2, 0 => %vr3` is the same as `i2i %vr2 => %vr3`
+    ///
+    /// TODO:
+    /// 2 * a = a + a, a / 1 = a, a / a = 1 if a != 0,
+    /// a >> 0 = a, a << 0 = a, a && a = a, a || a = a
     pub fn identity_register(&self) -> Option<&Reg> {
         Some(match self {
             Instruction::Add { .. } | Instruction::FAdd { .. } => match self.operands() {
@@ -2150,6 +1545,9 @@ impl Instruction {
             },
             Instruction::Sub { .. } | Instruction::FSub { .. } => match self.operands() {
                 (Some(Operand::Register(reg)), Some(Operand::Value(val))) if val.is_zero() => reg,
+                (Some(Operand::Register(a)), Some(Operand::Register(b))) if a == b => {
+                    todo!("this is sub id 0")
+                }
                 _ => {
                     return None;
                 }
@@ -2167,6 +1565,9 @@ impl Instruction {
             },
             Instruction::FDiv { .. } => match self.operands() {
                 (Some(Operand::Register(reg)), Some(Operand::Value(val))) if val.is_one() => reg,
+                (Some(Operand::Register(a)), Some(Operand::Register(b))) if a == b => {
+                    todo!("this is div id 1")
+                }
                 _ => {
                     return None;
                 }
@@ -2194,8 +1595,18 @@ impl Instruction {
                     return None;
                 }
             },
-            // Instruction::And { .. } => todo!(),
-            // Instruction::Or { dst, .. } => todo!(),
+            Instruction::And { .. } => match self.operands() {
+                (Some(Operand::Register(a)), Some(Operand::Register(b))) if a == b => a,
+                _ => {
+                    return None;
+                }
+            },
+            Instruction::Or { dst, .. } => match self.operands() {
+                (Some(Operand::Register(a)), Some(Operand::Register(b))) if a == b => a,
+                _ => {
+                    return None;
+                }
+            },
             _ => {
                 return None;
             }
@@ -2203,7 +1614,8 @@ impl Instruction {
     }
 
     /// If this operation is an identity operation, return the register that would be unchanged.
-    /// `val` is always the left operand, subtraction is __never__ a valid identity op for this call.
+    /// `val` is always the left operand, subtraction is __never__ a valid identity op for this
+    /// call.
     ///
     /// `add %vr2, 0 => %vr3` is the same as `i2i %vr2 => %vr3`
     pub fn identity_with_const_prop_left(&self, val: &Val) -> Option<&Reg> {
@@ -2251,31 +1663,21 @@ impl Instruction {
 
     pub fn as_immediate_instruction_right(&self, a: &Val) -> Option<Instruction> {
         Some(match self {
-            Instruction::Add { src_a, dst, .. } => Instruction::ImmAdd {
-                src: *src_a,
-                konst: a.clone(),
-                dst: *dst,
-            },
-            Instruction::Sub { src_a, dst, .. } => Instruction::ImmSub {
-                src: *src_a,
-                konst: a.clone(),
-                dst: *dst,
-            },
-            Instruction::Mult { src_a, dst, .. } => Instruction::ImmMult {
-                src: *src_a,
-                konst: a.clone(),
-                dst: *dst,
-            },
-            Instruction::LShift { src_a, dst, .. } => Instruction::ImmLShift {
-                src: *src_a,
-                konst: a.clone(),
-                dst: *dst,
-            },
-            Instruction::RShift { src_a, dst, .. } => Instruction::ImmRShift {
-                src: *src_a,
-                konst: a.clone(),
-                dst: *dst,
-            },
+            Instruction::Add { src_a, dst, .. } => {
+                Instruction::ImmAdd { src: *src_a, konst: a.clone(), dst: *dst }
+            }
+            Instruction::Sub { src_a, dst, .. } => {
+                Instruction::ImmSub { src: *src_a, konst: a.clone(), dst: *dst }
+            }
+            Instruction::Mult { src_a, dst, .. } => {
+                Instruction::ImmMult { src: *src_a, konst: a.clone(), dst: *dst }
+            }
+            Instruction::LShift { src_a, dst, .. } => {
+                Instruction::ImmLShift { src: *src_a, konst: a.clone(), dst: *dst }
+            }
+            Instruction::RShift { src_a, dst, .. } => {
+                Instruction::ImmRShift { src: *src_a, konst: a.clone(), dst: *dst }
+            }
             Instruction::F2F { dst, .. }
             | Instruction::FAdd { dst, .. }
             | Instruction::FSub { dst, .. }
@@ -2290,29 +1692,21 @@ impl Instruction {
 
     pub fn as_immediate_instruction_left(&self, a: &Val) -> Option<Instruction> {
         Some(match self {
-            Instruction::Add { src_b, dst, .. } => Instruction::ImmAdd {
-                src: *src_b,
-                konst: a.clone(),
-                dst: *dst,
-            },
-            Instruction::Mult { src_b, dst, .. } => Instruction::ImmMult {
-                src: *src_b,
-                konst: a.clone(),
-                dst: *dst,
-            },
-            Instruction::ImmAdd { konst, dst, .. } => Instruction::ImmLoad {
-                src: a.add(konst)?,
-                dst: *dst,
-            },
-            Instruction::ImmMult { konst, dst, .. } => Instruction::ImmLoad {
-                src: a.mult(konst)?,
-                dst: *dst,
-            },
-            Instruction::RShift { src_a, dst, .. } => Instruction::ImmRShift {
-                src: *src_a,
-                konst: a.clone(),
-                dst: *dst,
-            },
+            Instruction::Add { src_b, dst, .. } => {
+                Instruction::ImmAdd { src: *src_b, konst: a.clone(), dst: *dst }
+            }
+            Instruction::Mult { src_b, dst, .. } => {
+                Instruction::ImmMult { src: *src_b, konst: a.clone(), dst: *dst }
+            }
+            Instruction::ImmAdd { konst, dst, .. } => {
+                Instruction::ImmLoad { src: a.add(konst)?, dst: *dst }
+            }
+            Instruction::ImmMult { konst, dst, .. } => {
+                Instruction::ImmLoad { src: a.mult(konst)?, dst: *dst }
+            }
+            Instruction::RShift { src_a, dst, .. } => {
+                Instruction::ImmRShift { src: *src_a, konst: a.clone(), dst: *dst }
+            }
             Instruction::F2F { dst, .. }
             | Instruction::FAdd { dst, .. }
             | Instruction::FSub { dst, .. }
@@ -2340,14 +1734,18 @@ impl Instruction {
     }
 
     pub fn is_call_instruction(&self) -> bool {
-        matches!(
-            self,
-            Self::Call { .. } | Self::ImmCall { .. } | Self::ImmRCall { .. } // | Self::FCall { .. }
-        )
+        matches!(self, Self::Call { .. } | Self::ImmCall { .. } | Self::ImmRCall { .. })
     }
 
     pub fn is_load_imm(&self) -> bool {
         matches!(self, Self::ImmLoad { .. })
+    }
+
+    pub fn is_commutative(&self) -> bool {
+        matches!(
+            self,
+            Self::Add { .. } | Self::ImmAdd { .. } | Self::Mult { .. } | Self::ImmMult { .. }
+        )
     }
 }
 
@@ -2355,25 +1753,15 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
     let mut instructions = vec![];
 
     for line in input.lines() {
-        let comp = line
-            .split_ascii_whitespace()
-            .map(|s| s.replace(',', ""))
-            .collect::<Vec<_>>();
+        let comp = line.split_ascii_whitespace().map(|s| s.replace(',', "")).collect::<Vec<_>>();
         if comp.is_empty() {
             continue;
         }
 
-        match comp
-            .iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<_>>()
-            .as_slice()
-        {
+        match comp.iter().map(|s| s.as_str()).collect::<Vec<_>>().as_slice() {
             // Integer operations
-            ["i2i", src, "=>", dst] => instructions.push(Instruction::I2I {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["i2i", src, "=>", dst] => instructions
+                .push(Instruction::I2I { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
             ["add", a, b, "=>", dst] => instructions.push(Instruction::Add {
                 src_a: Reg::from_str(a)?,
                 src_b: Reg::from_str(b)?,
@@ -2414,10 +1802,8 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 src_b: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
-            ["not", src, "=>", dst] => instructions.push(Instruction::Not {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["not", src, "=>", dst] => instructions
+                .push(Instruction::Not { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
             ["addI", a, b, "=>", dst] => instructions.push(Instruction::ImmAdd {
                 src: Reg::from_str(a)?,
                 konst: Val::from_str(b)?,
@@ -2445,14 +1831,10 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             }),
 
             // Memory operations
-            ["loadI", src, "=>", dst] => instructions.push(Instruction::ImmLoad {
-                src: Val::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["load", src, "=>", dst] => instructions.push(Instruction::Load {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["loadI", src, "=>", dst] => instructions
+                .push(Instruction::ImmLoad { src: Val::from_str(src)?, dst: Reg::from_str(dst)? }),
+            ["load", src, "=>", dst] => instructions
+                .push(Instruction::Load { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
             ["loadAI", a, b, "=>", dst] => instructions.push(Instruction::LoadAddImm {
                 src: Reg::from_str(a)?,
                 add: Val::from_str(b)?,
@@ -2463,10 +1845,8 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 add: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
-            ["store", src, "=>", dst] => instructions.push(Instruction::Store {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["store", src, "=>", dst] => instructions
+                .push(Instruction::Store { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
             ["storeAI", a, b, "=>", dst] => instructions.push(Instruction::StoreAddImm {
                 src: Reg::from_str(a)?,
                 add: Val::from_str(b)?,
@@ -2513,44 +1893,26 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 b: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
-            ["testeq", a, "=>", dst] => instructions.push(Instruction::TestEQ {
-                test: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["testne", a, "=>", dst] => instructions.push(Instruction::TestNE {
-                test: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["testgt", a, "=>", dst] => instructions.push(Instruction::TestGT {
-                test: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["testge", a, "=>", dst] => instructions.push(Instruction::TestGE {
-                test: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["testlt", a, "=>", dst] => instructions.push(Instruction::TestLT {
-                test: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["testle", a, "=>", dst] => instructions.push(Instruction::TestLE {
-                test: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["testeq", a, "=>", dst] => instructions
+                .push(Instruction::TestEQ { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            ["testne", a, "=>", dst] => instructions
+                .push(Instruction::TestNE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            ["testgt", a, "=>", dst] => instructions
+                .push(Instruction::TestGT { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            ["testge", a, "=>", dst] => instructions
+                .push(Instruction::TestGE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            ["testlt", a, "=>", dst] => instructions
+                .push(Instruction::TestLT { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            ["testle", a, "=>", dst] => instructions
+                .push(Instruction::TestLE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
 
             // Float operations
-            ["f2i", src, "=>", dst] => instructions.push(Instruction::F2I {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["i2f", src, "=>", dst] => instructions.push(Instruction::I2F {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["f2f", src, "=>", dst] => instructions.push(Instruction::F2F {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["f2i", src, "=>", dst] => instructions
+                .push(Instruction::F2I { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
+            ["i2f", src, "=>", dst] => instructions
+                .push(Instruction::I2F { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
+            ["f2f", src, "=>", dst] => instructions
+                .push(Instruction::F2F { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
             ["fadd", a, b, "=>", dst] => instructions.push(Instruction::FAdd {
                 src_a: Reg::from_str(a)?,
                 src_b: Reg::from_str(b)?,
@@ -2576,10 +1938,8 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 src_b: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
-            ["fload", a, "=>", dst] => instructions.push(Instruction::FLoad {
-                src: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["fload", a, "=>", dst] => instructions
+                .push(Instruction::FLoad { src: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
             ["floadAI", a, b, "=>", dst] => instructions.push(Instruction::FLoadAddImm {
                 src: Reg::from_str(a)?,
                 add: Val::from_str(b)?,
@@ -2590,10 +1950,8 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 add: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
-            ["store", a, "=>", dst] => instructions.push(Instruction::Store {
-                src: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["store", a, "=>", dst] => instructions
+                .push(Instruction::Store { src: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
             ["storeAI", a, b, "=>", dst] => instructions.push(Instruction::StoreAddImm {
                 src: Reg::from_str(a)?,
                 add: Val::from_str(b)?,
@@ -2622,10 +1980,7 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                     .iter()
                     .map(|s| Reg::from_str(s))
                     .collect::<Result<Vec<_>, &'static str>>()?;
-                instructions.push(Instruction::Call {
-                    name: name.to_string(),
-                    args,
-                })
+                instructions.push(Instruction::Call { name: name.to_string(), args })
             }
             ["icall", name, args @ .., "=>", ret] => {
                 let args = args
@@ -2651,14 +2006,10 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             }
             ["ret"] => instructions.push(Instruction::Ret),
             ["iret", res] => instructions.push(Instruction::ImmRet(Reg::from_str(res)?)),
-            ["cbr", src, "->", label] => instructions.push(Instruction::CbrT {
-                cond: Reg::from_str(src)?,
-                loc: Loc::from_str(label)?,
-            }),
-            ["cbrne", src, "->", label] => instructions.push(Instruction::CbrF {
-                cond: Reg::from_str(src)?,
-                loc: Loc::from_str(label)?,
-            }),
+            ["cbr", src, "->", label] => instructions
+                .push(Instruction::CbrT { cond: Reg::from_str(src)?, loc: Loc::from_str(label)? }),
+            ["cbrne", src, "->", label] => instructions
+                .push(Instruction::CbrF { cond: Reg::from_str(src)?, loc: Loc::from_str(label)? }),
             ["cbr_LT", a, b, "->", label] => instructions.push(Instruction::CbrLT {
                 a: Reg::from_str(a)?,
                 b: Reg::from_str(b)?,
@@ -2720,10 +2071,8 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 size: size.parse().map_err(|_| "failed to parse .global size")?,
                 align: align.parse().map_err(|_| "failed to parse .global align")?,
             }),
-            [".string", name, str_lit] => instructions.push(Instruction::String {
-                name: name.to_string(),
-                content: str_lit.to_string(),
-            }),
+            [".string", name, str_lit] => instructions
+                .push(Instruction::String { name: name.to_string(), content: str_lit.to_string() }),
             [".float", name, val] => instructions.push(Instruction::Float {
                 name: name.to_string(),
                 content: val.parse().map_err(|_| "failed to parse .float value")?,
@@ -2790,13 +2139,7 @@ impl Function {
                 }
             }
         }
-        Iter {
-            iter: &self.blk,
-            inst: Some(&self.inst),
-            blk_idx: 0,
-            inst_idx: 0,
-            first_blk: true,
-        }
+        Iter { iter: &self.blk, inst: Some(&self.inst), blk_idx: 0, inst_idx: 0, first_blk: true }
     }
 }
 
@@ -2810,17 +2153,13 @@ pub struct IlocProgram {
 
 impl IlocProgram {
     pub fn instruction_iter(&self) -> impl Iterator<Item = &Instruction> {
-        self.preamble
-            .iter()
-            .chain(self.functions.iter().flat_map(|f| f.flatten_block_iter()))
+        self.preamble.iter().chain(self.functions.iter().flat_map(|f| f.flatten_block_iter()))
     }
 }
 
 pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
-    let fn_start = iloc
-        .iter()
-        .position(|inst| matches!(inst, Instruction::Frame { .. }))
-        .unwrap_or_default();
+    let fn_start =
+        iloc.iter().position(|inst| matches!(inst, Instruction::Frame { .. })).unwrap_or_default();
     let (preamble, rest) = iloc.split_at(fn_start);
 
     let mut used_labels = HashSet::new();
@@ -2865,16 +2204,11 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
                 s.push(':');
                 used_labels.insert(s);
             }
-            functions[fn_idx].blk[blk_idx]
-                .instructions
-                .push(inst.clone());
+            functions[fn_idx].blk[blk_idx].instructions.push(inst.clone());
         }
     }
 
-    IlocProgram {
-        preamble: preamble.to_vec(),
-        functions,
-    }
+    IlocProgram { preamble: preamble.to_vec(), functions }
 }
 
 #[test]
