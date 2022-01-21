@@ -6,7 +6,7 @@ use std::{
 
 use crate::iloc::{parse_text, Block, Function, IlocProgram, Instruction, Loc, Reg, Val};
 
-const STACK_SIZE: usize = 4096;
+const STACK_SIZE: usize = 4096 * 4;
 
 struct CallStackEntry {
     name: Loc,
@@ -92,7 +92,8 @@ impl Interpreter {
                     // the memory address of the beginning of the program
                     // itself, since our stack is separate it's just the 0th
                     // index of the stack
-                    registers.insert(Reg::Var(0), Val::Integer(func.stack_size as isize));
+                    registers
+                        .insert(Reg::Var(0), Val::Integer((STACK_SIZE - func.stack_size) as isize));
                 }
 
                 fn_decl_map.insert(Loc(func.label.clone()), (func.stack_size, func.params));
