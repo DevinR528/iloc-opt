@@ -49,7 +49,7 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new(iloc: IlocProgram) -> Self {
         let mut preamble_lines = iloc.preamble.len();
-        let mut stack = vec![Val::Null; STACK_SIZE];
+        let mut stack = vec![Val::Integer(0); STACK_SIZE];
         let data = iloc
             .preamble
             .into_iter()
@@ -92,8 +92,7 @@ impl Interpreter {
                     // the memory address of the beginning of the program
                     // itself, since our stack is separate it's just the 0th
                     // index of the stack
-                    registers
-                        .insert(Reg::Var(0), Val::Integer((STACK_SIZE - func.stack_size) as isize));
+                    registers.insert(Reg::Var(0), Val::Integer(STACK_SIZE as isize));
                 }
 
                 fn_decl_map.insert(Loc(func.label.clone()), (func.stack_size, func.params));
