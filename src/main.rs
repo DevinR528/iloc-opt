@@ -14,21 +14,13 @@ mod loc_val_num;
 
 use iloc::{make_blks, parse_text, Instruction};
 
-const JAVA_ILOC_BENCH: &[&str] = &[
-    "-jar",
-    "/home/devinr/Downloads/my-cs6810-ssa-opt-project/iloc.jar",
-    "-s",
-];
+const JAVA_ILOC_BENCH: &[&str] =
+    &["-jar", "/home/devinr/Downloads/my-cs6810-ssa-opt-project/iloc.jar", "-s"];
 
 fn main() {
     let files = env::args().skip(1).collect::<Vec<_>>();
 
-    if let ["debug", files @ ..] = files
-        .iter()
-        .map(|s| s.as_str())
-        .collect::<Vec<_>>()
-        .as_slice()
-    {
+    if let ["debug", files @ ..] = files.iter().map(|s| s.as_str()).collect::<Vec<_>>().as_slice() {
         for file in files {
             let input = fs::read_to_string(&file).unwrap();
             let mut iloc = make_blks(parse_text(&input).unwrap());
@@ -61,22 +53,13 @@ fn main() {
         let file = path.file_stem().unwrap().to_string_lossy().to_string();
         path.set_file_name(&format!("opt.{}.il", file));
 
-        let mut fd = fs::OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(&path)
-            .unwrap();
+        let mut fd =
+            fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
 
         fd.write_all(buf.as_bytes()).unwrap();
 
         let cmd = std::process::Command::new("java")
-            .args(
-                JAVA_ILOC_BENCH
-                    .iter()
-                    .chain(path.to_str().iter())
-                    .collect::<Vec<_>>(),
-            )
+            .args(JAVA_ILOC_BENCH.iter().chain(path.to_str().iter()).collect::<Vec<_>>())
             .output()
             .unwrap();
 

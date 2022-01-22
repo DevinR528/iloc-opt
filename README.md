@@ -16,7 +16,7 @@ My instruction counts
 
 | File            | Original | LVN    | SSA DBRE | SSA DCE | RA       | % Reduction |
 | -               | -        | -      | -        | -       | -        | -           |
-|`arrayparam.il`  |841       |+ 547   | N/A      | N/A     | N/A      | 47.3%       |
+|`arrayparam.il`  |841       |+ 487   | N/A      | N/A     | N/A      | 47.3%       |
 |`bubble.il`      |4374      |+ 3102  | N/A      | N/A     | N/A      | 43.3%       |
 |`check.il`       |140       |= 130   | N/A      | N/A     | N/A      | 97.9%       |
 |`dynamic.il`     |39155     |- 23117 | N/A      | N/A     | N/A      | 50.7%       |
