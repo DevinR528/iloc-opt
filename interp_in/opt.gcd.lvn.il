@@ -28,7 +28,9 @@
     testeq %vr17 => %vr18
     cbr %vr18 -> .L0
 .L1: nop
+    loadI -4 => %vr5
     addI %vr0, -4 => %vr6
+    loadI -8 => %vr7
     addI %vr0, -8 => %vr8
     icall gcd, %vr6,%vr8 => %vr19
     iwrite %vr19

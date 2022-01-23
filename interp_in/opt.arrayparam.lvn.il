@@ -33,13 +33,7 @@
     sub %vr12, %vr15 => %vr16
     load %vr16 => %vr17
     mult %vr17, %vr4 => %vr18
-    addI %vr11, -4 => %vr12
-    subI %vr4, 1 => %vr13
-    multI %vr13, 4 => %vr15
     store %vr18 => %vr16
-    addI %vr11, -4 => %vr12
-    subI %vr4, 1 => %vr13
-    multI %vr13, 4 => %vr15
     call inc, %vr16
     addI %vr4, 1 => %vr19
     i2i %vr19 => %vr4

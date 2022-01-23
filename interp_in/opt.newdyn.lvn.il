@@ -11,7 +11,7 @@
 .frame main, 3960 
     loadI 30 => %vr8
     i2i %vr8 => %vr5
-    i2i %vr8 => %vr4
+    i2i %vr5 => %vr4
     loadI 1 => %vr9
     i2i %vr9 => %vr6
     comp %vr6, %vr5 => %vr10
@@ -102,13 +102,6 @@
     comp %vr50, %vr54 => %vr55
     testne %vr55 => %vr56
     cbrne %vr56 -> .L8
-    mult %vr6, %vr5 => %vr13
-    add %vr13, %vr7 => %vr46
-    i2i %vr0 => %vr15
-    addI %vr15, -244 => %vr17
-    subI %vr46, 1 => %vr47
-    multI %vr47, 4 => %vr48
-    sub %vr17, %vr48 => %vr49
     load %vr49 => %vr57
     addI %vr57, 1 => %vr58
     store %vr58 => %vr49
@@ -131,21 +124,7 @@
     comp %vr63, %vr57 => %vr64
     testlt %vr64 => %vr65
     cbrne %vr65 -> .L9
-    subI %vr6, 1 => %vr12
-    mult %vr12, %vr5 => %vr40
-    add %vr40, %vr7 => %vr59
-    i2i %vr0 => %vr15
-    addI %vr15, -244 => %vr17
-    subI %vr59, 1 => %vr60
-    multI %vr60, 4 => %vr61
-    sub %vr17, %vr61 => %vr62
-    load %vr62 => %vr63
     addI %vr63, 1 => %vr66
-    mult %vr6, %vr5 => %vr13
-    add %vr7, %vr13 => %vr46
-    subI %vr46, 1 => %vr47
-    multI %vr47, 4 => %vr48
-    sub %vr17, %vr48 => %vr49
     store %vr66 => %vr49
 .L9: nop
     mult %vr6, %vr5 => %vr13
@@ -165,20 +144,7 @@
     comp %vr71, %vr57 => %vr72
     testlt %vr72 => %vr73
     cbrne %vr73 -> .L10
-    mult %vr6, %vr5 => %vr13
-    subI %vr7, 1 => %vr29
-    add %vr13, %vr29 => %vr67
-    i2i %vr0 => %vr15
-    addI %vr15, -244 => %vr17
-    subI %vr67, 1 => %vr68
-    multI %vr68, 4 => %vr69
-    sub %vr17, %vr69 => %vr70
-    load %vr70 => %vr71
     addI %vr71, 1 => %vr74
-    add %vr13, %vr7 => %vr46
-    subI %vr46, 1 => %vr47
-    multI %vr47, 4 => %vr48
-    sub %vr17, %vr48 => %vr49
     store %vr74 => %vr49
 .L10: nop
     addI %vr7, 1 => %vr39

@@ -167,12 +167,13 @@ impl Val {
 
 impl Hash for Val {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        discriminant(self).hash(state);
         match self {
             Self::Integer(int) => int.hash(state),
             Self::Float(float) => float.to_bits().hash(state),
             Self::Location(s) => s.hash(state),
             Self::String(s) => s.hash(state),
-            Self::Null => discriminant(self).hash(state),
+            Self::Null => {}
         }
     }
 }
@@ -1168,120 +1169,120 @@ impl Instruction {
     /// The return value is (left, right) `Option<Operand>`.
     pub fn operands(&self) -> (Option<Operand>, Option<Operand>) {
         match self {
-            Instruction::I2I { src, .. } => (Some(Operand::Register(src.clone())), None),
+            Instruction::I2I { src, .. } => (Some(Operand::Register(*src)), None),
             Instruction::Add { src_a, src_b, .. } => {
-                (Some(Operand::Register(src_a.clone())), Some(Operand::Register(src_b.clone())))
+                (Some(Operand::Register(*src_a)), Some(Operand::Register(*src_b)))
             }
             Instruction::Sub { src_a, src_b, .. } => {
-                (Some(Operand::Register(src_a.clone())), Some(Operand::Register(src_b.clone())))
+                (Some(Operand::Register(*src_a)), Some(Operand::Register(*src_b)))
             }
             Instruction::Mult { src_a, src_b, .. } => {
-                (Some(Operand::Register(src_a.clone())), Some(Operand::Register(src_b.clone())))
+                (Some(Operand::Register(*src_a)), Some(Operand::Register(*src_b)))
             }
             Instruction::LShift { src_a, src_b, .. } => {
-                (Some(Operand::Register(src_a.clone())), Some(Operand::Register(src_b.clone())))
+                (Some(Operand::Register(*src_a)), Some(Operand::Register(*src_b)))
             }
             Instruction::RShift { src_a, src_b, .. } => {
-                (Some(Operand::Register(src_a.clone())), Some(Operand::Register(src_b.clone())))
+                (Some(Operand::Register(*src_a)), Some(Operand::Register(*src_b)))
             }
             Instruction::Mod { src_a, src_b, .. } => {
-                (Some(Operand::Register(src_a.clone())), Some(Operand::Register(src_b.clone())))
+                (Some(Operand::Register(*src_a)), Some(Operand::Register(*src_b)))
             }
             Instruction::And { src_a, src_b, .. } => {
-                (Some(Operand::Register(src_a.clone())), Some(Operand::Register(src_b.clone())))
+                (Some(Operand::Register(*src_a)), Some(Operand::Register(*src_b)))
             }
             Instruction::Or { src_a, src_b, .. } => {
-                (Some(Operand::Register(src_a.clone())), Some(Operand::Register(src_b.clone())))
+                (Some(Operand::Register(*src_a)), Some(Operand::Register(*src_b)))
             }
-            Instruction::Not { src, .. } => (Some(Operand::Register(src.clone())), None),
+            Instruction::Not { src, .. } => (Some(Operand::Register(*src)), None),
             Instruction::ImmAdd { src, konst, .. } => {
-                (Some(Operand::Register(src.clone())), Some(Operand::Value(konst.clone())))
+                (Some(Operand::Register(*src)), Some(Operand::Value(konst.clone())))
             }
             Instruction::ImmSub { src, konst, .. } => {
-                (Some(Operand::Register(src.clone())), Some(Operand::Value(konst.clone())))
+                (Some(Operand::Register(*src)), Some(Operand::Value(konst.clone())))
             }
             Instruction::ImmMult { src, konst, .. } => {
-                (Some(Operand::Register(src.clone())), Some(Operand::Value(konst.clone())))
+                (Some(Operand::Register(*src)), Some(Operand::Value(konst.clone())))
             }
             Instruction::ImmLShift { src, konst, .. } => {
-                (Some(Operand::Register(src.clone())), Some(Operand::Value(konst.clone())))
+                (Some(Operand::Register(*src)), Some(Operand::Value(konst.clone())))
             }
             Instruction::ImmRShift { src, konst, .. } => {
-                (Some(Operand::Register(src.clone())), Some(Operand::Value(konst.clone())))
+                (Some(Operand::Register(*src)), Some(Operand::Value(konst.clone())))
             }
             Instruction::ImmLoad { src, .. } => (Some(Operand::Value(src.clone())), None),
-            Instruction::Load { src, .. } => (Some(Operand::Register(src.clone())), None),
+            Instruction::Load { src, .. } => (Some(Operand::Register(*src)), None),
             Instruction::LoadAddImm { src, add, .. } => {
-                (Some(Operand::Register(src.clone())), Some(Operand::Value(add.clone())))
+                (Some(Operand::Register(*src)), Some(Operand::Value(add.clone())))
             }
             Instruction::LoadAdd { src, add, .. } => {
-                (Some(Operand::Register(src.clone())), Some(Operand::Register(add.clone())))
+                (Some(Operand::Register(*src)), Some(Operand::Register(*add)))
             }
-            Instruction::Store { src, .. } => (Some(Operand::Register(src.clone())), None),
+            Instruction::Store { src, .. } => (Some(Operand::Register(*src)), None),
             Instruction::StoreAddImm { src, add, .. } => {
-                (Some(Operand::Register(src.clone())), Some(Operand::Value(add.clone())))
+                (Some(Operand::Register(*src)), Some(Operand::Value(add.clone())))
             }
             Instruction::StoreAdd { src, add, .. } => {
-                (Some(Operand::Register(src.clone())), Some(Operand::Register(add.clone())))
+                (Some(Operand::Register(*src)), Some(Operand::Register(*add)))
             }
             Instruction::CmpLT { a, b, .. } => {
-                (Some(Operand::Register(a.clone())), Some(Operand::Register(b.clone())))
+                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
             }
             Instruction::CmpLE { a, b, .. } => {
-                (Some(Operand::Register(a.clone())), Some(Operand::Register(b.clone())))
+                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
             }
             Instruction::CmpGT { a, b, .. } => {
-                (Some(Operand::Register(a.clone())), Some(Operand::Register(b.clone())))
+                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
             }
             Instruction::CmpGE { a, b, .. } => {
-                (Some(Operand::Register(a.clone())), Some(Operand::Register(b.clone())))
+                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
             }
             Instruction::CmpEQ { a, b, .. } => {
-                (Some(Operand::Register(a.clone())), Some(Operand::Register(b.clone())))
+                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
             }
             Instruction::CmpNE { a, b, .. } => {
-                (Some(Operand::Register(a.clone())), Some(Operand::Register(b.clone())))
+                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
             }
             Instruction::Comp { a, b, .. } => {
-                (Some(Operand::Register(a.clone())), Some(Operand::Register(b.clone())))
+                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
             }
-            Instruction::TestEQ { test, .. } => (Some(Operand::Register(test.clone())), None),
-            Instruction::TestNE { test, .. } => (Some(Operand::Register(test.clone())), None),
-            Instruction::TestGT { test, .. } => (Some(Operand::Register(test.clone())), None),
-            Instruction::TestGE { test, .. } => (Some(Operand::Register(test.clone())), None),
-            Instruction::TestLT { test, .. } => (Some(Operand::Register(test.clone())), None),
-            Instruction::TestLE { test, .. } => (Some(Operand::Register(test.clone())), None),
-            Instruction::F2I { src, .. } => (Some(Operand::Register(src.clone())), None),
-            Instruction::I2F { src, .. } => (Some(Operand::Register(src.clone())), None),
-            Instruction::F2F { src, .. } => (Some(Operand::Register(src.clone())), None),
+            Instruction::TestEQ { test, .. } => (Some(Operand::Register(*test)), None),
+            Instruction::TestNE { test, .. } => (Some(Operand::Register(*test)), None),
+            Instruction::TestGT { test, .. } => (Some(Operand::Register(*test)), None),
+            Instruction::TestGE { test, .. } => (Some(Operand::Register(*test)), None),
+            Instruction::TestLT { test, .. } => (Some(Operand::Register(*test)), None),
+            Instruction::TestLE { test, .. } => (Some(Operand::Register(*test)), None),
+            Instruction::F2I { src, .. } => (Some(Operand::Register(*src)), None),
+            Instruction::I2F { src, .. } => (Some(Operand::Register(*src)), None),
+            Instruction::F2F { src, .. } => (Some(Operand::Register(*src)), None),
             Instruction::FAdd { src_a, src_b, .. } => {
-                (Some(Operand::Register(src_a.clone())), Some(Operand::Register(src_b.clone())))
+                (Some(Operand::Register(*src_a)), Some(Operand::Register(*src_b)))
             }
             Instruction::FSub { src_a, src_b, .. } => {
-                (Some(Operand::Register(src_a.clone())), Some(Operand::Register(src_b.clone())))
+                (Some(Operand::Register(*src_a)), Some(Operand::Register(*src_b)))
             }
             Instruction::FMult { src_a, src_b, .. } => {
-                (Some(Operand::Register(src_a.clone())), Some(Operand::Register(src_b.clone())))
+                (Some(Operand::Register(*src_a)), Some(Operand::Register(*src_b)))
             }
             Instruction::FDiv { src_a, src_b, .. } => {
-                (Some(Operand::Register(src_a.clone())), Some(Operand::Register(src_b.clone())))
+                (Some(Operand::Register(*src_a)), Some(Operand::Register(*src_b)))
             }
             Instruction::FComp { src_a, src_b, .. } => {
-                (Some(Operand::Register(src_a.clone())), Some(Operand::Register(src_b.clone())))
+                (Some(Operand::Register(*src_a)), Some(Operand::Register(*src_b)))
             }
-            Instruction::FLoad { src, .. } => (Some(Operand::Register(src.clone())), None),
+            Instruction::FLoad { src, .. } => (Some(Operand::Register(*src)), None),
             Instruction::FLoadAddImm { src, add, .. } => {
-                (Some(Operand::Register(src.clone())), Some(Operand::Value(add.clone())))
+                (Some(Operand::Register(*src)), Some(Operand::Value(add.clone())))
             }
             Instruction::FLoadAdd { src, add, .. } => {
-                (Some(Operand::Register(src.clone())), Some(Operand::Register(add.clone())))
+                (Some(Operand::Register(*src)), Some(Operand::Register(*add)))
             }
-            Instruction::FStore { src, .. } => (Some(Operand::Register(src.clone())), None),
+            Instruction::FStore { src, .. } => (Some(Operand::Register(*src)), None),
             Instruction::FStoreAddImm { src, add, .. } => {
-                (Some(Operand::Register(src.clone())), Some(Operand::Value(add.clone())))
+                (Some(Operand::Register(*src)), Some(Operand::Value(add.clone())))
             }
             Instruction::FStoreAdd { src, add, .. } => {
-                (Some(Operand::Register(src.clone())), Some(Operand::Register(add.clone())))
+                (Some(Operand::Register(*src)), Some(Operand::Register(*add)))
             }
             _ => (None, None),
         }

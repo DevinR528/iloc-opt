@@ -28,7 +28,6 @@
     sub %vr17, %vr20 => %vr21
     store %vr12 => %vr21
     addI %vr15, -124 => %vr23
-    subI %vr6, 1 => %vr12
     multI %vr12, 4 => %vr24
     sub %vr23, %vr24 => %vr25
     store %vr6 => %vr25
@@ -55,7 +54,6 @@
     store %vr29 => %vr34
     multI %vr7, 2 => %vr36
     addI %vr15, -124 => %vr23
-    subI %vr7, 1 => %vr29
     multI %vr29, 4 => %vr37
     sub %vr23, %vr37 => %vr38
     store %vr36 => %vr38
@@ -89,32 +87,23 @@
     load %vr44 => %vr45
     mult %vr6, %vr5 => %vr13
     add %vr13, %vr7 => %vr46
-    addI %vr15, -244 => %vr17
     subI %vr46, 1 => %vr47
     multI %vr47, 4 => %vr48
     sub %vr17, %vr48 => %vr49
     store %vr45 => %vr49
     addI %vr15, -124 => %vr23
-    subI %vr6, 1 => %vr12
     multI %vr12, 4 => %vr24
     sub %vr23, %vr24 => %vr25
     load %vr25 => %vr50
     addI %vr15, -4 => %vr52
-    subI %vr7, 1 => %vr29
     multI %vr29, 4 => %vr37
     sub %vr52, %vr37 => %vr53
     load %vr53 => %vr54
     comp %vr50, %vr54 => %vr55
     testne %vr55 => %vr56
     cbrne %vr56 -> .L8
-    addI %vr15, -244 => %vr17
-    subI %vr46, 1 => %vr47
-    multI %vr47, 4 => %vr48
     load %vr49 => %vr57
     addI %vr57, 1 => %vr58
-    addI %vr15, -244 => %vr17
-    subI %vr46, 1 => %vr47
-    multI %vr47, 4 => %vr48
     store %vr58 => %vr49
 .L8: nop
     subI %vr6, 1 => %vr12
@@ -128,7 +117,6 @@
     load %vr62 => %vr63
     mult %vr6, %vr5 => %vr13
     add %vr13, %vr7 => %vr46
-    addI %vr15, -244 => %vr17
     subI %vr46, 1 => %vr47
     multI %vr47, 4 => %vr48
     sub %vr17, %vr48 => %vr49
@@ -136,14 +124,7 @@
     comp %vr63, %vr57 => %vr64
     testlt %vr64 => %vr65
     cbrne %vr65 -> .L9
-    subI %vr6, 1 => %vr12
-    addI %vr15, -244 => %vr17
-    subI %vr59, 1 => %vr60
-    multI %vr60, 4 => %vr61
     addI %vr63, 1 => %vr66
-    addI %vr15, -244 => %vr17
-    subI %vr46, 1 => %vr47
-    multI %vr47, 4 => %vr48
     store %vr66 => %vr49
 .L9: nop
     mult %vr6, %vr5 => %vr13
@@ -156,7 +137,6 @@
     sub %vr17, %vr69 => %vr70
     load %vr70 => %vr71
     add %vr13, %vr7 => %vr46
-    addI %vr15, -244 => %vr17
     subI %vr46, 1 => %vr47
     multI %vr47, 4 => %vr48
     sub %vr17, %vr48 => %vr49
@@ -164,14 +144,7 @@
     comp %vr71, %vr57 => %vr72
     testlt %vr72 => %vr73
     cbrne %vr73 -> .L10
-    subI %vr7, 1 => %vr29
-    addI %vr15, -244 => %vr17
-    subI %vr67, 1 => %vr68
-    multI %vr68, 4 => %vr69
     addI %vr71, 1 => %vr74
-    addI %vr15, -244 => %vr17
-    subI %vr46, 1 => %vr47
-    multI %vr47, 4 => %vr48
     store %vr74 => %vr49
 .L10: nop
     addI %vr7, 1 => %vr39

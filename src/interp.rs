@@ -49,27 +49,28 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new(iloc: IlocProgram) -> Self {
         let mut preamble_lines = iloc.preamble.len();
-        let mut stack = vec![Val::Integer(0); STACK_SIZE];
+        let mut stack = vec![];
         let data = iloc
             .preamble
             .into_iter()
-            .enumerate()
-            .flat_map(|(idx, inst)| match inst {
+            .flat_map(|inst| match inst {
                 Instruction::Global { name, size, align } => {
-                    stack.insert(idx, Val::Null);
-                    Some((Loc(name), Val::Integer(idx as isize)))
+                    stack.push(Val::Null);
+                    Some((Loc(name), Val::Integer((stack.len() - 1) as isize)))
                 }
                 Instruction::String { name, content } => {
-                    stack.insert(idx, Val::String(content));
-                    Some((Loc(name), Val::Integer(idx as isize)))
+                    stack.push(Val::String(content));
+                    Some((Loc(name), Val::Integer((stack.len() - 1) as isize)))
                 }
                 Instruction::Float { name, content } => {
-                    stack.insert(idx, Val::Float(content));
-                    Some((Loc(name), Val::Integer(idx as isize)))
+                    stack.push(Val::Float(content));
+                    Some((Loc(name), Val::Integer((stack.len() - 1) as isize)))
                 }
                 _ => None,
             })
             .collect::<HashMap<_, _>>();
+
+        stack.extend(vec![Val::Integer(0); STACK_SIZE]);
 
         let mut registers = HashMap::new();
         let mut label_map = HashMap::new();
@@ -90,8 +91,8 @@ impl Interpreter {
                 if func.label == "main" {
                     // This is the data stack pointer, in a real program it would be a pointer to
                     // the memory address of the beginning of the program
-                    // itself, since our stack is separate it's just the 0th
-                    // index of the stack
+                    // itself, since our stack is separate it's just the end
+                    // index of the stack since it grows towards index 0 from index (length)
                     registers.insert(Reg::Var(0), Val::Integer(STACK_SIZE as isize));
                 }
 
@@ -113,6 +114,11 @@ impl Interpreter {
         }
     }
 
+    fn callee_stack_size(&self) -> isize {
+        let CallStackEntry { name, .. } = self.call_stack.last().unwrap();
+        self.fn_decl.get(&Loc(name.to_string())).unwrap().0 as isize
+    }
+
     pub fn run_next_instruction(&mut self, count: &mut usize) -> Option<bool> {
         if self.call_stack.is_empty() {
             return Some(false);
@@ -124,9 +130,7 @@ impl Interpreter {
         //     self.curr_instruction().unwrap()
         // );
 
-        let CallStackEntry { name: func, clobber_map: smashed, ret_val } =
-            self.call_stack.last_mut().unwrap();
-
+        let CallStackEntry { name: func, .. } = self.call_stack.last_mut().unwrap();
         let stack = &mut self.stack;
         let instrs = self.functions.get(func).unwrap();
 
@@ -384,6 +388,7 @@ impl Interpreter {
                     // Save all the call clobbered registers
                     clobber_map: params
                         .iter()
+                        // Save the stack pointer
                         .chain(std::iter::once(&Reg::Var(0)))
                         .filter_map(|r| Some((*r, self.registers.get(r)?.clone())))
                         .collect(),
@@ -395,11 +400,11 @@ impl Interpreter {
                     self.registers.insert(*param, self.registers.get(arg).unwrap().clone());
                 }
 
+                // New stack pointer (vr0)
                 let new_ip = self
                     .registers
                     .get(&Reg::Var(0))
                     .unwrap()
-                    .clone()
                     .sub(&Val::Integer(*size as isize))
                     .unwrap();
                 self.registers.insert(Reg::Var(0), new_ip);
@@ -409,6 +414,7 @@ impl Interpreter {
             Instruction::ImmCall { name, args, ret } => {
                 self.ret_idx.push(self.inst_idx + 1);
                 self.inst_idx = 0;
+                let shift_stack = self.callee_stack_size();
                 let (size, params) = self.fn_decl.get(&Loc(name.to_owned())).unwrap();
 
                 self.call_stack.push(CallStackEntry {
@@ -416,6 +422,7 @@ impl Interpreter {
                     // Save all the call clobbered registers
                     clobber_map: params
                         .iter()
+                        // Save the stack pointer
                         .chain(std::iter::once(&Reg::Var(0)))
                         .filter_map(|r| Some((*r, self.registers.get(r)?.clone())))
                         .collect(),
@@ -427,12 +434,12 @@ impl Interpreter {
                     self.registers.insert(*param, self.registers.get(arg).unwrap().clone());
                 }
 
+                // New stack pointer (vr0)
                 let new_ip = self
                     .registers
                     .get(&Reg::Var(0))
                     .unwrap()
-                    .clone()
-                    .sub(&Val::Integer(*size as isize))
+                    .sub(&Val::Integer(shift_stack))
                     .unwrap();
                 self.registers.insert(Reg::Var(0), new_ip);
 
@@ -688,6 +695,75 @@ impl Interpreter {
     }
 }
 
+fn debug_loop(
+    buf: &mut String,
+    break_points: &mut HashSet<usize>,
+    interpreter: &mut Interpreter,
+    continue_flag: &mut bool,
+    line: usize,
+) {
+    if *continue_flag && !break_points.contains(&line) {
+        return;
+    }
+
+    'dbg: loop {
+        let mut handle = std::io::stdin_locked();
+        handle.read_line(buf).unwrap();
+        match buf.split_whitespace().collect::<Vec<_>>().as_slice() {
+            ["step" | "s"] | [] => {
+                break 'dbg;
+            }
+            ["cont" | "c"] => {
+                *continue_flag = true;
+                break 'dbg;
+            }
+            ["printi" | "pi"] => {
+                println!("{:?}", interpreter.curr_instruction());
+            }
+            ["printc" | "pc"] => {
+                println!(
+                    "{:?}",
+                    interpreter
+                        .call_stack
+                        .iter()
+                        .map(|cse| cse.name.0.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            ["prints" | "ps", idx] => {
+                println!("{:?}", interpreter.stack[idx.parse::<usize>().unwrap()]);
+            }
+            ["print" | "p", reg] => {
+                let reg =
+                    if !reg.starts_with("%vr") { format!("%vr{}", reg) } else { reg.to_string() };
+                if let Ok(r) = Reg::from_str(&reg) {
+                    if let Some(v) = interpreter.registers.get(&r) {
+                        println!("{:?}", v)
+                    }
+                }
+            }
+            ["brk", lines @ ..] => {
+                break_points.extend(
+                    lines
+                        .iter()
+                        .map(|s| s.parse::<usize>())
+                        .collect::<Result<Vec<_>, _>>()
+                        .unwrap(),
+                );
+            }
+            _ => {}
+        }
+
+        buf.clear();
+        if break_points.contains(&line) {
+            *continue_flag = false;
+        }
+    }
+    // Always clear the debug op buffer
+    buf.clear();
+}
+
 pub fn run_interpreter(iloc: IlocProgram) -> Result<(), &'static str> {
     let mut instruction_count = 0;
     let mut interpreter = Interpreter::new(iloc);
@@ -706,69 +782,8 @@ pub fn run_interpreter(iloc: IlocProgram) -> Result<(), &'static str> {
                 };
 
                 instruction_count += 1;
-                if continue_flag && !break_points.contains(&line) {
-                    continue;
-                }
 
-                'dbg: loop {
-                    let mut handle = std::io::stdin_locked();
-                    handle.read_line(&mut buf).unwrap();
-                    match buf.split_whitespace().collect::<Vec<_>>().as_slice() {
-                        ["step" | "s"] | [] => {
-                            break 'dbg;
-                        }
-                        ["cont" | "c"] => {
-                            continue_flag = true;
-                            break 'dbg;
-                        }
-                        ["printi" | "pi"] => {
-                            println!("{:?}", interpreter.curr_instruction());
-                        }
-                        ["printc" | "pc"] => {
-                            println!(
-                                "{:?}",
-                                interpreter
-                                    .call_stack
-                                    .iter()
-                                    .map(|cse| cse.name.0.to_string())
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            );
-                        }
-                        ["prints" | "ps", idx] => {
-                            println!("{:?}", interpreter.stack[idx.parse::<usize>().unwrap()]);
-                        }
-                        ["print" | "p", reg] => {
-                            let reg = if !reg.starts_with("%vr") {
-                                format!("%vr{}", reg)
-                            } else {
-                                reg.to_string()
-                            };
-                            if let Ok(r) = Reg::from_str(&reg) {
-                                if let Some(v) = interpreter.registers.get(&r) {
-                                    println!("{:?}", v)
-                                }
-                            }
-                        }
-                        ["brk", lines @ ..] => {
-                            break_points.extend(
-                                lines
-                                    .iter()
-                                    .map(|s| s.parse::<usize>())
-                                    .collect::<Result<Vec<_>, _>>()
-                                    .unwrap(),
-                            );
-                        }
-                        _ => {}
-                    }
-
-                    buf.clear();
-                    if break_points.contains(&line) {
-                        continue_flag = false;
-                    }
-                }
-                // Always clear the debug op buffer
-                buf.clear();
+                debug_loop(&mut buf, &mut break_points, &mut interpreter, &mut continue_flag, line);
             }
             Some(false) => {}
             None => {

@@ -12,22 +12,21 @@
     .float .float_const_0, 1.7
     .global main_fp, 4, 4
     .text
-.frame main, 92
+.frame main, 92 
     loadI main_fp => %vr4
-    iwrite %vr4
     store %vr0 => %vr4
     loadI 1 => %vr6
     loadI -1 => %vr7
     i2i %vr0 => %vr8
+    loadI -4 => %vr9
     addI %vr8, -4 => %vr10
     i2i %vr10 => %vr14
     store %vr7 => %vr14
     loadI 1000 => %vr15
-    addI %vr8, -4 => %vr10
     subI %vr10, 80 => %vr19
     store %vr15 => %vr19
-    call readarray
-    call writearray
+    call readarray 
+    call writearray 
     addI %vr0, -4 => %vr20
     addI %vr0, -88 => %vr22
     store %vr6 => %vr22
@@ -35,9 +34,9 @@
     addI %vr0, -92 => %vr25
     store %vr23 => %vr25
     call quicksort, %vr20,%vr22,%vr25
-    call writearray
+    call writearray 
     ret
-.frame readarray, 0
+.frame readarray, 0 
     loadI .string_const_0 => %vr5
     swrite %vr5
     loadI 1 => %vr6
@@ -48,8 +47,10 @@
     cbr %vr9 -> .L0
 .L1: nop
     iwrite %vr4
-    loadI main_fp => %vr11
-    addI %vr11, -4 => %vr13
+    loadI main_fp => %vr10
+    i2i %vr10 => %vr11
+    loadI -4 => %vr12
+    add %vr11, %vr12 => %vr13
     i2i %vr4 => %vr15
     multI %vr15, 4 => %vr17
     sub %vr13, %vr17 => %vr18
@@ -62,7 +63,7 @@
     cbr %vr9 -> .L1
 .L0: nop
     ret
-.frame writearray, 0
+.frame writearray, 0 
     loadI .string_const_1 => %vr5
     swrite %vr5
     loadI 1 => %vr6
@@ -72,8 +73,10 @@
     testge %vr8 => %vr9
     cbr %vr9 -> .L2
 .L3: nop
-    loadI main_fp => %vr11
-    addI %vr11, -4 => %vr13
+    loadI main_fp => %vr10
+    i2i %vr10 => %vr11
+    loadI -4 => %vr12
+    add %vr11, %vr12 => %vr13
     i2i %vr4 => %vr15
     multI %vr15, 4 => %vr17
     sub %vr13, %vr17 => %vr18
@@ -159,11 +162,7 @@
     multI %vr29, 4 => %vr30
     sub %vr4, %vr30 => %vr31
     load %vr31 => %vr32
-    i2i %vr7 => %vr36
-    multI %vr36, 4 => %vr37
     store %vr32 => %vr38
-    i2i %vr8 => %vr29
-    multI %vr29, 4 => %vr30
     store %vr10 => %vr31
     jumpI -> .L11
 .L10: nop
@@ -182,9 +181,9 @@
     testlt %vr9 => %vr10
     cbrne %vr10 -> .L12
     icall partition, %vr4,%vr5,%vr6 => %vr11
+    loadI -4 => %vr12
     addI %vr0, -4 => %vr13
     store %vr11 => %vr13
-    addI %vr0, -4 => %vr13
     call quicksort, %vr4,%vr5,%vr13
     addI %vr0, -4 => %vr13
     load %vr13 => %vr14
