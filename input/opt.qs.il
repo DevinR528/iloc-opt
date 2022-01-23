@@ -18,7 +18,6 @@
     loadI 1 => %vr6
     loadI -1 => %vr7
     i2i %vr0 => %vr8
-    loadI -4 => %vr9
     addI %vr8, -4 => %vr10
     i2i %vr10 => %vr14
     store %vr7 => %vr14
@@ -28,6 +27,7 @@
     call readarray 
     call writearray 
     addI %vr0, -4 => %vr20
+    loadI 1 => %vr6
     addI %vr0, -88 => %vr22
     store %vr6 => %vr22
     loadI 19 => %vr23
@@ -48,9 +48,8 @@
 .L1: nop
     iwrite %vr4
     loadI main_fp => %vr10
-    i2i %vr10 => %vr11
-    loadI -4 => %vr12
-    add %vr11, %vr12 => %vr13
+    load %vr10 => %vr11
+    addI %vr11, -4 => %vr13
     i2i %vr4 => %vr15
     multI %vr15, 4 => %vr17
     sub %vr13, %vr17 => %vr18
@@ -74,9 +73,8 @@
     cbr %vr9 -> .L2
 .L3: nop
     loadI main_fp => %vr10
-    i2i %vr10 => %vr11
-    loadI -4 => %vr12
-    add %vr11, %vr12 => %vr13
+    load %vr10 => %vr11
+    addI %vr11, -4 => %vr13
     i2i %vr4 => %vr15
     multI %vr15, 4 => %vr17
     sub %vr13, %vr17 => %vr18
@@ -181,7 +179,6 @@
     testlt %vr9 => %vr10
     cbrne %vr10 -> .L12
     icall partition, %vr4,%vr5,%vr6 => %vr11
-    loadI -4 => %vr12
     addI %vr0, -4 => %vr13
     store %vr11 => %vr13
     call quicksort, %vr4,%vr5,%vr13

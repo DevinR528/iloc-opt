@@ -13,7 +13,6 @@
 .frame main, 40 
     loadI main_fp => %vr4
     store %vr0 => %vr4
-    loadI -4 => %vr5
     addI %vr0, -4 => %vr6
     call init, %vr6
     addI %vr0, -4 => %vr6
@@ -27,7 +26,6 @@
 .L1: nop
     i2i %vr0 => %vr11
     addI %vr11, -4 => %vr12
-    loadI 1 => %vr7
     subI %vr4, 1 => %vr13
     multI %vr13, 4 => %vr15
     sub %vr12, %vr15 => %vr16

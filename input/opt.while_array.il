@@ -24,7 +24,6 @@
     store %vr4 => %vr15
     addI %vr4, 1 => %vr16
     i2i %vr16 => %vr4
-    loadI 10 => %vr6
     comp %vr4, %vr6 => %vr7
     testle %vr7 => %vr8
     cbr %vr8 -> .L1
@@ -36,7 +35,6 @@
     testgt %vr7 => %vr8
     cbr %vr8 -> .L2
 .L3: nop
-    loadI 5 => %vr17
     comp %vr4, %vr17 => %vr18
     testlt %vr18 => %vr19
     cbrne %vr19 -> .L4
@@ -54,7 +52,6 @@
 .L5: nop
     addI %vr4, 1 => %vr16
     i2i %vr16 => %vr4
-    loadI 10 => %vr6
     comp %vr4, %vr6 => %vr7
     testle %vr7 => %vr8
     cbr %vr8 -> .L3

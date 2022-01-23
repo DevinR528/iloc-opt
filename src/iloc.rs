@@ -1740,7 +1740,7 @@ impl Instruction {
     }
 
     pub fn is_load_imm(&self) -> bool {
-        matches!(self, Self::ImmLoad { .. })
+        matches!(self, Self::ImmLoad { src: Val::Integer(..) | Val::Float(..), .. })
     }
 
     pub fn is_commutative(&self) -> bool {

@@ -16,12 +16,12 @@ My instruction counts
 
 | File            | Original | LVN    | SSA DBRE | SSA DCE | RA       | % Reduction |
 | -               | -        | -      | -        | -       | -        | -           |
-|`arrayparam.il`  |841       |+ 498   | N/A      | N/A     | N/A      | 47.3%       |
+|`arrayparam.il`  |841       |= 487   | N/A      | N/A     | N/A      | 47.3%       |
 |`bubble.il`      |4374      |= 2885  | N/A      | N/A     | N/A      | 43.3%       |
 |`check.il`       |140       |= 130   | N/A      | N/A     | N/A      | 97.9%       |
-|`dynamic.il`     |39155     |- 21454 | N/A      | N/A     | N/A      | 50.7%       |
+|`dynamic.il`     |39155     |$ 21422 | N/A      | N/A     | N/A      | 50.7%       |
 |`fib.il`         |274       |= 252   | N/A      | N/A     | N/A      | 23%         |
-|`gcd.il`         |103       |+ 85    | N/A      | N/A     | N/A      | 29.1%       |
-|`newdyn.il`      |136919    |- 65407 | N/A      | N/A     | N/A      | 52.4%       |
-|`qs.il`          |4574      |+ ????  | N/A      | N/A     | N/A      | 32.8%       |
+|`gcd.il`         |103       |= 83    | N/A      | N/A     | N/A      | 29.1%       |
+|`newdyn.il`      |136919    |$ 65407 | N/A      | N/A     | N/A      | 52.4%       |
+|`qs.il`          |4574      |+ 3469  | N/A      | N/A     | N/A      | 32.8%       |
 |`while_array.il` |377       |= 315   | N/A      | N/A     | N/A      | 32.4%       |

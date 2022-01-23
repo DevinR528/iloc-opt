@@ -179,7 +179,6 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
             // println!("{:?}", new_instr[idx]);
         }
     }
-    println!();
 
     // if then -> Some(instructions)
     transformed_block.then(|| new_instr)
@@ -193,7 +192,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
 }
 
 pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
-    let mut target_instruction_idx = HashMap::new();
+    let mut target_instruction_idx: HashMap<_, Vec<_>> = HashMap::new();
     let mut target_reg = vec![];
     let mut used_reg: HashMap<_, usize> = HashMap::new();
 
@@ -204,16 +203,17 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
         // Don't modify any memory operations
         if expr.is_store() {
             for op in l.iter().chain(r.iter()).chain(dst.map(|r| Operand::Register(*r)).iter()) {
-                if let Some(pos) = target_reg.iter().position(|reg| reg == op) {
-                    target_reg.remove(pos);
-                }
+                *used_reg.entry(op.clone()).or_insert(0) += 1;
+                // if let Some(pos) = target_reg.iter().position(|reg| reg == op) {
+                //     target_reg.remove(pos);
+                // }
             }
             continue;
         }
 
         match (l, r, dst) {
             (Some(left), Some(right), Some(dst)) => {
-                target_instruction_idx.insert(Operand::Register(*dst), idx);
+                target_instruction_idx.entry(Operand::Register(*dst)).or_default().push(idx);
                 target_reg.push(Operand::Register(*dst));
 
                 if matches!(left, Operand::Register(..)) {
@@ -224,7 +224,7 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
                 }
             }
             (Some(src), None, Some(dst)) => {
-                target_instruction_idx.insert(Operand::Register(*dst), idx);
+                target_instruction_idx.entry(Operand::Register(*dst)).or_default().push(idx);
                 target_reg.push(Operand::Register(*dst));
 
                 if matches!(src, Operand::Register(..)) {
@@ -238,9 +238,6 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
             // All other combinations are invalid
             _ => unreachable!(),
         }
-        if dst == Some(&Reg::Var(5)) {
-            println!("{:?}", used_reg.get(&Operand::Register(Reg::Var(5))))
-        }
     }
 
     fn add_one(c: &mut usize) -> usize {
@@ -251,16 +248,14 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
     let mut indexes = vec![];
     for r in target_reg.iter() {
         if !used_reg.contains_key(r) {
-            let idx = *target_instruction_idx.get(r).unwrap();
-            indexes.push(idx);
-            let (a, b) = instructions[idx].operands();
-            if let Some(a) = a {
-                if used_reg.get_mut(&a).map_or(0, add_one) == 0 {
+            let idxs = target_instruction_idx.get(r).unwrap();
+            indexes.extend(idxs);
+            for idx in idxs {
+                let (a, b) = instructions[*idx].operands();
+                if let Some(a) = a {
                     used_reg.remove(&a);
                 }
-            }
-            if let Some(b) = b {
-                if used_reg.get_mut(&b).map_or(0, add_one) == 0 {
+                if let Some(b) = b {
                     used_reg.remove(&b);
                 }
             }

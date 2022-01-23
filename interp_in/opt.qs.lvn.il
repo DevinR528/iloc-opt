@@ -15,6 +15,7 @@
 .frame main, 92 
     loadI main_fp => %vr4
     store %vr0 => %vr4
+    loadI 1 => %vr6
     loadI -1 => %vr7
     i2i %vr0 => %vr8
     addI %vr8, -4 => %vr10
