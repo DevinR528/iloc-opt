@@ -57,17 +57,13 @@
     subI %vr12, 56 => %vr82
     store %vr78 => %vr82
     i2i %vr9 => %vr4
-    comp %vr4, %vr74 => %vr83
-    testgt %vr83 => %vr84
-    cbr %vr84 -> .L0
+    cbr_GT %vr4, %vr74 -> .L0
 .L1: nop
     i2i %vr4 => %vr7
     addI %vr4, 1 => %vr85
     i2i %vr85 => %vr5
     loadI 15 => %vr79
-    comp %vr5, %vr79 => %vr86
-    testgt %vr86 => %vr87
-    cbr %vr87 -> .L2
+    cbr_GT %vr5, %vr79 -> .L2
 .L3: nop
     i2i %vr0 => %vr10
     addI %vr10, -4 => %vr12
@@ -79,17 +75,13 @@
     multI %vr92, 4 => %vr93
     sub %vr12, %vr93 => %vr94
     load %vr94 => %vr95
-    comp %vr91, %vr95 => %vr96
-    testlt %vr96 => %vr97
-    cbrne %vr97 -> .L4
+    cbr_GE %vr91, %vr95 -> .L4
     i2i %vr5 => %vr7
 .L4: nop
     addI %vr5, 1 => %vr98
     i2i %vr98 => %vr5
     loadI 15 => %vr79
-    comp %vr5, %vr79 => %vr86
-    testle %vr86 => %vr87
-    cbr %vr87 -> .L3
+    cbr_LE %vr5, %vr79 -> .L3
 .L2: nop
     i2i %vr0 => %vr10
     addI %vr10, -4 => %vr12
@@ -107,16 +99,12 @@
     addI %vr4, 1 => %vr85
     i2i %vr85 => %vr4
     loadI 14 => %vr74
-    comp %vr4, %vr74 => %vr83
-    testle %vr83 => %vr84
-    cbr %vr84 -> .L1
+    cbr_LE %vr4, %vr74 -> .L1
 .L0: nop
     loadI 1 => %vr9
     i2i %vr9 => %vr4
     loadI 15 => %vr79
-    comp %vr4, %vr79 => %vr103
-    testgt %vr103 => %vr104
-    cbr %vr104 -> .L5
+    cbr_GT %vr4, %vr79 -> .L5
 .L6: nop
     i2i %vr0 => %vr10
     addI %vr10, -4 => %vr12
@@ -128,8 +116,6 @@
     addI %vr4, 1 => %vr85
     i2i %vr85 => %vr4
     loadI 15 => %vr79
-    comp %vr4, %vr79 => %vr103
-    testle %vr103 => %vr104
-    cbr %vr104 -> .L6
+    cbr_LE %vr4, %vr79 -> .L6
 .L5: nop
     ret

@@ -15,7 +15,6 @@
 .frame main, 92 
     loadI main_fp => %vr4
     store %vr0 => %vr4
-    loadI 1 => %vr6
     loadI -1 => %vr7
     i2i %vr0 => %vr8
     addI %vr8, -4 => %vr10
@@ -33,7 +32,7 @@
     loadI 19 => %vr23
     addI %vr0, -92 => %vr25
     store %vr23 => %vr25
-    call quicksort, %vr20,%vr22,%vr25
+    call quicksort, %vr20, %vr22, %vr25
     call writearray 
     ret
 .frame readarray, 0 
@@ -42,9 +41,7 @@
     loadI 1 => %vr6
     i2i %vr6 => %vr4
     loadI 20 => %vr7
-    comp %vr4, %vr7 => %vr8
-    testge %vr8 => %vr9
-    cbr %vr9 -> .L0
+    cbr_GE %vr4, %vr7 -> .L0
 .L1: nop
     iwrite %vr4
     loadI main_fp => %vr10
@@ -57,9 +54,7 @@
     addI %vr4, 1 => %vr19
     i2i %vr19 => %vr4
     loadI 20 => %vr7
-    comp %vr4, %vr7 => %vr8
-    testlt %vr8 => %vr9
-    cbr %vr9 -> .L1
+    cbr_LT %vr4, %vr7 -> .L1
 .L0: nop
     ret
 .frame writearray, 0 
@@ -68,9 +63,7 @@
     loadI 1 => %vr6
     i2i %vr6 => %vr4
     loadI 20 => %vr7
-    comp %vr4, %vr7 => %vr8
-    testge %vr8 => %vr9
-    cbr %vr9 -> .L2
+    cbr_GE %vr4, %vr7 -> .L2
 .L3: nop
     loadI main_fp => %vr10
     load %vr10 => %vr11
@@ -83,12 +76,10 @@
     addI %vr4, 1 => %vr20
     i2i %vr20 => %vr4
     loadI 20 => %vr7
-    comp %vr4, %vr7 => %vr8
-    testlt %vr8 => %vr9
-    cbr %vr9 -> .L3
+    cbr_LT %vr4, %vr7 -> .L3
 .L2: nop
     ret
-.frame partition, 0, %vr4,%vr5,%vr6
+.frame partition, 0, %vr4, %vr5, %vr6
     load %vr5 => %vr12
     loadI 0 => %vr13
     i2i %vr12 => %vr14
@@ -104,9 +95,7 @@
     loadI .float_const_0 => %vr23
     fload %vr23 => %vr24
     f2i %vr24 => %vr25
-    comp %vr25, %vr13 => %vr26
-    testeq %vr26 => %vr27
-    cbr %vr27 -> .L4
+    cbr_EQ %vr25, %vr13 -> .L4
 .L5: nop
     subI %vr8, 1 => %vr28
     i2i %vr28 => %vr8
@@ -114,9 +103,7 @@
     multI %vr29, 4 => %vr30
     sub %vr4, %vr30 => %vr31
     load %vr31 => %vr32
-    comp %vr32, %vr9 => %vr33
-    testle %vr33 => %vr34
-    cbr %vr34 -> .L6
+    cbr_LE %vr32, %vr9 -> .L6
 .L7: nop
     subI %vr8, 1 => %vr28
     i2i %vr28 => %vr8
@@ -124,9 +111,7 @@
     multI %vr29, 4 => %vr30
     sub %vr4, %vr30 => %vr31
     load %vr31 => %vr32
-    comp %vr32, %vr9 => %vr33
-    testgt %vr33 => %vr34
-    cbr %vr34 -> .L7
+    cbr_GT %vr32, %vr9 -> .L7
 .L6: nop
     addI %vr7, 1 => %vr35
     i2i %vr35 => %vr7
@@ -134,9 +119,7 @@
     multI %vr36, 4 => %vr37
     sub %vr4, %vr37 => %vr38
     load %vr38 => %vr39
-    comp %vr39, %vr9 => %vr40
-    testge %vr40 => %vr41
-    cbr %vr41 -> .L8
+    cbr_GE %vr39, %vr9 -> .L8
 .L9: nop
     addI %vr7, 1 => %vr35
     i2i %vr35 => %vr7
@@ -144,13 +127,9 @@
     multI %vr36, 4 => %vr37
     sub %vr4, %vr37 => %vr38
     load %vr38 => %vr39
-    comp %vr39, %vr9 => %vr40
-    testlt %vr40 => %vr41
-    cbr %vr41 -> .L9
+    cbr_LT %vr39, %vr9 -> .L9
 .L8: nop
-    comp %vr7, %vr8 => %vr42
-    testlt %vr42 => %vr43
-    cbrne %vr43 -> .L10
+    cbr_GE %vr7, %vr8 -> .L10
     i2i %vr7 => %vr36
     multI %vr36, 4 => %vr37
     sub %vr4, %vr37 => %vr38
@@ -172,21 +151,19 @@
     cbr %vr25 -> .L5
 .L4: nop
     ret
-.frame quicksort, 8, %vr4,%vr5,%vr6
+.frame quicksort, 8, %vr4, %vr5, %vr6
     load %vr5 => %vr7
     load %vr6 => %vr8
-    comp %vr7, %vr8 => %vr9
-    testlt %vr9 => %vr10
-    cbrne %vr10 -> .L12
-    icall partition, %vr4,%vr5,%vr6 => %vr11
+    cbr_GE %vr7, %vr8 -> .L12
+    icall partition, %vr4, %vr5, %vr6 => %vr11
     addI %vr0, -4 => %vr13
     store %vr11 => %vr13
-    call quicksort, %vr4,%vr5,%vr13
+    call quicksort, %vr4, %vr5, %vr13
     addI %vr0, -4 => %vr13
     load %vr13 => %vr14
     addI %vr14, 1 => %vr16
     addI %vr0, -8 => %vr18
     store %vr16 => %vr18
-    call quicksort, %vr4,%vr18,%vr6
+    call quicksort, %vr4, %vr18, %vr6
 .L12: nop
     ret

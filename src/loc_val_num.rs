@@ -174,92 +174,176 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
             .map_or(false, |r| const_map.contains_key(&Operand::Register(*r)))
             || new_instr[idx].is_load_imm()
         {
+            transformed_block |= true;
             new_instr[idx] = Instruction::SKIP;
-        } else {
-            // println!("{:?}", new_instr[idx]);
         }
     }
 
+    transformed_block |= compress_conditional_branches(&mut new_instr);
+
     // if then -> Some(instructions)
     transformed_block.then(|| new_instr)
-
-    // println!("orig inst: {:?}", blk);
-    // println!("values: {:?}", value_map);
-    // println!("back: {:?}", back_val_map);
-    // println!("expr: {:?}", expr_map);
-    // println!("reduced: {:?}", reduced);
-    // println!("opt inst: {:?}", new_instr);
 }
 
 pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
-    let mut target_instruction_idx: HashMap<_, Vec<_>> = HashMap::new();
-    let mut target_reg = vec![];
     let mut used_reg: HashMap<_, usize> = HashMap::new();
 
-    for (idx, expr) in instructions.iter().enumerate() {
+    let mut indexes = vec![];
+    for (idx, expr) in instructions.iter().enumerate().rev() {
         let (l, r) = expr.operands();
         let dst = expr.target_reg();
 
         // Don't modify any memory operations
         if expr.is_store() {
-            for op in l.iter().chain(r.iter()).chain(dst.map(|r| Operand::Register(*r)).iter()) {
-                *used_reg.entry(op.clone()).or_insert(0) += 1;
-                // if let Some(pos) = target_reg.iter().position(|reg| reg == op) {
-                //     target_reg.remove(pos);
-                // }
+            for op in l.iter().chain(r.iter()) {
+                used_reg.insert(op.clone(), 1);
             }
             continue;
         }
 
         match (l, r, dst) {
             (Some(left), Some(right), Some(dst)) => {
-                target_instruction_idx.entry(Operand::Register(*dst)).or_default().push(idx);
-                target_reg.push(Operand::Register(*dst));
-
                 if matches!(left, Operand::Register(..)) {
-                    *used_reg.entry(left).or_insert(0) += 1;
+                    used_reg.insert(left, 1);
                 }
                 if matches!(right, Operand::Register(..)) {
-                    *used_reg.entry(right).or_insert(0) += 1;
+                    used_reg.insert(right, 1);
                 }
             }
             (Some(src), None, Some(dst)) => {
-                target_instruction_idx.entry(Operand::Register(*dst)).or_default().push(idx);
-                target_reg.push(Operand::Register(*dst));
-
                 if matches!(src, Operand::Register(..)) {
-                    *used_reg.entry(src).or_insert(0) += 1;
+                    used_reg.insert(src, 1);
                 }
             }
             // Jumps, rets, push, and I/O instructions
-            (Some(src), None, None) => {}
+            (Some(src), None, None) => {
+                if matches!(src, Operand::Register(..)) {
+                    used_reg.insert(src, 1);
+                }
+                // There is no register to remove so continue
+                continue;
+            }
             // No operands or target
-            (None, None, None) => {}
+            (None, None, None) => {
+                continue;
+            }
             // All other combinations are invalid
             _ => unreachable!(),
         }
-    }
 
-    fn add_one(c: &mut usize) -> usize {
-        *c = c.saturating_sub(1);
-        *c
-    }
-
-    let mut indexes = vec![];
-    for r in target_reg.iter() {
-        if !used_reg.contains_key(r) {
-            let idxs = target_instruction_idx.get(r).unwrap();
-            indexes.extend(idxs);
-            for idx in idxs {
-                let (a, b) = instructions[*idx].operands();
-                if let Some(a) = a {
-                    used_reg.remove(&a);
-                }
-                if let Some(b) = b {
-                    used_reg.remove(&b);
-                }
-            }
+        let dst = dst.unwrap();
+        if used_reg.remove(&Operand::Register(*dst)).is_none() {
+            indexes.push(idx);
         }
     }
+
     indexes
+}
+
+pub fn compress_conditional_branches(instructions: &mut [Instruction]) -> bool {
+    let mut modified = false;
+    // We subtract 2 since we are using windows of 3 instructions to test for comparisons
+    let len = instructions.len().saturating_sub(2);
+    for idx in 0..len {
+        if is_cond_branch(idx, instructions) {
+            let (a, b) = instructions[idx].operands();
+            let a = a.unwrap().copy_to_register();
+            let b = b.unwrap().copy_to_register();
+            // This is `test* %vr3 => %vr4`
+            let test = &instructions[idx + 1];
+            // This is `cbrne/cbr %vr3 -> .L0`
+            let branch = &instructions[idx + 2];
+            let new_instruction = if matches!(branch, Instruction::CbrT { .. }) {
+                match test {
+                    Instruction::TestEQ { .. } => Instruction::CbrEQ {
+                        a,
+                        b,
+                        loc: Loc(branch.uses_label().unwrap().to_string()),
+                    },
+                    Instruction::TestNE { .. } => Instruction::CbrNE {
+                        a,
+                        b,
+                        loc: Loc(branch.uses_label().unwrap().to_string()),
+                    },
+                    Instruction::TestGE { .. } => Instruction::CbrGE {
+                        a,
+                        b,
+                        loc: Loc(branch.uses_label().unwrap().to_string()),
+                    },
+                    Instruction::TestGT { .. } => Instruction::CbrGT {
+                        a,
+                        b,
+                        loc: Loc(branch.uses_label().unwrap().to_string()),
+                    },
+                    Instruction::TestLE { .. } => Instruction::CbrLE {
+                        a,
+                        b,
+                        loc: Loc(branch.uses_label().unwrap().to_string()),
+                    },
+                    Instruction::TestLT { .. } => Instruction::CbrLT {
+                        a,
+                        b,
+                        loc: Loc(branch.uses_label().unwrap().to_string()),
+                    },
+                    _ => unreachable!(),
+                }
+            } else {
+                match test {
+                    Instruction::TestEQ { .. } => Instruction::CbrNE {
+                        a,
+                        b,
+                        loc: Loc(branch.uses_label().unwrap().to_string()),
+                    },
+                    Instruction::TestNE { .. } => Instruction::CbrEQ {
+                        a,
+                        b,
+                        loc: Loc(branch.uses_label().unwrap().to_string()),
+                    },
+                    Instruction::TestGE { .. } => Instruction::CbrLT {
+                        a,
+                        b,
+                        loc: Loc(branch.uses_label().unwrap().to_string()),
+                    },
+                    Instruction::TestGT { .. } => Instruction::CbrLE {
+                        a,
+                        b,
+                        loc: Loc(branch.uses_label().unwrap().to_string()),
+                    },
+                    Instruction::TestLE { .. } => Instruction::CbrGT {
+                        a,
+                        b,
+                        loc: Loc(branch.uses_label().unwrap().to_string()),
+                    },
+                    Instruction::TestLT { .. } => Instruction::CbrGE {
+                        a,
+                        b,
+                        loc: Loc(branch.uses_label().unwrap().to_string()),
+                    },
+                    _ => unreachable!(),
+                }
+            };
+
+            instructions[idx] = Instruction::SKIP;
+            instructions[idx + 1] = Instruction::SKIP;
+            instructions[idx + 2] = new_instruction;
+            modified = true;
+        }
+    }
+    modified
+}
+
+fn is_cond_branch(idx: usize, insts: &[Instruction]) -> bool {
+    matches!(
+        (&insts[idx], &insts[idx + 1], &insts[idx + 2]),
+        (
+            Instruction::Comp { .. },
+            Instruction::TestEQ { .. }
+                | Instruction::TestNE { .. }
+                | Instruction::TestGE { .. }
+                | Instruction::TestGT { .. }
+                | Instruction::TestLE { .. }
+                | Instruction::TestLT { .. },
+            Instruction::CbrT { .. } | Instruction::CbrF { .. }
+        )
+    )
 }

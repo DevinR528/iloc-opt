@@ -1,7 +1,12 @@
 #![feature(stdio_locked)]
 #![allow(unused)]
 
-use std::{collections::HashSet, env, fs, io::Write, path::PathBuf};
+use std::{
+    collections::HashSet,
+    env, fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 // Our Instruction definition
 mod iloc;
@@ -20,14 +25,14 @@ const JAVA_ILOC_BENCH: &[&str] =
 fn main() {
     let files = env::args().skip(1).collect::<Vec<_>>();
 
-    if let ["debug", files @ ..] = files.iter().map(|s| s.as_str()).collect::<Vec<_>>().as_slice() {
-        for file in files {
-            let input = fs::read_to_string(&file).unwrap();
-            let mut iloc = make_blks(parse_text(&input).unwrap());
-            interp::run_interpreter(iloc).unwrap();
-        }
-        return;
-    }
+    // if let ["debug", files @ ..] = files.iter().map(|s|
+    // s.as_str()).collect::<Vec<_>>().as_slice() {     for file in files {
+    //         let input = fs::read_to_string(&file).unwrap();
+    //         let mut iloc = make_blks(parse_text(&input).unwrap());
+    //         interp::run_interpreter(iloc).unwrap();
+    //     }
+    //     return;
+    // }
 
     for file in files {
         println!("performing optimization on: {}", file);
@@ -51,24 +56,29 @@ fn main() {
 
         let mut path = PathBuf::from(&file);
         let file = path.file_stem().unwrap().to_string_lossy().to_string();
-        path.set_file_name(&format!("opt.{}.il", file));
+        path.set_file_name(&format!("{}.lvn.il", file));
 
         let mut fd =
             fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
 
         fd.write_all(buf.as_bytes()).unwrap();
 
-        let cmd = std::process::Command::new("java")
-            .args(JAVA_ILOC_BENCH.iter().chain(path.to_str().iter()).collect::<Vec<_>>())
-            .output()
-            .unwrap();
-
-        if !cmd.stderr.is_empty() {
-            eprint!("{}", String::from_utf8_lossy(&cmd.stderr));
-        } else {
-            print!("{}", String::from_utf8_lossy(&cmd.stdout));
-        }
+        interp::run_interpreter(make_blks(parse_text(&buf).unwrap())).unwrap();
+        // java_run(&path);
 
         // println!("{}", 10 % 0);
+    }
+}
+
+fn java_run(path: &Path) {
+    let cmd = std::process::Command::new("java")
+        .args(JAVA_ILOC_BENCH.iter().chain(path.to_str().iter()).collect::<Vec<_>>())
+        .output()
+        .unwrap();
+
+    if !cmd.stderr.is_empty() {
+        eprint!("{}", String::from_utf8_lossy(&cmd.stderr));
+    } else {
+        print!("{}", String::from_utf8_lossy(&cmd.stdout));
     }
 }

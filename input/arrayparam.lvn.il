@@ -20,9 +20,7 @@
     loadI 1 => %vr7
     i2i %vr7 => %vr4
     loadI 10 => %vr8
-    comp %vr4, %vr8 => %vr9
-    testgt %vr9 => %vr10
-    cbr %vr10 -> .L0
+    cbr_GT %vr4, %vr8 -> .L0
 .L1: nop
     i2i %vr0 => %vr11
     addI %vr11, -4 => %vr12
@@ -36,9 +34,7 @@
     addI %vr4, 1 => %vr19
     i2i %vr19 => %vr4
     loadI 10 => %vr8
-    comp %vr4, %vr8 => %vr9
-    testle %vr9 => %vr10
-    cbr %vr10 -> .L1
+    cbr_LE %vr4, %vr8 -> .L1
 .L0: nop
     addI %vr0, -4 => %vr6
     call writearray, %vr6
@@ -48,9 +44,7 @@
     i2i %vr9 => %vr4
     loadI 10 => %vr10
     i2i %vr10 => %vr5
-    comp %vr4, %vr10 => %vr11
-    testgt %vr11 => %vr12
-    cbr %vr12 -> .L2
+    cbr_GT %vr4, %vr10 -> .L2
 .L3: nop
     i2f %vr4 => %vr13
     loadI .float_const_0 => %vr14
@@ -68,9 +62,7 @@
     addI %vr5, 1 => %vr25
     i2i %vr25 => %vr5
     loadI 10 => %vr10
-    comp %vr4, %vr10 => %vr11
-    testle %vr11 => %vr12
-    cbr %vr12 -> .L3
+    cbr_LE %vr4, %vr10 -> .L3
 .L2: nop
     ret
 .frame writearray, 0, %vr4

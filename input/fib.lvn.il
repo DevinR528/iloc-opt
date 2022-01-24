@@ -13,12 +13,10 @@
     i2i %vr8 => %vr6
     loadI 0 => %vr9
     i2i %vr9 => %vr7
-    i2i %vr9 => %vr5
-    i2i %vr8 => %vr4
+    i2i %vr7 => %vr5
+    i2i %vr6 => %vr4
     loadI 20 => %vr10
-    comp %vr4, %vr10 => %vr11
-    testgt %vr11 => %vr12
-    cbr %vr12 -> .L0
+    cbr_GT %vr4, %vr10 -> .L0
 .L1: nop
     iwrite %vr5
     add %vr7, %vr6 => %vr13
@@ -28,8 +26,6 @@
     addI %vr4, 1 => %vr14
     i2i %vr14 => %vr4
     loadI 20 => %vr10
-    comp %vr4, %vr10 => %vr11
-    testle %vr11 => %vr12
-    cbr %vr12 -> .L1
+    cbr_LE %vr4, %vr10 -> .L1
 .L0: nop
     ret

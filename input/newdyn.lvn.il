@@ -14,9 +14,7 @@
     i2i %vr5 => %vr4
     loadI 1 => %vr9
     i2i %vr9 => %vr6
-    comp %vr6, %vr5 => %vr10
-    testgt %vr10 => %vr11
-    cbr %vr11 -> .L0
+    cbr_GT %vr6, %vr5 -> .L0
 .L1: nop
     subI %vr6, 1 => %vr12
     mult %vr6, %vr5 => %vr13
@@ -33,19 +31,15 @@
     store %vr6 => %vr25
     addI %vr6, 1 => %vr26
     i2i %vr26 => %vr6
-    comp %vr6, %vr5 => %vr10
-    testle %vr10 => %vr11
-    cbr %vr11 -> .L1
+    cbr_LE %vr6, %vr5 -> .L1
 .L0: nop
     loadI 1 => %vr9
     i2i %vr9 => %vr7
-    comp %vr7, %vr4 => %vr27
-    testgt %vr27 => %vr28
-    cbr %vr28 -> .L2
+    cbr_GT %vr7, %vr4 -> .L2
 .L3: nop
     subI %vr7, 1 => %vr29
     i2i %vr5 => %vr30
-    add %vr7, %vr30 => %vr31
+    add %vr30, %vr7 => %vr31
     i2i %vr0 => %vr15
     addI %vr15, -244 => %vr17
     subI %vr31, 1 => %vr32
@@ -59,21 +53,15 @@
     store %vr36 => %vr38
     addI %vr7, 1 => %vr39
     i2i %vr39 => %vr7
-    comp %vr7, %vr4 => %vr27
-    testle %vr27 => %vr28
-    cbr %vr28 -> .L3
+    cbr_LE %vr7, %vr4 -> .L3
 .L2: nop
     loadI 2 => %vr35
     i2i %vr35 => %vr6
-    comp %vr6, %vr5 => %vr10
-    testgt %vr10 => %vr11
-    cbr %vr11 -> .L4
+    cbr_GT %vr6, %vr5 -> .L4
 .L5: nop
     loadI 2 => %vr35
     i2i %vr35 => %vr7
-    comp %vr7, %vr4 => %vr27
-    testgt %vr27 => %vr28
-    cbr %vr28 -> .L6
+    cbr_GT %vr7, %vr4 -> .L6
 .L7: nop
     subI %vr6, 1 => %vr12
     mult %vr12, %vr5 => %vr40
@@ -86,7 +74,7 @@
     sub %vr17, %vr43 => %vr44
     load %vr44 => %vr45
     mult %vr6, %vr5 => %vr13
-    add %vr7, %vr13 => %vr46
+    add %vr13, %vr7 => %vr46
     subI %vr46, 1 => %vr47
     multI %vr47, 4 => %vr48
     sub %vr17, %vr48 => %vr49
@@ -99,9 +87,7 @@
     multI %vr29, 4 => %vr37
     sub %vr52, %vr37 => %vr53
     load %vr53 => %vr54
-    comp %vr50, %vr54 => %vr55
-    testne %vr55 => %vr56
-    cbrne %vr56 -> .L8
+    cbr_EQ %vr50, %vr54 -> .L8
     load %vr49 => %vr57
     addI %vr57, 1 => %vr58
     store %vr58 => %vr49
@@ -116,14 +102,12 @@
     sub %vr17, %vr61 => %vr62
     load %vr62 => %vr63
     mult %vr6, %vr5 => %vr13
-    add %vr7, %vr13 => %vr46
+    add %vr13, %vr7 => %vr46
     subI %vr46, 1 => %vr47
     multI %vr47, 4 => %vr48
     sub %vr17, %vr48 => %vr49
     load %vr49 => %vr57
-    comp %vr63, %vr57 => %vr64
-    testlt %vr64 => %vr65
-    cbrne %vr65 -> .L9
+    cbr_GE %vr63, %vr57 -> .L9
     addI %vr63, 1 => %vr66
     store %vr66 => %vr49
 .L9: nop
@@ -141,23 +125,17 @@
     multI %vr47, 4 => %vr48
     sub %vr17, %vr48 => %vr49
     load %vr49 => %vr57
-    comp %vr71, %vr57 => %vr72
-    testlt %vr72 => %vr73
-    cbrne %vr73 -> .L10
+    cbr_GE %vr71, %vr57 -> .L10
     addI %vr71, 1 => %vr74
     store %vr74 => %vr49
 .L10: nop
     addI %vr7, 1 => %vr39
     i2i %vr39 => %vr7
-    comp %vr7, %vr4 => %vr27
-    testle %vr27 => %vr28
-    cbr %vr28 -> .L7
+    cbr_LE %vr7, %vr4 -> .L7
 .L6: nop
     addI %vr6, 1 => %vr26
     i2i %vr26 => %vr6
-    comp %vr6, %vr5 => %vr10
-    testle %vr10 => %vr11
-    cbr %vr11 -> .L5
+    cbr_LE %vr6, %vr5 -> .L5
 .L4: nop
     mult %vr5, %vr5 => %vr75
     add %vr75, %vr4 => %vr76

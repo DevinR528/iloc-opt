@@ -24,13 +24,11 @@
     comp %vr13, %vr10 => %vr14
     testne %vr14 => %vr15
     or %vr12, %vr15 => %vr16
-    comp %vr16, %vr10 => %vr17
-    testeq %vr17 => %vr18
-    cbr %vr18 -> .L0
+    cbr_EQ %vr16, %vr10 -> .L0
 .L1: nop
     addI %vr0, -4 => %vr6
     addI %vr0, -8 => %vr8
-    icall gcd, %vr6,%vr8 => %vr19
+    icall gcd, %vr6, %vr8 => %vr19
     iwrite %vr19
     addI %vr0, -4 => %vr6
     iread %vr6
@@ -47,12 +45,10 @@
     cbr %vr16 -> .L1
 .L0: nop
     ret
-.frame gcd, 4, %vr4,%vr5
+.frame gcd, 4, %vr4, %vr5
     load %vr5 => %vr6
     loadI 0 => %vr7
-    comp %vr6, %vr7 => %vr8
-    testeq %vr8 => %vr9
-    cbrne %vr9 -> .L2
+    cbr_NE %vr6, %vr7 -> .L2
     load %vr4 => %vr10
     iret %vr10
     jumpI -> .L3
@@ -62,7 +58,7 @@
     mod %vr10, %vr6 => %vr11
     addI %vr0, -4 => %vr13
     store %vr11 => %vr13
-    icall gcd, %vr5,%vr13 => %vr14
+    icall gcd, %vr5, %vr13 => %vr14
     iret %vr14
 .L3: nop
     ret

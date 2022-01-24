@@ -951,14 +951,14 @@ impl fmt::Display for Instruction {
                 self.inst_name(),
                 name,
                 if args.is_empty() { "" } else { "," },
-                args.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(",")
+                args.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(", ")
             ),
             Instruction::ImmCall { name, args, ret } => writeln!(
                 f,
                 "    {} {}, {} => {}",
                 self.inst_name(),
                 name,
-                args.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(","),
+                args.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(", "),
                 ret
             ),
             Instruction::ImmRCall { reg, args, ret } => writeln!(
@@ -966,7 +966,7 @@ impl fmt::Display for Instruction {
                 "    {} {}, {} => {}",
                 self.inst_name(),
                 reg,
-                args.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(","),
+                args.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(", "),
                 ret
             ),
             Instruction::ImmRet(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
@@ -1051,7 +1051,7 @@ impl fmt::Display for Instruction {
                     name,
                     size,
                     if params.is_empty() { "" } else { "," },
-                    params.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(",")
+                    params.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(", ")
                 )
             }
             Instruction::Global { name, size, align } => {
@@ -1225,6 +1225,7 @@ impl Instruction {
             Instruction::StoreAdd { src, add, .. } => {
                 (Some(Operand::Register(*src)), Some(Operand::Register(*add)))
             }
+            Instruction::IWrite(r) | Instruction::FWrite(r) => (Some(Operand::Register(*r)), None),
             Instruction::CmpLT { a, b, .. } => {
                 (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
             }
@@ -1989,6 +1990,7 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                     .iter()
                     .map(|s| Reg::from_str(s))
                     .collect::<Result<Vec<_>, &'static str>>()?;
+
                 instructions.push(Instruction::ImmCall {
                     name: name.to_string(),
                     args,

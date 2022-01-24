@@ -6,17 +6,17 @@ use std::{
 
 use crate::iloc::{parse_text, Block, Function, IlocProgram, Instruction, Loc, Reg, Val};
 
-const STACK_SIZE: usize = 4096 * 4;
+const STACK_SIZE: usize = 4096 * 4 * 4;
 
 struct CallStackEntry {
     name: Loc,
-    clobber_map: HashMap<Reg, Val>,
+    registers: HashMap<Reg, Val>,
     ret_val: Option<Reg>,
 }
 
 impl CallStackEntry {
-    fn new(s: &str) -> Self {
-        Self { name: Loc(s.to_string()), clobber_map: HashMap::default(), ret_val: None }
+    fn new(s: &str, registers: HashMap<Reg, Val>) -> Self {
+        Self { name: Loc(s.to_string()), registers, ret_val: None }
     }
 }
 
@@ -31,8 +31,6 @@ pub struct Interpreter {
     fn_decl: HashMap<Loc, (usize, Vec<Reg>)>,
     /// A mapping of labels names to the index of the first instruction to execute after the label.
     label_map: HashMap<Loc, usize>,
-    /// A map of register to value.
-    registers: HashMap<Reg, Val>,
     /// The index of which instruction we are on within a block.
     inst_idx: usize,
     /// The function call stack.
@@ -106,9 +104,8 @@ impl Interpreter {
             functions,
             fn_decl: fn_decl_map,
             label_map,
-            registers,
             inst_idx: 0,
-            call_stack: vec![CallStackEntry::new("main")],
+            call_stack: vec![CallStackEntry::new("main", registers)],
             stack,
             ret_idx: vec![0],
         }
@@ -119,20 +116,18 @@ impl Interpreter {
         self.fn_decl.get(&Loc(name.to_string())).unwrap().0 as isize
     }
 
+    fn registers(&self) -> &HashMap<Reg, Val> {
+        &self.call_stack.last().unwrap().registers
+    }
+
     pub fn run_next_instruction(&mut self, count: &mut usize) -> Option<bool> {
         if self.call_stack.is_empty() {
             return Some(false);
         }
 
-        // println!(
-        //     "// line    {}  {}",
-        //     self.curr_line().unwrap(),
-        //     self.curr_instruction().unwrap()
-        // );
-
-        let CallStackEntry { name: func, .. } = self.call_stack.last_mut().unwrap();
+        let CallStackEntry { name: func, .. } = self.call_stack.last()?;
         let stack = &mut self.stack;
-        let instrs = self.functions.get(func).unwrap();
+        let instrs = self.functions.get(func)?;
 
         // Skip these instructions
         match instrs[self.inst_idx].1 {
@@ -145,100 +140,101 @@ impl Interpreter {
 
         match &instrs[self.inst_idx].1 {
             Instruction::I2I { src, dst } => {
-                self.registers.insert(*dst, self.registers.get(src).cloned()?);
+                let val = self.registers().get(src).cloned()?;
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::Add { src_a, src_b, dst } => {
-                let a = self.registers.get(src_a)?;
-                let b = self.registers.get(src_b)?;
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
 
                 let val = a.add(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::Sub { src_a, src_b, dst } => {
-                let a = self.registers.get(src_a)?;
-                let b = self.registers.get(src_b)?;
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
 
                 let val = a.sub(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::Mult { src_a, src_b, dst } => {
-                let a = self.registers.get(src_a)?;
-                let b = self.registers.get(src_b)?;
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
 
                 let val = a.mult(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::LShift { src_a, src_b, dst } => {
-                let a = self.registers.get(src_a)?;
-                let b = self.registers.get(src_b)?;
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
 
                 let val = a.lshift(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::RShift { src_a, src_b, dst } => {
-                let a = self.registers.get(src_a)?;
-                let b = self.registers.get(src_b)?;
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
 
                 let val = a.rshift(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::Mod { src_a, src_b, dst } => {
-                let a = self.registers.get(src_a)?;
-                let b = self.registers.get(src_b)?;
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
 
                 let val = a.modulus(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::And { src_a, src_b, dst } => {
-                let a = self.registers.get(src_a)?;
-                let b = self.registers.get(src_b)?;
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
 
                 let val = a.and(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::Or { src_a, src_b, dst } => {
-                let a = self.registers.get(src_a)?;
-                let b = self.registers.get(src_b)?;
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
 
                 let val = a.or(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::Not { src, dst } => {
-                let a = self.registers.get(src)?;
+                let a = self.registers().get(src)?;
 
                 if let Val::Integer(int) = a.clone() {
-                    self.registers.insert(*dst, Val::Integer(!int));
+                    self.call_stack.last_mut()?.registers.insert(*dst, Val::Integer(!int));
                 }
             }
             Instruction::ImmAdd { src, konst, dst } => {
-                let a = self.registers.get(src)?;
+                let a = self.registers().get(src)?;
 
                 let val = a.add(konst)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::ImmSub { src, konst, dst } => {
-                let a = self.registers.get(src)?;
+                let a = self.registers().get(src)?;
 
                 let val = a.sub(konst)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::ImmMult { src, konst, dst } => {
-                let a = self.registers.get(src)?;
+                let a = self.registers().get(src)?;
 
                 let val = a.mult(konst)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::ImmLShift { src, konst, dst } => {
-                let a = self.registers.get(src)?;
+                let a = self.registers().get(src)?;
 
                 let val = a.lshift(konst)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::ImmRShift { src, konst, dst } => {
-                let a = self.registers.get(src)?;
+                let a = self.registers().get(src)?;
 
                 let val = a.rshift(konst)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::ImmLoad { src, dst } => {
                 let src = if let Val::Location(s) = src {
@@ -246,131 +242,139 @@ impl Interpreter {
                 } else {
                     src.clone()
                 };
-                self.registers.insert(*dst, src);
+                self.call_stack.last_mut()?.registers.insert(*dst, src);
             }
             Instruction::Load { src, dst } => {
-                let stack_idx = self.registers.get(src)?;
+                let stack_idx = self.call_stack.last()?.registers.get(src)?;
                 let val = stack[stack_idx.to_int()? as usize].clone();
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::LoadAddImm { src, add, dst } => {
-                let stack_idx = self.registers.get(src)?.to_int()? as usize;
+                let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int()? as usize;
                 let val = stack[stack_idx + (add.to_int()? as usize)].clone();
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::LoadAdd { src, add, dst } => {
-                let stack_idx = self.registers.get(src)?.to_int()? as usize;
-                let add = self.registers.get(add)?.to_int()? as usize;
+                let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int()? as usize;
+                let add = self.call_stack.last()?.registers.get(add)?.to_int()? as usize;
 
                 let val = stack[stack_idx + add].clone();
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::Store { src, dst } => {
-                let val = self.registers.get(src)?.clone();
-                let stack_idx = self.registers.get(dst)?.to_int()? as usize;
+                let val = self.call_stack.last()?.registers.get(src)?.clone();
+                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()? as usize;
                 stack[stack_idx] = val;
             }
             Instruction::StoreAddImm { src, add, dst } => {
-                let val = self.registers.get(src)?.clone();
-                let stack_idx = self.registers.get(dst)?.to_int()? as usize;
+                let val = self.call_stack.last()?.registers.get(src)?.clone();
+                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()? as usize;
                 stack[stack_idx + (add.to_int()? as usize)] = val;
             }
             Instruction::StoreAdd { src, add, dst } => {
-                let val = self.registers.get(src)?.clone();
+                let val = self.call_stack.last()?.registers.get(src)?.clone();
 
-                let add = self.registers.get(add)?.to_int()? as usize;
-                let stack_idx = self.registers.get(dst)?.to_int()? as usize;
+                let add = self.call_stack.last()?.registers.get(add)?.to_int()? as usize;
+                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()? as usize;
 
                 stack[stack_idx + add] = val;
             }
             Instruction::CmpLT { a, b, dst } => {
-                let a = self.registers.get(a)?;
-                let b = self.registers.get(b)?;
+                let a = self.registers().get(a)?;
+                let b = self.registers().get(b)?;
                 let val = a.cmp_lt(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::CmpLE { a, b, dst } => {
-                let a = self.registers.get(a)?;
-                let b = self.registers.get(b)?;
+                let a = self.registers().get(a)?;
+                let b = self.registers().get(b)?;
                 let val = a.cmp_le(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::CmpGT { a, b, dst } => {
-                let a = self.registers.get(a)?;
-                let b = self.registers.get(b)?;
+                let a = self.registers().get(a)?;
+                let b = self.registers().get(b)?;
                 let val = a.cmp_gt(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::CmpGE { a, b, dst } => {
-                let a = self.registers.get(a)?;
-                let b = self.registers.get(b)?;
+                let a = self.registers().get(a)?;
+                let b = self.registers().get(b)?;
                 let val = a.cmp_ge(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::CmpEQ { a, b, dst } => {
-                let a = self.registers.get(a)?;
-                let b = self.registers.get(b)?;
+                let a = self.registers().get(a)?;
+                let b = self.registers().get(b)?;
                 let val = a.cmp_eq(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::CmpNE { a, b, dst } => {
-                let a = self.registers.get(a)?;
-                let b = self.registers.get(b)?;
+                let a = self.registers().get(a)?;
+                let b = self.registers().get(b)?;
                 let val = a.cmp_ne(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::Comp { a, b, dst } => {
-                let a = self.registers.get(a)?;
-                let b = self.registers.get(b)?;
+                let a = self.registers().get(a)?;
+                let b = self.registers().get(b)?;
 
                 let val = a.comp(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::TestEQ { test, dst } => {
-                let a = self.registers.get(test)?;
+                let a = self.registers().get(test)?;
                 let is_eq = a.is_zero();
-                self.registers.insert(*dst, Val::Integer(if is_eq { 1 } else { 0 }));
+                self.call_stack
+                    .last_mut()
+                    .unwrap()
+                    .registers
+                    .insert(*dst, Val::Integer(if is_eq { 1 } else { 0 }));
             }
             Instruction::TestNE { test, dst } => {
-                let a = self.registers.get(test)?;
+                let a = self.registers().get(test)?;
                 let is_ne = !a.is_zero();
-                self.registers.insert(*dst, Val::Integer(if is_ne { 1 } else { 0 }));
+                self.call_stack
+                    .last_mut()
+                    .unwrap()
+                    .registers
+                    .insert(*dst, Val::Integer(if is_ne { 1 } else { 0 }));
             }
             Instruction::TestGT { test, dst } => {
-                let a = self.registers.get(test)?;
+                let a = self.registers().get(test)?;
                 let is_gt = match a {
                     Val::Integer(i) if *i > 0 => 1,
                     Val::Float(f) if *f > 0.0 => 1,
                     _ => 0,
                 };
-                self.registers.insert(*dst, Val::Integer(is_gt));
+                self.call_stack.last_mut()?.registers.insert(*dst, Val::Integer(is_gt));
             }
             Instruction::TestGE { test, dst } => {
-                let a = self.registers.get(test)?;
+                let a = self.registers().get(test)?;
                 let is_ge = match a {
                     Val::Integer(i) if *i >= 0 => 1,
                     Val::Float(f) if *f >= 0.0 => 1,
                     _ => 0,
                 };
-                self.registers.insert(*dst, Val::Integer(is_ge));
+                self.call_stack.last_mut()?.registers.insert(*dst, Val::Integer(is_ge));
             }
             Instruction::TestLT { test, dst } => {
-                let a = self.registers.get(test)?;
+                let a = self.registers().get(test)?;
                 let is_lt = match a {
                     Val::Integer(i) if *i < 0 => 1,
                     Val::Float(f) if *f < 0.0 => 1,
                     _ => 0,
                 };
-                self.registers.insert(*dst, Val::Integer(is_lt));
+                self.call_stack.last_mut()?.registers.insert(*dst, Val::Integer(is_lt));
             }
             Instruction::TestLE { test, dst } => {
-                let a = self.registers.get(test)?;
+                let a = self.registers().get(test)?;
                 let is_le = match a {
                     Val::Integer(i) if *i <= 0 => 1,
                     Val::Float(f) if *f <= 0.0 => 1,
                     _ => 0,
                 };
-                self.registers.insert(*dst, Val::Integer(is_le));
+                self.call_stack.last_mut()?.registers.insert(*dst, Val::Integer(is_le));
             }
             Instruction::ImmJump(loc) => {
                 let jmp_idx = self.label_map.get(loc)?;
@@ -381,33 +385,29 @@ impl Interpreter {
             Instruction::Call { name, args } => {
                 self.ret_idx.push(self.inst_idx + 1);
                 self.inst_idx = 0;
-                let (size, params) = self.fn_decl.get(&Loc(name.to_owned())).unwrap();
+                let shift_stack = self.callee_stack_size();
+                let (_, params) = self.fn_decl.get(&Loc(name.to_owned())).unwrap();
 
-                self.call_stack.push(CallStackEntry {
-                    name: Loc(name.to_owned()),
-                    // Save all the call clobbered registers
-                    clobber_map: params
-                        .iter()
-                        // Save the stack pointer
-                        .chain(std::iter::once(&Reg::Var(0)))
-                        .filter_map(|r| Some((*r, self.registers.get(r)?.clone())))
-                        .collect(),
-                    ret_val: None,
-                });
+                let mut registers = HashMap::new();
+                // New stack pointer (vr0)
+                let new_ip = self
+                    .registers()
+                    .get(&Reg::Var(0))
+                    .unwrap()
+                    .sub(&Val::Integer(shift_stack))
+                    .unwrap();
+                registers.insert(Reg::Var(0), new_ip);
 
                 assert_eq!(params.len(), args.len());
                 for (param, arg) in params.iter().zip(args) {
-                    self.registers.insert(*param, self.registers.get(arg).unwrap().clone());
+                    registers.insert(*param, self.registers().get(arg).unwrap().clone());
                 }
 
-                // New stack pointer (vr0)
-                let new_ip = self
-                    .registers
-                    .get(&Reg::Var(0))
-                    .unwrap()
-                    .sub(&Val::Integer(*size as isize))
-                    .unwrap();
-                self.registers.insert(Reg::Var(0), new_ip);
+                self.call_stack.push(CallStackEntry {
+                    name: Loc(name.to_owned()),
+                    registers,
+                    ret_val: None,
+                });
 
                 return Some(true);
             }
@@ -415,45 +415,35 @@ impl Interpreter {
                 self.ret_idx.push(self.inst_idx + 1);
                 self.inst_idx = 0;
                 let shift_stack = self.callee_stack_size();
-                let (size, params) = self.fn_decl.get(&Loc(name.to_owned())).unwrap();
+                let (_, params) = self.fn_decl.get(&Loc(name.to_owned())).unwrap();
 
-                self.call_stack.push(CallStackEntry {
-                    name: Loc(name.to_owned()),
-                    // Save all the call clobbered registers
-                    clobber_map: params
-                        .iter()
-                        // Save the stack pointer
-                        .chain(std::iter::once(&Reg::Var(0)))
-                        .filter_map(|r| Some((*r, self.registers.get(r)?.clone())))
-                        .collect(),
-                    ret_val: Some(*ret),
-                });
-
-                assert_eq!(params.len(), args.len());
-                for (param, arg) in params.iter().zip(args) {
-                    self.registers.insert(*param, self.registers.get(arg).unwrap().clone());
-                }
-
+                let mut registers = HashMap::new();
                 // New stack pointer (vr0)
                 let new_ip = self
-                    .registers
+                    .registers()
                     .get(&Reg::Var(0))
                     .unwrap()
                     .sub(&Val::Integer(shift_stack))
                     .unwrap();
-                self.registers.insert(Reg::Var(0), new_ip);
+                registers.insert(Reg::Var(0), new_ip);
+
+                assert_eq!(params.len(), args.len());
+                for (param, arg) in params.iter().zip(args) {
+                    registers.insert(*param, self.registers().get(arg).unwrap().clone());
+                }
+
+                self.call_stack.push(CallStackEntry {
+                    name: Loc(name.to_owned()),
+                    registers,
+                    ret_val: Some(*ret),
+                });
 
                 return Some(true);
             }
             Instruction::ImmRCall { reg, args, ret } => todo!(),
             Instruction::Ret => {
                 self.inst_idx = self.ret_idx.pop()?;
-                let CallStackEntry { name, clobber_map, ret_val } = self.call_stack.pop()?;
-
-                // Restore the call clobbered registers
-                for (reg, val) in clobber_map {
-                    self.registers.insert(reg, val);
-                }
+                let CallStackEntry { ret_val, .. } = self.call_stack.pop()?;
 
                 assert!(ret_val.is_none());
 
@@ -461,22 +451,17 @@ impl Interpreter {
             }
             Instruction::ImmRet(ret_reg) => {
                 self.inst_idx = self.ret_idx.pop()?;
-                let CallStackEntry { name, clobber_map, ret_val } = self.call_stack.pop()?;
-
-                // Restore the call clobbered registers
-                for (reg, val) in clobber_map {
-                    self.registers.insert(reg, val);
-                }
+                let CallStackEntry { ret_val, registers, .. } = self.call_stack.pop()?;
 
                 let dst = ret_val.unwrap();
-                let val = self.registers.get(ret_reg).unwrap().clone();
-                self.registers.insert(dst, val);
+                let val = registers.get(ret_reg).unwrap().clone();
+                self.call_stack.last_mut()?.registers.insert(dst, val);
 
                 return Some(true);
             }
             // cbr
             Instruction::CbrT { cond, loc } => {
-                let a = self.registers.get(cond)?;
+                let a = self.registers().get(cond)?;
                 let should_jump = match a {
                     Val::Integer(i) if *i == 1 => true,
                     Val::Float(f) if *f == 1.0 => true,
@@ -490,7 +475,7 @@ impl Interpreter {
             }
             // cbrne
             Instruction::CbrF { cond, loc } => {
-                let a = self.registers.get(cond)?;
+                let a = self.registers().get(cond)?;
                 let should_jump = match a {
                     Val::Integer(i) if *i == 0 => true,
                     Val::Float(f) if *f == 0.0 => true,
@@ -504,8 +489,8 @@ impl Interpreter {
                 }
             }
             Instruction::CbrLT { a, b, loc } => {
-                let a = self.registers.get(a)?;
-                let b = self.registers.get(b)?;
+                let a = self.registers().get(a)?;
+                let b = self.registers().get(b)?;
                 let should_jump = match a.cmp_lt(b)? {
                     Val::Integer(i) if i == 1 => true,
                     Val::Float(f) if f == 1.0 => true,
@@ -518,8 +503,8 @@ impl Interpreter {
                 }
             }
             Instruction::CbrLE { a, b, loc } => {
-                let a = self.registers.get(a)?;
-                let b = self.registers.get(b)?;
+                let a = self.registers().get(a)?;
+                let b = self.registers().get(b)?;
                 let should_jump = match a.cmp_le(b)? {
                     Val::Integer(i) if i == 1 => true,
                     Val::Float(f) if f == 1.0 => true,
@@ -532,8 +517,8 @@ impl Interpreter {
                 }
             }
             Instruction::CbrGT { a, b, loc } => {
-                let a = self.registers.get(a)?;
-                let b = self.registers.get(b)?;
+                let a = self.registers().get(a)?;
+                let b = self.registers().get(b)?;
                 let should_jump = match a.cmp_gt(b)? {
                     Val::Integer(i) if i == 1 => true,
                     Val::Float(f) if f == 1.0 => true,
@@ -546,8 +531,8 @@ impl Interpreter {
                 }
             }
             Instruction::CbrGE { a, b, loc } => {
-                let a = self.registers.get(a)?;
-                let b = self.registers.get(b)?;
+                let a = self.registers().get(a)?;
+                let b = self.registers().get(b)?;
                 let should_jump = match a.cmp_ge(b)? {
                     Val::Integer(i) if i == 1 => true,
                     Val::Float(f) if f == 1.0 => true,
@@ -560,10 +545,8 @@ impl Interpreter {
                 }
             }
             Instruction::CbrEQ { a, b, loc } => {
-                todo!();
-
-                let a = self.registers.get(a)?;
-                let b = self.registers.get(b)?;
+                let a = self.registers().get(a)?;
+                let b = self.registers().get(b)?;
                 let should_jump = match a.cmp_eq(b)? {
                     Val::Integer(i) if i == 1 => true,
                     Val::Float(f) if f == 1.0 => true,
@@ -576,9 +559,8 @@ impl Interpreter {
                 }
             }
             Instruction::CbrNE { a, b, loc } => {
-                todo!();
-                let a = self.registers.get(a)?;
-                let b = self.registers.get(b)?;
+                let a = self.registers().get(a)?;
+                let b = self.registers().get(b)?;
                 let should_jump = match a.cmp_ne(b)? {
                     Val::Integer(i) if i == 1 => true,
                     Val::Float(f) if f == 1.0 => true,
@@ -591,64 +573,73 @@ impl Interpreter {
                 }
             }
             Instruction::F2I { src, dst } => {
-                let int_from_float = if let Val::Float(f) = self.registers.get(src).cloned()? {
+                let int_from_float = if let Val::Float(f) = self.registers().get(src).cloned()? {
                     unsafe { f.to_int_unchecked::<isize>() }
                 } else {
                     todo!("float error")
                 };
-                self.registers.insert(*dst, Val::Integer(int_from_float));
+                self.call_stack
+                    .last_mut()
+                    .unwrap()
+                    .registers
+                    .insert(*dst, Val::Integer(int_from_float));
             }
             Instruction::I2F { src, dst } => {
-                let float_from_int = if let Val::Integer(i) = self.registers.get(src).cloned()? {
+                let float_from_int = if let Val::Integer(i) = self.registers().get(src).cloned()? {
                     i as f64
                 } else {
                     todo!("integer error")
                 };
-                self.registers.insert(*dst, Val::Float(float_from_int));
+                self.call_stack
+                    .last_mut()
+                    .unwrap()
+                    .registers
+                    .insert(*dst, Val::Float(float_from_int));
             }
             Instruction::F2F { src, dst } => {
-                self.registers.insert(*dst, self.registers.get(src).cloned()?);
+                let val = self.registers().get(src).cloned()?;
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::FAdd { src_a, src_b, dst } => {
-                let a = self.registers.get(src_a)?;
-                let b = self.registers.get(src_b)?;
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
 
                 let val = a.fadd(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::FSub { src_a, src_b, dst } => {
-                let a = self.registers.get(src_a)?;
-                let b = self.registers.get(src_b)?;
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
 
                 let val = a.fsub(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::FMult { src_a, src_b, dst } => {
-                let a = self.registers.get(src_a)?;
-                let b = self.registers.get(src_b)?;
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
 
                 let val = a.fmult(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::FDiv { src_a, src_b, dst } => {
-                let a = self.registers.get(src_a)?;
-                let b = self.registers.get(src_b)?;
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
 
                 let val = a.fdiv(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::FComp { src_a, src_b, dst } => {
-                let a = self.registers.get(src_a)?;
-                let b = self.registers.get(src_b)?;
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
 
                 let val = a.fsub(b)?;
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::FLoad { src, dst } => {
-                let stack_idx = self.registers.get(src)?;
+                let stack_idx = self.call_stack.last()?.registers.get(src)?;
                 let val = stack[stack_idx.to_int()? as usize].clone();
 
-                self.registers.insert(*dst, val);
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::FLoadAddImm { src, add, dst } => todo!(),
             Instruction::FLoadAdd { src, add, dst } => todo!(),
@@ -660,21 +651,28 @@ impl Interpreter {
                 let mut handle = std::io::stdin_locked();
                 handle.read_line(&mut buf).unwrap();
 
-                self.registers.insert(*r, Val::Float(buf.trim().parse::<f64>().unwrap()));
+                self.call_stack
+                    .last_mut()
+                    .unwrap()
+                    .registers
+                    .insert(*r, Val::Float(buf.trim().parse::<f64>().unwrap()));
             }
             Instruction::IRead(r) => {
                 let mut buf = String::new();
                 let mut handle = std::io::stdin_locked();
                 handle.read_line(&mut buf).unwrap();
 
-                let stack_idx = self.registers.get(r)?;
+                let stack_idx = self.call_stack.last()?.registers.get(r)?;
                 stack[stack_idx.to_int().unwrap() as usize] =
                     Val::Integer(buf.trim().parse().unwrap());
             }
-            Instruction::FWrite(r) => println!("{:?}", self.registers.get(r)?.to_float()?),
-            Instruction::IWrite(r) => println!("{:?}", self.registers.get(r)?.to_int()?),
+            Instruction::FWrite(r) => println!("{:?}", self.registers().get(r)?.to_float()?),
+            Instruction::IWrite(r) => println!("{:?}", self.registers().get(r)?.to_int()?),
             Instruction::SWrite(r) => {
-                println!("{:?}", stack[self.registers.get(r)?.to_int()? as usize])
+                println!(
+                    "{:?}",
+                    stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize]
+                )
             }
             _ => todo!("{:?}", instrs[self.inst_idx]),
         }
@@ -738,7 +736,7 @@ fn debug_loop(
                 let reg =
                     if !reg.starts_with("%vr") { format!("%vr{}", reg) } else { reg.to_string() };
                 if let Ok(r) = Reg::from_str(&reg) {
-                    if let Some(v) = interpreter.registers.get(&r) {
+                    if let Some(v) = interpreter.call_stack.last().unwrap().registers.get(&r) {
                         println!("{:?}", v)
                     }
                 }
@@ -768,9 +766,9 @@ pub fn run_interpreter(iloc: IlocProgram) -> Result<(), &'static str> {
     let mut instruction_count = 0;
     let mut interpreter = Interpreter::new(iloc);
 
-    let mut break_points = HashSet::new();
-    let mut buf = String::new();
-    let mut continue_flag = false;
+    // let mut break_points = HashSet::new();
+    // let mut buf = String::new();
+    // let mut continue_flag = false;
     // Now we can get input from the user
     loop {
         match interpreter.run_next_instruction(&mut instruction_count) {
@@ -783,12 +781,19 @@ pub fn run_interpreter(iloc: IlocProgram) -> Result<(), &'static str> {
 
                 instruction_count += 1;
 
-                debug_loop(&mut buf, &mut break_points, &mut interpreter, &mut continue_flag, line);
+                // debug_loop(&mut buf, &mut break_points, &mut interpreter, &mut continue_flag,
+                // line);
             }
             Some(false) => {}
             None => {
-                let mut regs =
-                    interpreter.registers.iter().map(|(r, v)| (r, v)).collect::<Vec<_>>();
+                let mut regs = interpreter
+                    .call_stack
+                    .last()
+                    .unwrap()
+                    .registers
+                    .iter()
+                    .map(|(r, v)| (r, v))
+                    .collect::<Vec<_>>();
 
                 regs.sort_by(|a, b| a.0.cmp(b.0));
 
