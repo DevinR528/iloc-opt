@@ -1,7 +1,12 @@
-In addition to local value number redundancy elimination I implemented constant folding,
-constant propagation, identity transormations of immediate instructions as well as three address,
+To run
+```
+lvn ./input/file.il
+```
+
+In addition to local value number redundancy elimination, I implemented constant folding,
+constant propagation, identity transformations of immediate instructions as well as three address,
 and combining of compare, test, and branch instruction sequences. We are using my interpreter for 
-the commands you will run but the output and way the interpreter count instruction are identical.
+the commands you will run, but the output and way the interpreter count instruction are identical.
 
 
 | File            | Original | LVN   | Time        |
