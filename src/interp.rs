@@ -762,13 +762,13 @@ fn debug_loop(
     buf.clear();
 }
 
-pub fn run_interpreter(iloc: IlocProgram) -> Result<(), &'static str> {
+pub fn run_interpreter(iloc: IlocProgram, debug: bool) -> Result<(), &'static str> {
     let mut instruction_count = 0;
     let mut interpreter = Interpreter::new(iloc);
 
-    // let mut break_points = HashSet::new();
-    // let mut buf = String::new();
-    // let mut continue_flag = false;
+    let mut break_points = HashSet::new();
+    let mut buf = String::new();
+    let mut continue_flag = false;
     // Now we can get input from the user
     loop {
         match interpreter.run_next_instruction(&mut instruction_count) {
@@ -781,8 +781,15 @@ pub fn run_interpreter(iloc: IlocProgram) -> Result<(), &'static str> {
 
                 instruction_count += 1;
 
-                // debug_loop(&mut buf, &mut break_points, &mut interpreter, &mut continue_flag,
-                // line);
+                if debug {
+                    debug_loop(
+                        &mut buf,
+                        &mut break_points,
+                        &mut interpreter,
+                        &mut continue_flag,
+                        line,
+                    )
+                };
             }
             Some(false) => {}
             None => {

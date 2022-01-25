@@ -4,7 +4,7 @@
 use std::{
     collections::HashSet,
     env, fs,
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -23,50 +23,54 @@ const JAVA_ILOC_BENCH: &[&str] =
     &["-jar", "/home/devinr/Downloads/my-cs6810-ssa-opt-project/iloc.jar", "-s"];
 
 fn main() {
+    let mut debug = false;
+    let mut optimize = false;
     let files = env::args().skip(1).collect::<Vec<_>>();
-
-    // if let ["debug", files @ ..] = files.iter().map(|s|
-    // s.as_str()).collect::<Vec<_>>().as_slice() {     for file in files {
-    //         let input = fs::read_to_string(&file).unwrap();
-    //         let mut iloc = make_blks(parse_text(&input).unwrap());
-    //         interp::run_interpreter(iloc).unwrap();
-    //     }
-    //     return;
-    // }
+    let f = files.iter().map(|s| s.as_str()).collect::<Vec<_>>();
+    let files = match f.as_slice() {
+        ["debug", files @ ..] => {
+            debug = true;
+            files
+        }
+        ["opt", files @ ..] => {
+            optimize = true;
+            files
+        }
+        [files @ ..] => files,
+    };
 
     for file in files {
-        println!("performing optimization on: {}", file);
-
-        let input = fs::read_to_string(&file).unwrap();
-        let mut iloc = parse_text(&input).unwrap();
-        let mut blocks = make_blks(iloc);
-        for func in &mut blocks.functions {
-            for blk in &mut func.blk {
-                if let Some(insts) = loc_val_num::number_basic_block(blk) {
-                    blk.instructions = insts;
+        let buf = if optimize {
+            println!("performing optimization on: {}", file);
+            let input = fs::read_to_string(&file).unwrap();
+            let mut iloc = parse_text(&input).unwrap();
+            let mut blocks = make_blks(iloc);
+            for func in &mut blocks.functions {
+                for blk in &mut func.blk {
+                    if let Some(insts) = loc_val_num::number_basic_block(blk) {
+                        blk.instructions = insts;
+                    }
                 }
             }
-        }
+            let mut buf = String::new();
+            for inst in blocks.instruction_iter() {
+                // println!("{:?}", inst);
+                buf.push_str(&inst.to_string())
+            }
 
-        let mut buf = String::new();
-        for inst in blocks.instruction_iter() {
-            // println!("{:?}", inst);
-            buf.push_str(&inst.to_string())
-        }
+            let mut path = PathBuf::from(&file);
+            let file = path.file_stem().unwrap().to_string_lossy().to_string();
+            path.set_file_name(&format!("{}.lvn.il", file));
+            let mut fd =
+                fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
+            fd.write_all(buf.as_bytes()).unwrap();
 
-        let mut path = PathBuf::from(&file);
-        let file = path.file_stem().unwrap().to_string_lossy().to_string();
-        path.set_file_name(&format!("{}.lvn.il", file));
+            fs::read_to_string(&path).unwrap()
+        } else {
+            fs::read_to_string(&file).unwrap()
+        };
 
-        let mut fd =
-            fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
-
-        fd.write_all(buf.as_bytes()).unwrap();
-
-        interp::run_interpreter(make_blks(parse_text(&buf).unwrap())).unwrap();
-        // java_run(&path);
-
-        // println!("{}", 10 % 0);
+        interp::run_interpreter(make_blks(parse_text(&buf).unwrap()), debug).unwrap();
     }
 }
 

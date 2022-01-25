@@ -2082,6 +2082,10 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 content: val.parse().map_err(|_| "failed to parse .float value")?,
             }),
             [label, "nop"] => instructions.push(Instruction::Label(label.to_string())),
+            [first, ..] if first.starts_with('#') => {}
+            [label] if label.starts_with('.') => {
+                instructions.push(Instruction::Label(label.to_string()))
+            }
             inst => todo!("{:?}", inst),
             // _ => {
             //     return Err("invalid instruction sequence");
