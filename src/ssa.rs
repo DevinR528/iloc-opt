@@ -57,22 +57,23 @@ pub fn dominator_tree(cfg: &ControlFlowGraph) {
     let mut align = 0;
     let mut paths = vec![vec![".L_main".to_string()]];
     traverse(".L_main", align, cfg, &mut paths);
+    println!("{:#?}", paths)
 }
 
 fn traverse(val: &str, align: usize, cfg: &ControlFlowGraph, paths: &mut Vec<Vec<String>>) {
     let set = HashSet::default();
     let nodes = cfg.paths.get(val).unwrap_or(&set).clone();
 
-    if nodes.len() == 1 {
-        paths.last_mut().unwrap().push(val.to_string());
-    } else {
-        let last = paths.last().unwrap().clone();
-        for (idx, node) in nodes.iter().enumerate() {
-            paths.push(last.clone());
-            traverse(node, align + 5, cfg, paths);
-        }
-        println!("{}{}({})", " ".repeat(align), " ".repeat(7 - val.to_string().len()), val);
+    paths.last_mut().unwrap().push(val.to_string());
+
+    let last = paths.last().unwrap().clone();
+    for (idx, node) in nodes.iter().enumerate() {
+        if idx > 0 {
+            paths.push(last.clone())
+        };
+        traverse(node, align + 5, cfg, paths);
     }
+    println!("{}{}({})", " ".repeat(align), " ".repeat(7 - val.to_string().len()), val);
 }
 
 #[test]
