@@ -25,18 +25,8 @@ impl ControlFlowGraph {
     /// which helps us know if we need to keep iterating.
     ///
     /// Returns `false` when we have seen this node and true when it updates the graph.
-    pub fn add_edge(&mut self, blk: &str) -> bool {
-        let blk = blk.replace(':', "");
-        let changed = if let Some(prev) = self.entry.take() {
-            println!("blk = {} prev = {}", blk, prev);
-
-            self.paths.entry(prev).or_default().insert(blk.to_string())
-        } else {
-            self.paths.insert(blk.to_string(), HashSet::default()).is_none()
-        };
-
-        self.entry = Some(blk);
-        changed
+    pub fn add_edge(&mut self, from: &str, to: &str) -> bool {
+        self.paths.entry(from.to_string()).or_default().insert(to.to_string())
     }
 }
 
@@ -44,47 +34,21 @@ pub fn build_cfg(func: &Function) -> ControlFlowGraph {
     let entry = func.blocks.first().unwrap().clone();
     let mut cfg = ControlFlowGraph::default();
 
-    let mut to_uncond = HashSet::new();
-    let mut from_uncond = HashSet::new();
-    let mut work_stack = VecDeque::new();
-    for block in &func.blocks {
-        work_stack.push_back(block);
-        while let Some(curr_blk) = work_stack.pop_front() {
-            if !cfg.add_edge(&curr_blk.label) {
-                println!("cheat {:?}", cfg.entry);
-                continue;
-            }
+    'blocks: for (idx, block) in func.blocks.iter().enumerate() {
+        let b_label = block.label.replace(':', "");
 
-            for inst in &curr_blk.instructions {
-                if let Some(label) = inst.uses_label() {
-                    if inst.unconditional_jmp() {
-                        cfg.paths
-                            .entry(curr_blk.label.replace(':', ""))
-                            .or_default()
-                            .insert(label.to_string());
-                        from_uncond.insert(curr_blk.label.replace(':', ""));
-                        to_uncond.insert(label);
-                        continue;
-                    }
+        for inst in &block.instructions {
+            if let Some(label) = inst.uses_label() {
+                cfg.add_edge(&b_label, label);
 
-                    work_stack.push_back(
-                        func.blocks
-                            .iter()
-                            .find(|b| b.label.replace(':', "") == label)
-                            .unwrap_or_else(|| panic!("{:#?}", func.blocks)),
-                    );
+                if inst.unconditional_jmp() {
+                    continue 'blocks;
                 }
             }
         }
-
-        println!("unc {:?} {:?}", from_uncond, to_uncond);
-        println!("work {:?}", block.label);
-
-        if from_uncond.contains(cfg.entry.as_deref().unwrap_or("")) {
-            from_uncond.remove(cfg.entry.as_deref().unwrap_or(""));
-            println!("taken {:?}", cfg.entry.take());
-        } else {
-            cfg.entry = Some(block.label.replace(':', ""));
+        if let Some(next) = func.blocks.get(idx + 1) {
+            let next_label = next.label.replace(':', "");
+            cfg.add_edge(&b_label, &next_label);
         }
     }
 
