@@ -14,8 +14,10 @@ mod interp;
 
 // Each pass of our optimizing compiler
 //
-// Local Value Numbering
+/// Local Value Numbering
 mod loc_val_num;
+/// Build a single static assingment
+mod ssa;
 
 use iloc::{make_blks, parse_text, Instruction};
 
@@ -46,7 +48,7 @@ fn main() {
             let mut iloc = parse_text(&input).unwrap();
             let mut blocks = make_blks(iloc);
             for func in &mut blocks.functions {
-                for blk in &mut func.blk {
+                for blk in &mut func.blocks {
                     if let Some(insts) = loc_val_num::number_basic_block(blk) {
                         blk.instructions = insts;
                     }

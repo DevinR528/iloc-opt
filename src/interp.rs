@@ -131,9 +131,12 @@ impl Interpreter {
 
         // Skip these instructions
         match instrs[self.inst_idx].1 {
-            Instruction::Frame { .. } | Instruction::Label(..) => {
+            Instruction::Label(..) => {
                 *count += 1;
                 self.inst_idx += 1
+            }
+            Instruction::Frame { .. } => {
+                self.inst_idx += 1;
             }
             _ => {}
         }

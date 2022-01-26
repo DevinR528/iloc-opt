@@ -1420,6 +1420,10 @@ impl Instruction {
         }
     }
 
+    pub fn unconditional_jmp(&self) -> bool {
+        matches!(self, Instruction::ImmJump(..))
+    }
+
     pub fn as_new_move_instruction(&self, src: Reg, dst: Reg) -> Instruction {
         match self {
             Instruction::I2I { .. }
@@ -1843,19 +1847,19 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 add: Val::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
-            ["loadA0", a, b, "=>", dst] => instructions.push(Instruction::LoadAdd {
+            ["loadAO", a, b, "=>", dst] => instructions.push(Instruction::LoadAdd {
                 src: Reg::from_str(a)?,
                 add: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
             ["store", src, "=>", dst] => instructions
                 .push(Instruction::Store { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
-            ["storeAI", a, b, "=>", dst] => instructions.push(Instruction::StoreAddImm {
+            ["storeAI", a, "=>", b, dst] => instructions.push(Instruction::StoreAddImm {
                 src: Reg::from_str(a)?,
                 add: Val::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
-            ["storeA0", a, b, "=>", dst] => instructions.push(Instruction::StoreAdd {
+            ["storeAO", a, "=>", b, dst] => instructions.push(Instruction::StoreAdd {
                 src: Reg::from_str(a)?,
                 add: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
@@ -2110,7 +2114,7 @@ pub struct Function {
     inst: Instruction,
     pub stack_size: usize,
     pub params: Vec<Reg>,
-    pub blk: Vec<Block>,
+    pub blocks: Vec<Block>,
 }
 
 impl Function {
@@ -2147,7 +2151,13 @@ impl Function {
                 }
             }
         }
-        Iter { iter: &self.blk, inst: Some(&self.inst), blk_idx: 0, inst_idx: 0, first_blk: true }
+        Iter {
+            iter: &self.blocks,
+            inst: Some(&self.inst),
+            blk_idx: 0,
+            inst_idx: 0,
+            first_blk: true,
+        }
     }
 }
 
@@ -2184,7 +2194,7 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
                 stack_size: *size,
                 params: params.clone(),
                 inst: inst.clone(),
-                blk: vec![Block {
+                blocks: vec![Block {
                     label: label.clone(),
                     inst: Instruction::Label(label.clone()),
                     instructions: vec![],
@@ -2197,7 +2207,7 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
             fn_idx = functions.len().saturating_sub(1);
             blk_idx = 0;
         } else if let Instruction::Label(label) = inst {
-            functions[fn_idx].blk.push(Block {
+            functions[fn_idx].blocks.push(Block {
                 label: label.to_string(),
                 inst: inst.clone(),
                 instructions: vec![],
@@ -2205,14 +2215,14 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
 
             all_labels.insert(label.to_string());
 
-            blk_idx = functions[fn_idx].blk.len().saturating_sub(1);
+            blk_idx = functions[fn_idx].blocks.len().saturating_sub(1);
         } else {
             if let Some(label) = inst.uses_label() {
                 let mut s = label.to_string();
                 s.push(':');
                 used_labels.insert(s);
             }
-            functions[fn_idx].blk[blk_idx].instructions.push(inst.clone());
+            functions[fn_idx].blocks[blk_idx].instructions.push(inst.clone());
         }
     }
 
