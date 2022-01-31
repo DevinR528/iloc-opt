@@ -51,6 +51,11 @@ pub fn build_cfg(func: &Function) -> ControlFlowGraph {
 
         // TODO: only iter the branch instructions with labels
         for inst in &block.instructions {
+            // TODO: can we make note of this for optimization...(if there are trailing
+            // unreachable instructions)
+            if inst.is_return() {
+                continue 'blocks;
+            }
             if let Some(label) = inst.uses_label() {
                 cfg.add_edge(&b_label, label);
 
@@ -111,8 +116,6 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &[Block]) {
     let mut paths = vec![];
     traverse(".L_main", align, cfg, &mut paths);
 
-    println!("{:#?}", paths);
-
     // Build dominator tree
     let mut dom_map = HashMap::with_capacity(blocks.len());
     let blocks = blocks.iter().map(|b| b.label.replace(':', "")).collect::<Vec<_>>();
@@ -130,31 +133,88 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &[Block]) {
         }
 
         if is_reachable {
+            set.insert(label);
             dom_map.insert(label.to_string(), set);
         }
     }
 
     println!("dominator map:\n{:#?}", dom_map);
 
-    // Build dominance frontier map
-    let mut dom_frontier_map = HashMap::with_capacity(blocks.len());
+    // Build dominance predecessor map (AKA find join points)
+    let mut dom_preds_map = HashMap::with_capacity(blocks.len());
     for label in &blocks {
         let mut set = HashSet::new();
-        for (label_idx, path) in
-            paths.iter().filter_map(|p| Some((p.iter().position(|l| l == label)?, p)))
-        {
-            if let Some(idx) = label_idx.checked_sub(1) {
-                set.insert(&path[idx]);
+        // For each index we find the label (this detects loops back to a node,
+        // which is important when computing frontiers) we save the that index to check
+        // what the previous label is in that path
+        for (label_idxs, path) in paths.iter().map(|p| {
+            (
+                p.iter()
+                    .enumerate()
+                    .filter_map(|(i, l)| if l == label { Some(i) } else { None })
+                    .collect::<Vec<usize>>(),
+                p,
+            )
+        }) {
+            for idx in label_idxs {
+                if let Some(idx) = idx.checked_sub(1) {
+                    set.insert(&path[idx]);
+                }
             }
         }
 
         // If the set is empty there are no predecessors
         if !set.is_empty() {
-            dom_frontier_map.insert(label.to_string(), set);
+            dom_preds_map.insert(label.to_string(), set);
         }
     }
 
-    println!("frontier map:\n{:#?}", dom_frontier_map);
+    let mut idom_map = HashMap::with_capacity(blocks.len());
+    for label in &blocks {
+        let mut labels = VecDeque::from([label]);
+        while let Some(dfset) = labels.pop_front().and_then(|l| dom_preds_map.get(l)) {
+            if dfset.len() == 1 {
+                idom_map.insert(label.to_string(), (*dfset.iter().next().unwrap()).clone());
+                break;
+            }
+
+            for df in dfset {
+                labels.push_back(df);
+            }
+        }
+    }
+
+    println!("preds map:\n{:#?}", dom_preds_map);
+    println!("idom map:\n{:#?}", idom_map);
+
+    // Keith Cooper/Linda Torczon EaC pg. 499 SSA dominance frontier algorithm
+    let mut fdom_map: HashMap<String, HashSet<String>> = HashMap::with_capacity(blocks.len());
+    for label in &blocks {
+        // Node must be a join point (have multiple preds)
+        if let Some(preds) =
+            dom_preds_map.get(label).and_then(|p| if p.len() > 1 { Some(p) } else { None })
+        {
+            // For each previous node find a predecessor of `label` that also dominates `label
+            for p in preds {
+                let mut run = *p;
+                while Some(run) != idom_map.get(label) {
+                    // TODO: I think this works because a dom frontier will only ever be a single
+                    // node since no node with multiple predecessors can be in the `idom_map`.
+                    //
+                    // Second, for a join point j, each predecessor k of j must have j ∈ df(k),
+                    // since k cannot dominate j if j has ore than one predecessor. Finally, if j ∈
+                    // df(k) for some predecessor k, then j must also be in df(l) for each l ∈
+                    // Dom(k), unless l ∈ Dom( j)
+                    fdom_map.entry(run.to_string()).or_default().insert(label.to_string());
+                    if let Some(idom) = idom_map.get(run) {
+                        run = idom;
+                    }
+                }
+            }
+        }
+    }
+
+    println!("frontier map:\n{:#?}", fdom_map);
 }
 
 #[test]

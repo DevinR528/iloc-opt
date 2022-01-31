@@ -1421,7 +1421,11 @@ impl Instruction {
     }
 
     pub fn unconditional_jmp(&self) -> bool {
-        matches!(self, Instruction::ImmJump(..))
+        matches!(self, Instruction::ImmJump(..) | Instruction::Ret | Instruction::ImmRet(_))
+    }
+
+    pub fn is_return(&self) -> bool {
+        matches!(self, Instruction::Ret | Instruction::ImmRet(_))
     }
 
     pub fn as_new_move_instruction(&self, src: Reg, dst: Reg) -> Instruction {
