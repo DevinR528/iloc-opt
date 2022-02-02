@@ -484,6 +484,8 @@ pub enum Instruction {
 
     /// This is a signal to the output generator to skip this instruction.
     SKIP,
+    /// Phi nodes that are inserted when blocks are converted to pruned SSA.
+    Phi(Reg),
 }
 
 impl Hash for Instruction {
@@ -1110,8 +1112,62 @@ impl Instruction {
     //     SingleOperand(Inst()),
     //     TwoOperand(Inst { src, dst }),
     // }
-    /// Optional target register for 3 address instructions.
+    /// Optional target register for instructions with a destination.
     pub fn target_reg(&self) -> Option<&Reg> {
+        match self {
+            Instruction::I2I { dst, .. } => Some(dst),
+            Instruction::Add { dst, .. } => Some(dst),
+            Instruction::Sub { dst, .. } => Some(dst),
+            Instruction::Mult { dst, .. } => Some(dst),
+            Instruction::LShift { dst, .. } => Some(dst),
+            Instruction::RShift { dst, .. } => Some(dst),
+            Instruction::Mod { dst, .. } => Some(dst),
+            Instruction::And { dst, .. } => Some(dst),
+            Instruction::Or { dst, .. } => Some(dst),
+            Instruction::Not { dst, .. } => Some(dst),
+            Instruction::ImmAdd { dst, .. } => Some(dst),
+            Instruction::ImmSub { dst, .. } => Some(dst),
+            Instruction::ImmMult { dst, .. } => Some(dst),
+            Instruction::ImmLShift { dst, .. } => Some(dst),
+            Instruction::ImmRShift { dst, .. } => Some(dst),
+            Instruction::ImmLoad { dst, .. } => Some(dst),
+            Instruction::Load { dst, .. } => Some(dst),
+            Instruction::LoadAddImm { dst, .. } => Some(dst),
+            Instruction::LoadAdd { dst, .. } => Some(dst),
+            Instruction::Store { dst, .. } => Some(dst),
+            Instruction::StoreAddImm { dst, .. } => Some(dst),
+            Instruction::StoreAdd { dst, .. } => Some(dst),
+            Instruction::CmpLT { dst, .. } => Some(dst),
+            Instruction::CmpLE { dst, .. } => Some(dst),
+            Instruction::CmpGT { dst, .. } => Some(dst),
+            Instruction::CmpGE { dst, .. } => Some(dst),
+            Instruction::CmpEQ { dst, .. } => Some(dst),
+            Instruction::CmpNE { dst, .. } => Some(dst),
+            Instruction::Comp { dst, .. } => Some(dst),
+            Instruction::TestEQ { dst, .. } => Some(dst),
+            Instruction::TestNE { dst, .. } => Some(dst),
+            Instruction::TestGT { dst, .. } => Some(dst),
+            Instruction::TestGE { dst, .. } => Some(dst),
+            Instruction::TestLT { dst, .. } => Some(dst),
+            Instruction::TestLE { dst, .. } => Some(dst),
+            Instruction::F2I { dst, .. } => Some(dst),
+            Instruction::I2F { dst, .. } => Some(dst),
+            Instruction::F2F { dst, .. } => Some(dst),
+            Instruction::FAdd { dst, .. } => Some(dst),
+            Instruction::FSub { dst, .. } => Some(dst),
+            Instruction::FMult { dst, .. } => Some(dst),
+            Instruction::FDiv { dst, .. } => Some(dst),
+            Instruction::FComp { dst, .. } => Some(dst),
+            Instruction::FLoad { dst, .. } => Some(dst),
+            Instruction::FLoadAddImm { dst, .. } => Some(dst),
+            Instruction::FLoadAdd { dst, .. } => Some(dst),
+            Instruction::FStore { dst, .. } => Some(dst),
+            Instruction::FStoreAddImm { dst, .. } => Some(dst),
+            Instruction::FStoreAdd { dst, .. } => Some(dst),
+            _ => None,
+        }
+    }
+    pub fn target_reg_mut(&mut self) -> Option<&mut Reg> {
         match self {
             Instruction::I2I { dst, .. } => Some(dst),
             Instruction::Add { dst, .. } => Some(dst),
@@ -1289,6 +1345,62 @@ impl Instruction {
         }
     }
 
+    /// The return value is (left, right) `Option<&mut Reg>`.
+    pub fn operands_mut(&mut self) -> (Option<&mut Reg>, Option<&mut Reg>) {
+        match self {
+            Instruction::I2I { src, .. } => (Some(src), None),
+            Instruction::Add { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
+            Instruction::Sub { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
+            Instruction::Mult { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
+            Instruction::LShift { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
+            Instruction::RShift { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
+            Instruction::Mod { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
+            Instruction::And { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
+            Instruction::Or { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
+            Instruction::Not { src, .. } => (Some(src), None),
+            Instruction::ImmAdd { src, konst, .. } => (Some(src), None),
+            Instruction::ImmSub { src, konst, .. } => (Some(src), None),
+            Instruction::ImmMult { src, konst, .. } => (Some(src), None),
+            Instruction::ImmLShift { src, konst, .. } => (Some(src), None),
+            Instruction::ImmRShift { src, konst, .. } => (Some(src), None),
+            Instruction::Load { src, .. } => (Some(src), None),
+            Instruction::LoadAddImm { src, add, .. } => (Some(src), None),
+            Instruction::LoadAdd { src, add, .. } => (Some(src), Some(add)),
+            Instruction::Store { src, .. } => (Some(src), None),
+            Instruction::StoreAddImm { src, add, .. } => (Some(src), None),
+            Instruction::StoreAdd { src, add, .. } => (Some(src), Some(add)),
+            Instruction::IWrite(r) | Instruction::FWrite(r) => (Some(r), None),
+            Instruction::CmpLT { a, b, .. } => (Some(a), Some(b)),
+            Instruction::CmpLE { a, b, .. } => (Some(a), Some(b)),
+            Instruction::CmpGT { a, b, .. } => (Some(a), Some(b)),
+            Instruction::CmpGE { a, b, .. } => (Some(a), Some(b)),
+            Instruction::CmpEQ { a, b, .. } => (Some(a), Some(b)),
+            Instruction::CmpNE { a, b, .. } => (Some(a), Some(b)),
+            Instruction::Comp { a, b, .. } => (Some(a), Some(b)),
+            Instruction::TestEQ { test, .. } => (Some(test), None),
+            Instruction::TestNE { test, .. } => (Some(test), None),
+            Instruction::TestGT { test, .. } => (Some(test), None),
+            Instruction::TestGE { test, .. } => (Some(test), None),
+            Instruction::TestLT { test, .. } => (Some(test), None),
+            Instruction::TestLE { test, .. } => (Some(test), None),
+            Instruction::F2I { src, .. } => (Some(src), None),
+            Instruction::I2F { src, .. } => (Some(src), None),
+            Instruction::F2F { src, .. } => (Some(src), None),
+            Instruction::FAdd { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
+            Instruction::FSub { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
+            Instruction::FMult { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
+            Instruction::FDiv { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
+            Instruction::FComp { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
+            Instruction::FLoad { src, .. } => (Some(src), None),
+            Instruction::FLoadAddImm { src, add, .. } => (Some(src), None),
+            Instruction::FLoadAdd { src, add, .. } => (Some(src), Some(add)),
+            Instruction::FStore { src, .. } => (Some(src), None),
+            Instruction::FStoreAddImm { src, add, .. } => (Some(src), None),
+            Instruction::FStoreAdd { src, add, .. } => (Some(src), Some(add)),
+            _ => (None, None),
+        }
+    }
+
     pub const fn inst_name(&self) -> &'static str {
         match self {
             Instruction::I2I { .. } => "i2i",
@@ -1401,7 +1513,9 @@ impl Instruction {
             Instruction::String { .. } => "string",
             Instruction::Float { .. } => "float",
             Instruction::Label(_) => "label",
-            Instruction::SKIP => panic!("should never print a skip instruction"),
+            Instruction::SKIP | Instruction::Phi(..) => {
+                panic!("should never print a skip or phi instruction")
+            }
         }
     }
 
@@ -1757,6 +1871,10 @@ impl Instruction {
             self,
             Self::Add { .. } | Self::ImmAdd { .. } | Self::Mult { .. } | Self::ImmMult { .. }
         )
+    }
+
+    pub fn is_phi(&self) -> bool {
+        matches!(self, Instruction::Phi(..))
     }
 }
 

@@ -4,35 +4,30 @@
 .frame main, 8
 .L0: nop
     loadI 1 =>  %vr1
-    addI %vr1, 0 => %vr4
 .L1: nop
-    iwrite %vr4
-    loadI main_fp => %vr10
-    cbr %vr2 -> .L5
+    loadI 2 => %vr2
+    loadI 3 => %vr3
+    cbr_GT %vr2, %vr3 -> .L5
 .L2: nop
-    iwrite %vr4
-    loadI main_fp  => %vr10
-    cbr %vr2 -> .L3
+    loadI 5 => %vr4
+    loadI 3 => %vr3
+    loadI 10 => %vr5
 .L3: nop
-    iwrite %vr4
-    loadI main_fp => %vr10
-    cbr %vr2 -> .L1
+    add %vr2, %vr4 => %vr6
+    add %vr3, %vr5 => %vr7
+    addI %vr1, 1 => %vr1
+    cbr %vr1 -> .L1
 .L4: nop
-    iwrite %vr4
-    loadI main_fp => %vr10
     ret
 .L5: nop
-    iwrite %vr4
-    loadI main_fp => %vr10
-    cbr %vr23 -> .L8
+    loadI 2 => %vr2
+    loadI 3 => %vr5
+    cbr_GT %vr2, %vr5 -> .L8
 .L6: nop
-    iwrite %vr4
-    loadI main_fp => %vr10
+    loadI 4 => %vr5
 .L7: nop
-    iwrite %vr4
-    loadI main_fp => %vr10
+    loadI 4 => %vr4
     jumpI -> .L3
 .L8: nop
-    iwrite %vr4
-    loadI main_fp => %vr10
+    loadI 6 => %vr3
     jumpI -> .L7

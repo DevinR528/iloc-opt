@@ -1,9 +1,10 @@
 use std::{
     cell::Cell,
     collections::{HashMap, HashSet, VecDeque},
+    ops::Range,
 };
 
-use crate::iloc::{Block, Function, Instruction};
+use crate::iloc::{Block, Function, Instruction, Operand, Reg};
 
 #[derive(Clone, Copy, Debug)]
 pub enum TraversalState {
@@ -110,7 +111,7 @@ fn traverse(val: &str, align: usize, cfg: &ControlFlowGraph, paths: &mut Vec<Vec
     }
 }
 
-pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &[Block]) {
+pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut Vec<Block>) {
     let mut align = 0;
 
     let mut paths = vec![];
@@ -118,10 +119,10 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &[Block]) {
 
     // Build dominator tree
     let mut dom_map = HashMap::with_capacity(blocks.len());
-    let blocks = blocks.iter().map(|b| b.label.replace(':', "")).collect::<Vec<_>>();
-    for label in &blocks {
+    let blocks_label = blocks.iter().map(|b| b.label.replace(':', "")).collect::<Vec<_>>();
+    for label in &blocks_label {
         let mut is_reachable = false;
-        let mut set = blocks.iter().collect::<HashSet<_>>();
+        let mut set = blocks_label.iter().collect::<HashSet<_>>();
         for path in paths.iter().filter(|p| p.contains(label)) {
             is_reachable = true;
 
@@ -138,12 +139,14 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &[Block]) {
         }
     }
 
-    println!("dominator map:\n{:#?}", dom_map);
+    // println!("dominator map:\n{:#?}", dom_map);
 
     // Build dominance predecessor map (AKA find join points)
-    let mut dom_preds_map = HashMap::with_capacity(blocks.len());
-    for label in &blocks {
-        let mut set = HashSet::new();
+    let mut dom_succs_map = HashMap::with_capacity(blocks_label.len());
+    let mut dom_preds_map = HashMap::with_capacity(blocks_label.len());
+    for label in &blocks_label {
+        let mut succ = HashSet::new();
+        let mut pred = HashSet::new();
         // For each index we find the label (this detects loops back to a node,
         // which is important when computing frontiers) we save the that index to check
         // what the previous label is in that path
@@ -158,19 +161,25 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &[Block]) {
         }) {
             for idx in label_idxs {
                 if let Some(idx) = idx.checked_sub(1) {
-                    set.insert(&path[idx]);
+                    pred.insert(&path[idx]);
+                }
+                if let Some(l) = path.get(idx + 1) {
+                    succ.insert(l);
                 }
             }
         }
 
         // If the set is empty there are no predecessors
-        if !set.is_empty() {
-            dom_preds_map.insert(label.to_string(), set);
+        if !pred.is_empty() {
+            dom_preds_map.insert(label.to_string(), pred);
+        }
+        if !succ.is_empty() {
+            dom_succs_map.insert(label.to_string(), succ);
         }
     }
 
-    let mut idom_map = HashMap::with_capacity(blocks.len());
-    for label in &blocks {
+    let mut idom_map = HashMap::with_capacity(blocks_label.len());
+    for label in &blocks_label {
         let mut labels = VecDeque::from([label]);
         while let Some(dfset) = labels.pop_front().and_then(|l| dom_preds_map.get(l)) {
             if dfset.len() == 1 {
@@ -184,12 +193,12 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &[Block]) {
         }
     }
 
-    println!("preds map:\n{:#?}", dom_preds_map);
+    println!("succs map:\n{:#?}", dom_succs_map);
     println!("idom map:\n{:#?}", idom_map);
 
     // Keith Cooper/Linda Torczon EaC pg. 499 SSA dominance frontier algorithm
-    let mut fdom_map: HashMap<String, HashSet<String>> = HashMap::with_capacity(blocks.len());
-    for label in &blocks {
+    let mut fdom_map: HashMap<String, HashSet<String>> = HashMap::with_capacity(blocks_label.len());
+    for label in &blocks_label {
         // Node must be a join point (have multiple preds)
         if let Some(preds) =
             dom_preds_map.get(label).and_then(|p| if p.len() > 1 { Some(p) } else { None })
@@ -214,7 +223,136 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &[Block]) {
         }
     }
 
-    println!("frontier map:\n{:#?}", fdom_map);
+    // println!("frontier map:\n{:#?}", fdom_map);
+
+    insert_phi_functions(blocks, &fdom_map);
+
+    let mut meta = HashMap::new();
+    rename_values(blocks, 0, &mut meta, &dom_succs_map, &idom_map)
+}
+
+#[derive(Debug, Default)]
+pub struct RenameMeta {
+    counter: usize,
+    stack: VecDeque<Operand>,
+}
+
+fn new_name(reg: &mut Reg, meta: &mut HashMap<Operand, RenameMeta>) {
+    let m = meta.entry(Operand::Register(*reg)).or_default();
+    let i = m.counter;
+    m.stack.push_back(Operand::Register(Reg::Var(i)));
+    *reg = Reg::Var(i);
+}
+
+fn rewrite_name(reg: &mut Reg, meta: &mut HashMap<Operand, RenameMeta>) {
+    let m = meta.entry(Operand::Register(*reg)).or_default();
+    let new = m.stack.back().unwrap().copy_to_register();
+    *reg = new;
+}
+fn phi_range(insts: &[Instruction]) -> Range<usize> {
+    0..insts.iter().take_while(|i| i.is_phi()).count()
+}
+
+pub fn rename_values(
+    blks: &mut [Block],
+    blk_idx: usize,
+    meta: &mut HashMap<Operand, RenameMeta>,
+    succs: &HashMap<String, HashSet<&String>>,
+    dom_tree: &HashMap<String, String>,
+) {
+    let empty = HashSet::new();
+
+    let blk = &mut blks[blk_idx];
+    let rng = phi_range(&blk.instructions);
+
+    for phi in &mut blk.instructions[rng.clone()] {
+        if let Instruction::Phi(r) = phi {
+            new_name(r, meta);
+        }
+    }
+
+    for op in &mut blk.instructions[rng.end..] {
+        let (a, b) = op.operands_mut();
+        if let Some(a) = a {
+            rewrite_name(a, meta);
+        }
+        if let Some(b) = b {
+            rewrite_name(b, meta);
+        }
+
+        let dst = op.target_reg_mut();
+        if let Some(dst) = dst {
+            new_name(dst, meta);
+        }
+    }
+
+    for blk in succs.get(&blk.label.replace(':', "")).unwrap_or(&empty) {}
+    // for blk in dom_tree.get(&blk.label.replace(':', "")).unwrap_or(&empty) {}
+}
+
+pub fn insert_phi_functions(blocks: &mut Vec<Block>, dom_front: &HashMap<String, HashSet<String>>)
+// -> (HashMap<String, HashSet<Operand>>, HashMap<Operand, HashSet<String>>)
+{
+    let mut globals = vec![];
+    let mut blocks_map = HashMap::new();
+
+    for blk in &*blocks {
+        let mut varkil = HashSet::new();
+        for op in &blk.instructions {
+            let (a, b) = op.operands();
+            let dst = op.target_reg();
+            if let Some(a @ Operand::Register(..)) = a {
+                if !varkil.contains(&a) {
+                    globals.push(a);
+                }
+            }
+            if let Some(b @ Operand::Register(..)) = b {
+                if !varkil.contains(&b) {
+                    globals.push(b);
+                }
+            }
+            if let Some(dst) = dst {
+                varkil.insert(Operand::Register(*dst));
+                blocks_map
+                    .entry(Operand::Register(*dst))
+                    .or_insert_with(HashSet::new)
+                    .insert(blk.label.replace(':', ""));
+            }
+        }
+    }
+
+    // println!("globals: {:#?}", globals);
+    // println!("reg -> block: {:#?}", blocks_map);
+
+    let empty = HashSet::new();
+    let mut phis: HashMap<_, HashSet<_>> = HashMap::new();
+    for x in &globals {
+        let mut worklist = blocks_map.get(x).unwrap_or(&empty).iter().collect::<VecDeque<_>>();
+        while let Some(b) = worklist.pop_front() {
+            for d in dom_front.get(b).unwrap_or(&empty) {
+                if !phis.get(d).map_or(false, |set| set.contains(x)) {
+                    // insert phi func
+                    phis.entry(d.to_string()).or_default().insert(x.clone());
+                    worklist.push_back(d);
+                }
+            }
+        }
+    }
+
+    // println!("phis: {:#?}", phis);
+
+    // let mut otherway = HashMap::with_capacity(phis.len());
+    // for (label, set) in &phis {
+    //     for reg in set {
+    //         otherway.entry(reg.clone()).or_insert_with(HashSet::new).insert(label.to_string());
+    //     }
+    // }
+    for (label, set) in &phis {
+        let instructions = blocks.iter_mut().find(|b| b.label.replace(':', "") == *label).unwrap();
+        for reg in set {
+            instructions.instructions.insert(0, Instruction::Phi(reg.copy_to_register()));
+        }
+    }
 }
 
 #[test]
@@ -247,7 +385,7 @@ fn ssa_cfg_while() {
 
     emit_cfg_viz(&cfg, "while_array.dot");
 
-    dominator_tree(&cfg, &blocks.functions[0].blocks);
+    dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }
 
 #[test]
@@ -265,7 +403,9 @@ fn ssa_cfg_dumb() {
     println!("{:?}", cfg);
     emit_cfg_viz(&cfg, "dumb.dot");
 
-    dominator_tree(&cfg, &blocks.functions[0].blocks);
+    for func in &mut blocks.functions {
+        dominator_tree(&cfg, &mut func.blocks);
+    }
 }
 
 #[test]
@@ -283,7 +423,7 @@ fn ssa_cfg_trap() {
     println!("{:?}", cfg);
     emit_cfg_viz(&cfg, "trap.dot");
 
-    dominator_tree(&cfg, &blocks.functions[0].blocks);
+    dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }
 
 fn emit_cfg_viz(cfg: &ControlFlowGraph, file: &str) {
