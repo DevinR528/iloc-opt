@@ -111,6 +111,7 @@ fn traverse(val: &str, align: usize, cfg: &ControlFlowGraph, paths: &mut Vec<Vec
     }
 }
 
+// TODO: Cleanup (see todo's above loops and such)
 pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut Vec<Block>) {
     let mut align = 0;
 
@@ -141,6 +142,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut Vec<Block>) {
 
     // println!("dominator map:\n{:#?}", dom_map);
 
+    // TODO: only one or none used figure it out!!!
     // Build dominance predecessor map (AKA find join points)
     let mut dom_succs_map = HashMap::with_capacity(blocks_label.len());
     let mut dom_preds_map = HashMap::with_capacity(blocks_label.len());
@@ -186,15 +188,18 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut Vec<Block>) {
                 idom_map.insert(label.to_string(), (*dfset.iter().next().unwrap()).clone());
                 break;
             }
-
             for df in dfset {
                 labels.push_back(df);
             }
         }
     }
 
-    println!("succs map:\n{:#?}", dom_succs_map);
-    println!("idom map:\n{:#?}", idom_map);
+    let mut idom_succs_map = HashMap::with_capacity(blocks_label.len());
+    for (to, from) in &idom_map {
+        idom_succs_map.entry(from.to_string()).or_insert_with(HashSet::new).insert(to);
+    }
+    // println!("succs map:\n{:#?}", dom_succs_map);
+    // println!("idom map:\n{:#?}", idom_succs_map);
 
     // Keith Cooper/Linda Torczon EaC pg. 499 SSA dominance frontier algorithm
     let mut fdom_map: HashMap<String, HashSet<String>> = HashMap::with_capacity(blocks_label.len());
@@ -225,10 +230,13 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut Vec<Block>) {
 
     // println!("frontier map:\n{:#?}", fdom_map);
 
-    insert_phi_functions(blocks, &fdom_map);
+    println!("{:#?}\n", blocks);
 
+    insert_phi_functions(blocks, &fdom_map);
     let mut meta = HashMap::new();
-    rename_values(blocks, 0, &mut meta, &dom_succs_map, &idom_map)
+    rename_values(blocks, 0, &mut meta, &dom_succs_map, &idom_succs_map);
+
+    println!("{:#?}", blocks);
 }
 
 #[derive(Debug, Default)]
@@ -240,13 +248,16 @@ pub struct RenameMeta {
 fn new_name(reg: &mut Reg, meta: &mut HashMap<Operand, RenameMeta>) {
     let m = meta.entry(Operand::Register(*reg)).or_default();
     let i = m.counter;
+
+    m.counter += 1;
+
     m.stack.push_back(Operand::Register(Reg::Var(i)));
     *reg = Reg::Var(i);
 }
 
 fn rewrite_name(reg: &mut Reg, meta: &mut HashMap<Operand, RenameMeta>) {
     let m = meta.entry(Operand::Register(*reg)).or_default();
-    let new = m.stack.back().unwrap().copy_to_register();
+    let new = m.stack.back().unwrap_or_else(|| panic!("{:?} {:?}", m, reg)).copy_to_register();
     *reg = new;
 }
 fn phi_range(insts: &[Instruction]) -> Range<usize> {
@@ -258,20 +269,17 @@ pub fn rename_values(
     blk_idx: usize,
     meta: &mut HashMap<Operand, RenameMeta>,
     succs: &HashMap<String, HashSet<&String>>,
-    dom_tree: &HashMap<String, String>,
+    dom_succs: &HashMap<String, HashSet<&String>>,
 ) {
-    let empty = HashSet::new();
+    let rng = phi_range(&blks[blk_idx].instructions);
 
-    let blk = &mut blks[blk_idx];
-    let rng = phi_range(&blk.instructions);
-
-    for phi in &mut blk.instructions[rng.clone()] {
-        if let Instruction::Phi(r) = phi {
+    for phi in &mut blks[blk_idx].instructions[rng.clone()] {
+        if let Instruction::Phi(r, ..) = phi {
             new_name(r, meta);
         }
     }
 
-    for op in &mut blk.instructions[rng.end..] {
+    for op in &mut blks[blk_idx].instructions[rng.end..] {
         let (a, b) = op.operands_mut();
         if let Some(a) = a {
             rewrite_name(a, meta);
@@ -286,8 +294,38 @@ pub fn rename_values(
         }
     }
 
-    for blk in succs.get(&blk.label.replace(':', "")).unwrap_or(&empty) {}
-    // for blk in dom_tree.get(&blk.label.replace(':', "")).unwrap_or(&empty) {}
+    let empty = HashSet::new();
+    let blk_label = blks[blk_idx].label.replace(':', "");
+
+    for blk in succs.get(&blk_label).unwrap_or(&empty) {
+        // TODO: make block -> index map
+        let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
+        let rng = phi_range(&blks[idx].instructions);
+
+        for phi in &mut blks[idx].instructions[rng] {
+            if let Instruction::Phi(r, set) = phi {
+                set.insert(blk.to_string());
+            }
+        }
+    }
+
+    // This is what drives the rename algorithm
+    for blk in dom_succs.get(&blk_label).unwrap_or(&empty) {
+        // TODO: make block -> index map
+        let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
+        rename_values(blks, idx, meta, succs, dom_succs);
+    }
+
+    for op in &blks[blk_idx].instructions {
+        let dst = if let Some(d) = op.target_reg() {
+            d
+        } else {
+            continue;
+        };
+        if let Some(stack) = meta.get_mut(&Operand::Register(*dst)) {
+            stack.stack.pop_back();
+        }
+    }
 }
 
 pub fn insert_phi_functions(blocks: &mut Vec<Block>, dom_front: &HashMap<String, HashSet<String>>)
@@ -328,11 +366,16 @@ pub fn insert_phi_functions(blocks: &mut Vec<Block>, dom_front: &HashMap<String,
     let mut phis: HashMap<_, HashSet<_>> = HashMap::new();
     for x in &globals {
         let mut worklist = blocks_map.get(x).unwrap_or(&empty).iter().collect::<VecDeque<_>>();
-        while let Some(b) = worklist.pop_front() {
-            for d in dom_front.get(b).unwrap_or(&empty) {
+        // For every block that this variable is live in
+        while let Some(blk) = worklist.pop_front() {
+            // The dominance frontier (join point) is the block that needs
+            // the 𝛟 added to it
+            for d in dom_front.get(blk).unwrap_or(&empty) {
+                // If we have done this before skip it
                 if !phis.get(d).map_or(false, |set| set.contains(x)) {
                     // insert phi func
                     phis.entry(d.to_string()).or_default().insert(x.clone());
+                    // This needs to be propagated back up the graph
                     worklist.push_back(d);
                 }
             }
@@ -350,7 +393,9 @@ pub fn insert_phi_functions(blocks: &mut Vec<Block>, dom_front: &HashMap<String,
     for (label, set) in &phis {
         let instructions = blocks.iter_mut().find(|b| b.label.replace(':', "") == *label).unwrap();
         for reg in set {
-            instructions.instructions.insert(0, Instruction::Phi(reg.copy_to_register()));
+            instructions
+                .instructions
+                .insert(0, Instruction::Phi(reg.copy_to_register(), HashSet::default()));
         }
     }
 }
@@ -400,7 +445,7 @@ fn ssa_cfg_dumb() {
 
     let cfg = build_cfg(&blocks.functions[0]);
 
-    println!("{:?}", cfg);
+    // println!("{:?}", cfg);
     emit_cfg_viz(&cfg, "dumb.dot");
 
     for func in &mut blocks.functions {

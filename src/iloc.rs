@@ -484,8 +484,9 @@ pub enum Instruction {
 
     /// This is a signal to the output generator to skip this instruction.
     SKIP,
+    // TODO: use something that doesn't make this variant huge
     /// Phi nodes that are inserted when blocks are converted to pruned SSA.
-    Phi(Reg),
+    Phi(Reg, HashSet<String>),
 }
 
 impl Hash for Instruction {
