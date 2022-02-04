@@ -486,7 +486,7 @@ pub enum Instruction {
     SKIP,
     // TODO: use something that doesn't make this variant huge
     /// Phi nodes that are inserted when blocks are converted to pruned SSA.
-    Phi(Reg, HashSet<String>),
+    Phi(Reg, HashSet<Reg>),
 }
 
 impl Hash for Instruction {

@@ -198,8 +198,8 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut Vec<Block>) {
     for (to, from) in &idom_map {
         idom_succs_map.entry(from.to_string()).or_insert_with(HashSet::new).insert(to);
     }
-    // println!("succs map:\n{:#?}", dom_succs_map);
-    // println!("idom map:\n{:#?}", idom_succs_map);
+    println!("succs map:\n{:#?}", idom_map);
+    println!("idom map:\n{:#?}", idom_succs_map);
 
     // Keith Cooper/Linda Torczon EaC pg. 499 SSA dominance frontier algorithm
     let mut fdom_map: HashMap<String, HashSet<String>> = HashMap::with_capacity(blocks_label.len());
@@ -228,21 +228,33 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut Vec<Block>) {
         }
     }
 
-    // println!("frontier map:\n{:#?}", fdom_map);
+    println!("frontier map:\n{:#?}", fdom_map);
 
-    println!("{:#?}\n", blocks);
+    // println!("{:#?}\n", blocks);
 
     insert_phi_functions(blocks, &fdom_map);
     let mut meta = HashMap::new();
     rename_values(blocks, 0, &mut meta, &dom_succs_map, &idom_succs_map);
 
-    println!("{:#?}", blocks);
+    // println!("{:#?}", blocks);
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct RenameMeta {
     counter: usize,
     stack: VecDeque<Operand>,
+}
+
+impl Default for RenameMeta {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RenameMeta {
+    pub fn new() -> Self {
+        Self { counter: 0, stack: VecDeque::from([Operand::Register(Reg::Var(0))]) }
+    }
 }
 
 fn new_name(reg: &mut Reg, meta: &mut HashMap<Operand, RenameMeta>) {
@@ -304,7 +316,14 @@ pub fn rename_values(
 
         for phi in &mut blks[idx].instructions[rng] {
             if let Instruction::Phi(r, set) = phi {
-                set.insert(blk.to_string());
+                let fill = meta
+                    .get(&Operand::Register(*r))
+                    .unwrap()
+                    .stack
+                    .back()
+                    .unwrap()
+                    .copy_to_register();
+                set.insert(fill);
             }
         }
     }
