@@ -1,6 +1,6 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 
-use crate::iloc::{Block, Function, IlocProgram, Instruction, Loc, Operand, Reg, Val};
+use crate::iloc::{Block, Instruction, Loc, Operand, Reg, Val};
 
 pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
     let mut transformed_block = false;
@@ -159,7 +159,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                 expr_map.insert((a, b, new_instr[idx].inst_name()), *dst);
             }
             // Jumps, rets, push, and I/O instructions
-            (Some(src), None, None) => {}
+            (Some(_src), None, None) => {}
             // No operands or target
             (None, None, None) => {}
             // All other combinations are invalid
@@ -202,7 +202,7 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
         }
 
         match (l, r, dst) {
-            (Some(left), Some(right), Some(dst)) => {
+            (Some(left), Some(right), Some(_dst)) => {
                 if matches!(left, Operand::Register(..)) {
                     used_reg.insert(left, 1);
                 }
@@ -210,7 +210,7 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
                     used_reg.insert(right, 1);
                 }
             }
-            (Some(src), None, Some(dst)) => {
+            (Some(src), None, Some(_dst)) => {
                 if matches!(src, Operand::Register(..)) {
                     used_reg.insert(src, 1);
                 }

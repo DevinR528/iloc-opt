@@ -1,10 +1,11 @@
 use std::{
     cmp::Ordering,
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashSet},
     fmt,
     hash::{self, Hash},
     mem::discriminant,
     str::FromStr,
+    usize,
 };
 
 #[derive(Clone, Debug)]
@@ -215,8 +216,8 @@ impl fmt::Display for Val {
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Reg {
-    Expr(usize),
     Var(usize),
+    Phi(usize, usize),
 }
 
 impl FromStr for Reg {
@@ -237,7 +238,31 @@ impl FromStr for Reg {
 impl fmt::Display for Reg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Reg::Expr(num) | Reg::Var(num) => write!(f, "%vr{}", num),
+            Reg::Var(num) | Reg::Phi(num, ..) => write!(f, "%vr{}", num),
+        }
+    }
+}
+
+impl Reg {
+    pub fn as_phi(&mut self, phi_id: usize) {
+        if let Reg::Var(curr) = self {
+            *self = Reg::Phi(*curr, phi_id);
+        }
+    }
+
+    pub fn as_register(&self) -> Reg {
+        if let Reg::Phi(reg, ..) = self {
+            Reg::Var(*reg)
+        } else {
+            *self
+        }
+    }
+
+    pub fn as_usize(&self) -> usize {
+        if let Reg::Var(curr) = self {
+            *curr
+        } else {
+            unreachable!("not just Reg::Var in hurr")
         }
     }
 }
@@ -259,7 +284,7 @@ impl fmt::Display for Loc {
 }
 
 #[rustfmt::skip]
-#[allow(clippy::upper_case_acronyms)]
+#[allow(clippy::upper_case_acronyms, unused)]
 #[derive(Clone, Debug)]
 pub enum Instruction {
     // Integer arithmetic operations
@@ -419,57 +444,6 @@ pub enum Instruction {
     StLShift,
     /// `strshift`
     StRShift,
-    /// `stcomp`
-    StComp,
-    /// `stand`
-    StAnd,
-    /// `stor`
-    StOr,
-    /// `stnot`
-    StNot,
-    /// `stload`
-    StLoad,
-    /// `ststore`
-    StStore,
-    /// `sttesteq`
-    StTestEQ,
-    /// `sttestne`
-    StTestNE,
-    /// `sttestgt`
-    StTestGT,
-    /// `sttestge`
-    StTestGE,
-    /// `sttestlt`
-    StTestLT,
-    /// `sttestle`
-    StTestLE,
-    /// `stfadd`
-    StFAdd,
-    /// `stfsub`
-    StFSub,
-    /// `stfmul`
-    StFMul,
-    /// `stfdiv`
-    StFDiv,
-    /// `stfcomp`
-    StFComp,
-    /// `stfload`
-    StFLoad,
-    /// `stfstore`
-    StFStore,
-    /// `stfread`
-    StFRead,
-    /// `stiread`
-    StIRead,
-    /// `stfwrite`
-    StFWrite,
-    /// `stiwrite`
-    StIWrite,
-    /// `stswrite`
-    StSwrite,
-    /// `stjump`
-    StJump,
-
     // Pseudo operations
     Data,
     Text,
@@ -486,7 +460,7 @@ pub enum Instruction {
     SKIP,
     // TODO: use something that doesn't make this variant huge
     /// Phi nodes that are inserted when blocks are converted to pruned SSA.
-    Phi(Reg, HashSet<Reg>),
+    Phi(Reg, BTreeSet<usize>, Option<usize>),
 }
 
 impl Hash for Instruction {
@@ -1083,7 +1057,6 @@ impl fmt::Display for Instruction {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Operand {
     Register(Reg),
-    Location(Loc),
     Value(Val),
 }
 
@@ -1165,6 +1138,8 @@ impl Instruction {
             Instruction::FStore { dst, .. } => Some(dst),
             Instruction::FStoreAddImm { dst, .. } => Some(dst),
             Instruction::FStoreAdd { dst, .. } => Some(dst),
+            // The phi instruction needs to return the original register
+            Instruction::Phi(dst, ..) => Some(dst),
             _ => None,
         }
     }
@@ -1359,16 +1334,16 @@ impl Instruction {
             Instruction::And { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
             Instruction::Or { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
             Instruction::Not { src, .. } => (Some(src), None),
-            Instruction::ImmAdd { src, konst, .. } => (Some(src), None),
-            Instruction::ImmSub { src, konst, .. } => (Some(src), None),
-            Instruction::ImmMult { src, konst, .. } => (Some(src), None),
-            Instruction::ImmLShift { src, konst, .. } => (Some(src), None),
-            Instruction::ImmRShift { src, konst, .. } => (Some(src), None),
+            Instruction::ImmAdd { src, konst: _, .. } => (Some(src), None),
+            Instruction::ImmSub { src, konst: _, .. } => (Some(src), None),
+            Instruction::ImmMult { src, konst: _, .. } => (Some(src), None),
+            Instruction::ImmLShift { src, konst: _, .. } => (Some(src), None),
+            Instruction::ImmRShift { src, konst: _, .. } => (Some(src), None),
             Instruction::Load { src, .. } => (Some(src), None),
-            Instruction::LoadAddImm { src, add, .. } => (Some(src), None),
+            Instruction::LoadAddImm { src, add: _, .. } => (Some(src), None),
             Instruction::LoadAdd { src, add, .. } => (Some(src), Some(add)),
             Instruction::Store { src, .. } => (Some(src), None),
-            Instruction::StoreAddImm { src, add, .. } => (Some(src), None),
+            Instruction::StoreAddImm { src, add: _, .. } => (Some(src), None),
             Instruction::StoreAdd { src, add, .. } => (Some(src), Some(add)),
             Instruction::IWrite(r) | Instruction::FWrite(r) => (Some(r), None),
             Instruction::CmpLT { a, b, .. } => (Some(a), Some(b)),
@@ -1393,10 +1368,10 @@ impl Instruction {
             Instruction::FDiv { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
             Instruction::FComp { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
             Instruction::FLoad { src, .. } => (Some(src), None),
-            Instruction::FLoadAddImm { src, add, .. } => (Some(src), None),
+            Instruction::FLoadAddImm { src, add: _, .. } => (Some(src), None),
             Instruction::FLoadAdd { src, add, .. } => (Some(src), Some(add)),
             Instruction::FStore { src, .. } => (Some(src), None),
-            Instruction::FStoreAddImm { src, add, .. } => (Some(src), None),
+            Instruction::FStoreAddImm { src, add: _, .. } => (Some(src), None),
             Instruction::FStoreAdd { src, add, .. } => (Some(src), Some(add)),
             _ => (None, None),
         }
@@ -1482,31 +1457,6 @@ impl Instruction {
             Instruction::StDiv => "stdiv",
             Instruction::StLShift => "stlshift",
             Instruction::StRShift => "strshift",
-            Instruction::StComp => "stcomp",
-            Instruction::StAnd => "stand",
-            Instruction::StOr => "stor",
-            Instruction::StNot => "stnot",
-            Instruction::StLoad => "stload",
-            Instruction::StStore => "ststore",
-            Instruction::StTestEQ => "sttesteq",
-            Instruction::StTestNE => "sttestne",
-            Instruction::StTestGT => "sttestgt",
-            Instruction::StTestGE => "sttestge",
-            Instruction::StTestLT => "sttestlt",
-            Instruction::StTestLE => "sttestle",
-            Instruction::StFAdd => "stfadd",
-            Instruction::StFSub => "stfsub",
-            Instruction::StFMul => "stfmul",
-            Instruction::StFDiv => "stfdiv",
-            Instruction::StFComp => "stfcomp",
-            Instruction::StFLoad => "stfload",
-            Instruction::StFStore => "stfstore",
-            Instruction::StFRead => "stfread",
-            Instruction::StIRead => "stiread",
-            Instruction::StFWrite => "stfwrite",
-            Instruction::StIWrite => "stiwrite",
-            Instruction::StSwrite => "stswrite",
-            Instruction::StJump => "stjump",
             Instruction::Data => "data",
             Instruction::Text => "text",
             Instruction::Frame { .. } => "frame",
@@ -1577,7 +1527,6 @@ impl Instruction {
             | Instruction::FLoadAdd { .. } => Instruction::F2F { src, dst },
             Self::Store { .. }
             | Self::StoreAddImm { .. }
-            | Self::StoreAddImm { .. }
             | Self::FStore { .. }
             | Self::FStoreAddImm { .. }
             | Self::FStoreAdd { .. }
@@ -1622,12 +1571,12 @@ impl Instruction {
                 }
             },
             (Val::Float(_), Val::Float(_)) => match self {
-                Instruction::F2F { dst, .. }
-                | Instruction::FAdd { dst, .. }
-                | Instruction::FSub { dst, .. }
-                | Instruction::FMult { dst, .. }
-                | Instruction::FDiv { dst, .. }
-                | Instruction::FComp { dst, .. } => todo!(),
+                Instruction::F2F { dst: _, .. }
+                | Instruction::FAdd { dst: _, .. }
+                | Instruction::FSub { dst: _, .. }
+                | Instruction::FMult { dst: _, .. }
+                | Instruction::FDiv { dst: _, .. }
+                | Instruction::FComp { dst: _, .. } => todo!(),
                 _ => {
                     return None;
                 }
@@ -1726,7 +1675,7 @@ impl Instruction {
                     return None;
                 }
             },
-            Instruction::Or { dst, .. } => match self.operands() {
+            Instruction::Or { dst: _, .. } => match self.operands() {
                 (Some(Operand::Register(a)), Some(Operand::Register(b))) if a == b => a,
                 _ => {
                     return None;
@@ -1752,7 +1701,7 @@ impl Instruction {
                 src_b
             }
             Instruction::And { .. } => todo!(),
-            Instruction::Or { dst, .. } => todo!(),
+            Instruction::Or { dst: _, .. } => todo!(),
             _ => {
                 return None;
             }
@@ -1779,7 +1728,7 @@ impl Instruction {
             Instruction::LShift { src_a, .. } if val.is_zero() => src_a,
             Instruction::RShift { src_a, .. } if val.is_zero() => src_a,
             Instruction::And { .. } => todo!(),
-            Instruction::Or { dst, .. } => todo!(),
+            Instruction::Or { dst: _, .. } => todo!(),
             _ => {
                 return None;
             }
@@ -1803,12 +1752,12 @@ impl Instruction {
             Instruction::RShift { src_a, dst, .. } => {
                 Instruction::ImmRShift { src: *src_a, konst: a.clone(), dst: *dst }
             }
-            Instruction::F2F { dst, .. }
-            | Instruction::FAdd { dst, .. }
-            | Instruction::FSub { dst, .. }
-            | Instruction::FMult { dst, .. }
-            | Instruction::FDiv { dst, .. }
-            | Instruction::FComp { dst, .. } => todo!(),
+            Instruction::F2F { dst: _, .. }
+            | Instruction::FAdd { dst: _, .. }
+            | Instruction::FSub { dst: _, .. }
+            | Instruction::FMult { dst: _, .. }
+            | Instruction::FDiv { dst: _, .. }
+            | Instruction::FComp { dst: _, .. } => todo!(),
             _ => {
                 return None;
             }
@@ -1832,12 +1781,12 @@ impl Instruction {
             Instruction::RShift { src_a, dst, .. } => {
                 Instruction::ImmRShift { src: *src_a, konst: a.clone(), dst: *dst }
             }
-            Instruction::F2F { dst, .. }
-            | Instruction::FAdd { dst, .. }
-            | Instruction::FSub { dst, .. }
-            | Instruction::FMult { dst, .. }
-            | Instruction::FDiv { dst, .. }
-            | Instruction::FComp { dst, .. } => todo!(),
+            Instruction::F2F { dst: _, .. }
+            | Instruction::FAdd { dst: _, .. }
+            | Instruction::FSub { dst: _, .. }
+            | Instruction::FMult { dst: _, .. }
+            | Instruction::FDiv { dst: _, .. }
+            | Instruction::FComp { dst: _, .. } => todo!(),
             _ => {
                 return None;
             }
@@ -1849,7 +1798,6 @@ impl Instruction {
         matches!(
             self,
             Self::Store { .. }
-                | Self::StoreAddImm { .. }
                 | Self::StoreAddImm { .. }
                 | Self::FStore { .. }
                 | Self::FStoreAddImm { .. }
@@ -2080,18 +2028,6 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 add: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
-            ["store", a, "=>", dst] => instructions
-                .push(Instruction::Store { src: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
-            ["storeAI", a, b, "=>", dst] => instructions.push(Instruction::StoreAddImm {
-                src: Reg::from_str(a)?,
-                add: Val::from_str(b)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["storeAO", a, b, "=>", dst] => instructions.push(Instruction::StoreAdd {
-                src: Reg::from_str(a)?,
-                add: Reg::from_str(b)?,
-                dst: Reg::from_str(dst)?,
-            }),
 
             // I/O operations
             ["fread", target] => instructions.push(Instruction::FRead(Reg::from_str(target)?)),
@@ -2247,7 +2183,6 @@ impl Function {
             inst: Option<&'a Instruction>,
             blk_idx: usize,
             inst_idx: usize,
-            first_blk: bool,
         }
         impl<'a> Iterator for Iter<'a> {
             type Item = &'a Instruction;
@@ -2274,13 +2209,7 @@ impl Function {
                 }
             }
         }
-        Iter {
-            iter: &self.blocks,
-            inst: Some(&self.inst),
-            blk_idx: 0,
-            inst_idx: 0,
-            first_blk: true,
-        }
+        Iter { iter: &self.blocks, inst: Some(&self.inst), blk_idx: 0, inst_idx: 0 }
     }
 }
 

@@ -2,6 +2,10 @@
     .global main_fp, 4, 4
     .text
 .frame main, 8
+    loadI 0 =>  %vr2
+    loadI 0 =>  %vr4
+    loadI 0 =>  %vr3
+    loadI 0 =>  %vr5
 .L0: nop
     loadI 1 =>  %vr1
 .L1: nop

@@ -1,10 +1,8 @@
 #![feature(stdio_locked)]
-#![allow(unused)]
 
 use std::{
-    collections::HashSet,
     env, fs,
-    io::{Read, Write},
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -19,7 +17,9 @@ mod loc_val_num;
 /// Build a single static assingment
 mod ssa;
 
-use iloc::{make_blks, parse_text, Instruction};
+use iloc::{make_blks, parse_text};
+#[allow(unused)]
+use ssa::{build_cfg, dominator_tree, rename_values, ssa_optimization};
 
 const JAVA_ILOC_BENCH: &[&str] =
     &["-jar", "/home/devinr/Downloads/my-cs6810-ssa-opt-project/iloc.jar", "-s"];
@@ -45,7 +45,7 @@ fn main() {
         let buf = if optimize {
             println!("performing optimization on: {}", file);
             let input = fs::read_to_string(&file).unwrap();
-            let mut iloc = parse_text(&input).unwrap();
+            let iloc = parse_text(&input).unwrap();
             let mut blocks = make_blks(iloc);
             for func in &mut blocks.functions {
                 for blk in &mut func.blocks {
@@ -76,6 +76,7 @@ fn main() {
     }
 }
 
+#[allow(unused)]
 fn java_run(path: &Path) {
     let cmd = std::process::Command::new("java")
         .args(JAVA_ILOC_BENCH.iter().chain(path.to_str().iter()).collect::<Vec<_>>())

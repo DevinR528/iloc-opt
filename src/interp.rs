@@ -1,10 +1,10 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     io::BufRead,
     str::FromStr,
 };
 
-use crate::iloc::{parse_text, Block, Function, IlocProgram, Instruction, Loc, Reg, Val};
+use crate::iloc::{IlocProgram, Instruction, Loc, Reg, Val};
 
 const STACK_SIZE: usize = 4096 * 4 * 4;
 
@@ -52,7 +52,7 @@ impl Interpreter {
             .preamble
             .into_iter()
             .flat_map(|inst| match inst {
-                Instruction::Global { name, size, align } => {
+                Instruction::Global { name, size: _, align: _ } => {
                     stack.push(Val::Null);
                     Some((Loc(name), Val::Integer((stack.len() - 1) as isize)))
                 }
@@ -384,7 +384,7 @@ impl Interpreter {
                 self.inst_idx = *jmp_idx;
                 return Some(true);
             }
-            Instruction::Jump(reg) => todo!(),
+            Instruction::Jump(_reg) => todo!(),
             Instruction::Call { name, args } => {
                 self.ret_idx.push(self.inst_idx + 1);
                 self.inst_idx = 0;
@@ -443,7 +443,7 @@ impl Interpreter {
 
                 return Some(true);
             }
-            Instruction::ImmRCall { reg, args, ret } => todo!(),
+            Instruction::ImmRCall { reg: _, args: _, ret: _ } => todo!(),
             Instruction::Ret => {
                 self.inst_idx = self.ret_idx.pop()?;
                 let CallStackEntry { ret_val, .. } = self.call_stack.pop()?;
@@ -644,11 +644,11 @@ impl Interpreter {
 
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
-            Instruction::FLoadAddImm { src, add, dst } => todo!(),
-            Instruction::FLoadAdd { src, add, dst } => todo!(),
-            Instruction::FStore { src, dst } => todo!(),
-            Instruction::FStoreAddImm { src, add, dst } => todo!(),
-            Instruction::FStoreAdd { src, add, dst } => todo!(),
+            Instruction::FLoadAddImm { src: _, add: _, dst: _ } => todo!(),
+            Instruction::FLoadAdd { src: _, add: _, dst: _ } => todo!(),
+            Instruction::FStore { src: _, dst: _ } => todo!(),
+            Instruction::FStoreAddImm { src: _, add: _, dst: _ } => todo!(),
+            Instruction::FStoreAdd { src: _, add: _, dst: _ } => todo!(),
             Instruction::FRead(r) => {
                 let mut buf = String::new();
                 let mut handle = std::io::stdin_locked();
