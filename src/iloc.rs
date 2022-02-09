@@ -1048,7 +1048,7 @@ impl fmt::Display for Instruction {
                 }
             }
             Instruction::Text | Instruction::Data => writeln!(f, "    .{}", self.inst_name()),
-            Instruction::Skip(s) => writeln!(f, "    # {}", s),
+            Instruction::Skip(s) => writeln!(f, "    # {}", s.trim()),
             Instruction::Phi(..) => Ok(()),
             _ => writeln!(f, "    {}", self.inst_name()),
         }
@@ -2242,7 +2242,7 @@ impl IlocProgram {
     }
 }
 
-pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
+pub fn make_blks(iloc: Vec<Instruction>, basic_blocks: bool) -> IlocProgram {
     let fn_start =
         iloc.iter().position(|inst| matches!(inst, Instruction::Frame { .. })).unwrap_or_default();
     let (preamble, rest) = iloc.split_at(fn_start);
@@ -2283,7 +2283,8 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
             all_labels.insert(label.to_string());
 
             blk_idx = functions[fn_idx].blocks.len().saturating_sub(1);
-        } else if inst.is_cnd_jump()
+        } else if basic_blocks
+            && inst.is_cnd_jump()
             && !matches!(rest[idx + 1], Instruction::Label(..) | Instruction::Frame { .. })
         {
             functions[fn_idx].blocks[blk_idx].instructions.push(inst.clone());
@@ -2293,7 +2294,6 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
                 all_labels.len(),
                 functions[fn_idx].blocks[blk_idx].label.replace('.', "")
             );
-            println!("LLLOLOLLOL {}", label);
 
             functions[fn_idx].blocks.push(Block {
                 label: label.to_string(),

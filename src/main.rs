@@ -46,7 +46,7 @@ fn main() {
             println!("performing optimization on: {}", file);
             let input = fs::read_to_string(&file).unwrap();
             let iloc = parse_text(&input).unwrap();
-            let mut blocks = make_blks(iloc);
+            let mut blocks = make_blks(iloc, false);
             for func in &mut blocks.functions {
                 for blk in &mut func.blocks {
                     if let Some(insts) = loc_val_num::number_basic_block(blk) {
@@ -55,6 +55,7 @@ fn main() {
                 }
             }
 
+            let mut blocks = make_blks(blocks.instruction_iter().cloned().collect(), true);
             ssa::ssa_optimization(&mut blocks);
 
             let mut buf = String::new();
@@ -75,7 +76,7 @@ fn main() {
             fs::read_to_string(&file).unwrap()
         };
 
-        interp::run_interpreter(make_blks(parse_text(&buf).unwrap()), debug).unwrap();
+        interp::run_interpreter(make_blks(parse_text(&buf).unwrap(), false), debug).unwrap();
     }
 }
 

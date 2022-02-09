@@ -8,9 +8,9 @@ use crate::iloc::{Block, Function, IlocProgram, Instruction, Operand, Reg};
 
 fn print_blocks(blocks: &[Block]) {
     for blk in &*blocks {
-        if !matches!(blk.label.as_str(), ".L0:" | ".L1:" | ".L3:" | ".L7:") {
-            continue;
-        }
+        // if !matches!(blk.label.as_str(), ".L0:" | ".L1:" | ".L3:" | ".L7:") {
+        //     continue;
+        // }
 
         println!("{} [", blk.label);
         for inst in &blk.instructions {
@@ -434,7 +434,10 @@ pub fn dom_val_num(
         let rng = phi_range(&blks[idx].instructions);
 
         for phi in &mut blks[idx].instructions[rng] {
+            let p = phi.clone();
             if let Instruction::Phi(r, set, ..) = phi {
+                println!("{:?} {}", p, blk);
+
                 let fill = meta
                     .get(&Operand::Register(*r))
                     .unwrap()
@@ -493,7 +496,7 @@ fn ssa_cfg() {
 
     let input = fs::read_to_string("input/check.il").unwrap();
     let iloc = parse_text(&input).unwrap();
-    let blocks = make_blks(iloc);
+    let blocks = make_blks(iloc, true);
 
     let cfg = build_cfg(&blocks.functions[0]);
     println!("{:?}", cfg);
@@ -508,7 +511,7 @@ fn ssa_cfg_while() {
 
     let input = fs::read_to_string("input/while_array.il").unwrap();
     let iloc = parse_text(&input).unwrap();
-    let mut blocks = make_blks(iloc);
+    let mut blocks = make_blks(iloc, true);
 
     let cfg = build_cfg(&blocks.functions[0]);
     // println!("{:?}", cfg);
@@ -526,7 +529,7 @@ fn ssa_cfg_dumb() {
 
     let input = fs::read_to_string("input/dumb.il").unwrap();
     let iloc = parse_text(&input).unwrap();
-    let mut blocks = make_blks(iloc);
+    let mut blocks = make_blks(iloc, true);
     ssa_optimization(&mut blocks);
 }
 
@@ -538,7 +541,7 @@ fn ssa_cfg_trap() {
 
     let input = fs::read_to_string("input/trap.il").unwrap();
     let iloc = parse_text(&input).unwrap();
-    let mut blocks = make_blks(iloc);
+    let mut blocks = make_blks(iloc, true);
 
     let cfg = build_cfg(&blocks.functions[0]);
 
