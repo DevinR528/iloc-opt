@@ -351,7 +351,243 @@ fn phi_range(insts: &[Instruction]) -> Range<usize> {
     0..insts.iter().take_while(|i| i.is_phi()).count()
 }
 
-pub fn rename_values(
+pub type ScopedExprTree = VecDeque<HashMap<(Operand, Option<Operand>, String), Reg>>;
+
+pub fn dom_val_num(
+    blks: &mut [Block],
+    blk_idx: usize,
+    meta: &mut HashMap<Operand, RenameMeta>,
+    dtree: &DominatorTree,
+    expr_tree: &mut ScopedExprTree,
+) {
+    let rng = phi_range(&blks[blk_idx].instructions);
+    for phi in &mut blks[blk_idx].instructions[rng.clone()] {
+        if let Instruction::Phi(r, _, dst) = phi {
+            new_name(r, dst, meta);
+        }
+    }
+
+    expr_tree.push_back(HashMap::new());
+    for phi in &mut blks[blk_idx].instructions[rng.clone()] {
+        if let Instruction::Phi(r, _set, dst) = phi {
+            let expr =
+                (Operand::Register(Reg::Phi(r.as_usize(), dst.unwrap())), None, "phi".to_string());
+            if let Some(val_num) = expr_tree.iter().find_map(|map| map.get(&expr)).copied() {
+                println!("phi found {:?} {:?}", expr, val_num);
+
+                expr_tree.back_mut().unwrap().insert(expr, val_num);
+                *phi = Instruction::Skip(format!("{}", phi));
+            } else {
+                println!("phis {:?}", expr);
+
+                expr_tree.back_mut().unwrap().insert(expr, Reg::Phi(r.as_usize(), dst.unwrap()));
+            }
+        }
+    }
+
+    for op in &mut blks[blk_idx].instructions[rng.end..] {
+        let (mut a, mut b) = op.operands_mut();
+        if let Some((a, meta)) = a.as_mut().and_then(|reg| {
+            let cpy = **reg;
+            Some((reg, meta.get(&Operand::Register(cpy))?))
+        }) {
+            rewrite_name(a, meta);
+        }
+        if let Some((b, meta)) = b.as_mut().and_then(|reg| {
+            let cpy = **reg;
+            Some((reg, meta.get(&Operand::Register(cpy))?))
+        }) {
+            rewrite_name(b, meta);
+        }
+
+        if let Some(dst) = op.target_reg_mut() {
+            if let Some(meta) = meta.get_mut(&Operand::Register(*dst)) {
+                // This is `new_name` minus the set addition
+                let i = meta.counter;
+                meta.counter += 1;
+                meta.stack.push_back(i);
+                dst.as_phi(i);
+            }
+        }
+
+        if let (Some(a), b) = op.operands() {
+            let expr = (a, b, op.inst_name().to_string());
+
+            // TODO: if expr can be simplified to expr' the replace assign with `x <- expr'`
+
+            if let Some(val_num) = expr_tree.iter().find_map(|map| map.get(&expr)).copied() {
+                // VN[x] = val_num??
+                // Or does that happen by not calling new_name or the meta.get_mut thing below??
+                *op = Instruction::Skip(format!("{}", op));
+            } else if let Some(dst) = op.target_reg() {
+                expr_tree.back_mut().unwrap().insert(expr, *dst);
+            }
+        }
+    }
+
+    let empty = BTreeSet::new();
+    let blk_label = blks[blk_idx].label.replace(':', "");
+
+    for blk in dtree.cfg_succs_map.get(&blk_label).unwrap_or(&empty) {
+        // TODO: make block -> index map
+        let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
+        let rng = phi_range(&blks[idx].instructions);
+
+        for phi in &mut blks[idx].instructions[rng] {
+            if let Instruction::Phi(r, set, ..) = phi {
+                let fill = meta
+                    .get(&Operand::Register(*r))
+                    .unwrap()
+                    .stack
+                    .back()
+                    .unwrap_or_else(|| panic!("{:?} {:?}", meta, r));
+                set.insert(*fill);
+            }
+        }
+    }
+
+    // This is what drives the rename algorithm
+    for blk in dtree.dom_succs_map.get(&blk_label).unwrap_or(&empty) {
+        // TODO: make block -> index map
+        let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
+        dom_val_num(blks, idx, meta, dtree, expr_tree);
+    }
+
+    for op in &blks[blk_idx].instructions {
+        if let Some(dst) = op.target_reg().map(Reg::as_register) {
+            if let Some(meta) = meta.get_mut(&Operand::Register(dst)) {
+                meta.stack.pop_back();
+            }
+        }
+    }
+    expr_tree.pop_back();
+}
+
+pub fn ssa_optimization(iloc: &mut IlocProgram) {
+    for func in &mut iloc.functions {
+        let cfg = build_cfg(func);
+        let dtree = dominator_tree(&cfg, &mut func.blocks);
+
+        let phis = insert_phi_functions(&mut func.blocks, &dtree.fdom_map);
+        print_blocks(&func.blocks);
+
+        let mut meta = HashMap::new();
+        for (_blk_label, register_set) in phis {
+            meta.extend(register_set.iter().map(|op| (op.clone(), RenameMeta::default())));
+        }
+        let mut stack = VecDeque::new();
+        dom_val_num(&mut func.blocks, 0, &mut meta, &dtree, &mut stack);
+
+        // rename_values(&mut func.blocks, 0, &mut meta, &dtree.cfg_succs_map,
+        // &dtree.dom_succs_map);
+
+        print_blocks(&func.blocks);
+    }
+}
+
+#[test]
+fn ssa_cfg() {
+    use std::fs;
+
+    use crate::iloc::{make_blks, parse_text};
+
+    let input = fs::read_to_string("input/check.il").unwrap();
+    let iloc = parse_text(&input).unwrap();
+    let blocks = make_blks(iloc);
+
+    let cfg = build_cfg(&blocks.functions[0]);
+    println!("{:?}", cfg);
+    emit_cfg_viz(&cfg, "check.dot");
+}
+
+#[test]
+fn ssa_cfg_while() {
+    use std::fs;
+
+    use crate::iloc::{make_blks, parse_text};
+
+    let input = fs::read_to_string("input/while_array.il").unwrap();
+    let iloc = parse_text(&input).unwrap();
+    let mut blocks = make_blks(iloc);
+
+    let cfg = build_cfg(&blocks.functions[0]);
+    // println!("{:?}", cfg);
+
+    emit_cfg_viz(&cfg, "while_array.dot");
+
+    dominator_tree(&cfg, &mut blocks.functions[0].blocks);
+}
+
+#[test]
+fn ssa_cfg_dumb() {
+    use std::fs;
+
+    use crate::iloc::{make_blks, parse_text};
+
+    let input = fs::read_to_string("input/dumb.il").unwrap();
+    let iloc = parse_text(&input).unwrap();
+    let mut blocks = make_blks(iloc);
+    ssa_optimization(&mut blocks);
+}
+
+#[test]
+fn ssa_cfg_trap() {
+    use std::fs;
+
+    use crate::iloc::{make_blks, parse_text};
+
+    let input = fs::read_to_string("input/trap.il").unwrap();
+    let iloc = parse_text(&input).unwrap();
+    let mut blocks = make_blks(iloc);
+
+    let cfg = build_cfg(&blocks.functions[0]);
+
+    println!("{:?}", cfg);
+    emit_cfg_viz(&cfg, "trap.dot");
+
+    dominator_tree(&cfg, &mut blocks.functions[0].blocks);
+}
+
+#[allow(unused)]
+fn emit_cfg_viz(cfg: &ControlFlowGraph, file: &str) {
+    use std::{
+        collections::hash_map::DefaultHasher,
+        fmt::Write,
+        fs,
+        hash::{Hash, Hasher},
+    };
+
+    fn str_id(s: &str) -> u64 {
+        let mut state = DefaultHasher::default();
+        s.hash(&mut state);
+        state.finish()
+    }
+
+    let mut seen = HashSet::new();
+    let mut buf = String::new();
+    writeln!(buf, "digraph cfg {{").unwrap();
+    for (n, map) in &cfg.paths {
+        writeln!(buf, "{} [ label = \"{}\", shape = square]", str_id(n), n).unwrap();
+        seen.insert(n.clone());
+        for BlockNode { label: e, .. } in map.values() {
+            if !seen.contains(e) {
+                writeln!(buf, "{} [ label = \"{}\", shape = square]", str_id(e), e).unwrap();
+                seen.insert(e.clone());
+            }
+            writeln!(buf, "{} -> {}", str_id(n), str_id(e)).unwrap();
+        }
+    }
+    writeln!(buf, "}}").unwrap();
+    fs::write(file, buf).unwrap();
+}
+
+//
+//
+// SCRATCH IGNORE
+//
+//
+
+fn rename_values(
     blks: &mut [Block],
     blk_idx: usize,
     meta: &mut HashMap<Operand, RenameMeta>,
@@ -431,234 +667,4 @@ pub fn rename_values(
             }
         }
     }
-}
-
-pub type ScopedExprTree = VecDeque<HashMap<(Operand, Option<Operand>, String), Reg>>;
-
-pub fn dom_val_num(
-    blks: &mut [Block],
-    blk_idx: usize,
-    meta: &mut HashMap<Operand, RenameMeta>,
-    dtree: &DominatorTree,
-    expr_tree: &mut ScopedExprTree,
-) {
-    let rng = phi_range(&blks[blk_idx].instructions);
-    for phi in &mut blks[blk_idx].instructions[rng.clone()] {
-        if let Instruction::Phi(r, _, dst) = phi {
-            new_name(r, dst, meta);
-        }
-    }
-
-    expr_tree.push_back(HashMap::new());
-    for phi in &mut blks[blk_idx].instructions[rng.clone()] {
-        if let Instruction::Phi(r, set, dst) = phi {
-            let expr = (Operand::Register(*r), None, format!("phi{:?}{:?}", set, dst));
-            if let Some(val_num) = expr_tree.iter().find_map(|map| map.get(&expr)).copied() {
-                println!("phi found {:?} {:?}", expr, val_num);
-
-                expr_tree.back_mut().unwrap().insert(expr, val_num);
-                *phi = Instruction::SKIP;
-            } else {
-                println!("phis {:?}", expr);
-
-                expr_tree.back_mut().unwrap().insert(expr, Reg::Phi(r.as_usize(), dst.unwrap()));
-            }
-        }
-    }
-
-    for op in &mut blks[blk_idx].instructions[rng.end..] {
-        let (mut a, mut b) = op.operands_mut();
-        if let Some((a, meta)) = a.as_mut().and_then(|reg| {
-            let cpy = **reg;
-            Some((reg, meta.get(&Operand::Register(cpy))?))
-        }) {
-            rewrite_name(a, meta);
-        }
-        if let Some((b, meta)) = b.as_mut().and_then(|reg| {
-            let cpy = **reg;
-            Some((reg, meta.get(&Operand::Register(cpy))?))
-        }) {
-            rewrite_name(b, meta);
-        }
-
-        if let Some(dst) = op.target_reg_mut() {
-            if let Some(meta) = meta.get_mut(&Operand::Register(*dst)) {
-                // This is `new_name` minus the set addition
-                let i = meta.counter;
-                meta.counter += 1;
-                meta.stack.push_back(i);
-                dst.as_phi(i);
-            }
-        }
-
-        if let (Some(a), b) = op.operands() {
-            let expr = (a, b, op.inst_name().to_string());
-
-            // TODO: if expr can be simplified to expr' the replace assign with `x <- expr'`
-
-            if let Some(val_num) = expr_tree.iter().find_map(|map| map.get(&expr)).copied() {
-                println!("instructions: {:?} {:?}", expr, val_num);
-
-                // VN[x] = val_num??
-                // Or does that happen by not calling new_name or the meta.get_mut thing below??
-                *op = Instruction::SKIP;
-            } else if let Some(dst) = op.target_reg() {
-                expr_tree.back_mut().unwrap().insert(expr, *dst);
-            }
-        }
-    }
-
-    let empty = BTreeSet::new();
-    let blk_label = blks[blk_idx].label.replace(':', "");
-
-    for blk in dtree.cfg_succs_map.get(&blk_label).unwrap_or(&empty) {
-        // TODO: make block -> index map
-        let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
-        let rng = phi_range(&blks[idx].instructions);
-
-        for phi in &mut blks[idx].instructions[rng] {
-            if let Instruction::Phi(r, set, ..) = phi {
-                let fill = meta
-                    .get(&Operand::Register(*r))
-                    .unwrap()
-                    .stack
-                    .back()
-                    .unwrap_or_else(|| panic!("{:?} {:?}", meta, r));
-                set.insert(*fill);
-            }
-        }
-    }
-
-    // This is what drives the rename algorithm
-    for blk in dtree.dom_succs_map.get(&blk_label).unwrap_or(&empty) {
-        // TODO: make block -> index map
-        let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
-        dom_val_num(blks, idx, meta, dtree, expr_tree);
-    }
-
-    for op in &blks[blk_idx].instructions {
-        if let Some(dst) = op.target_reg().map(Reg::as_register) {
-            if let Some(meta) = meta.get_mut(&Operand::Register(dst)) {
-                meta.stack.pop_back();
-            }
-        }
-    }
-    expr_tree.pop_back();
-}
-
-pub fn ssa_optimization(mut iloc: IlocProgram) {
-    for func in &mut iloc.functions {
-        let cfg = build_cfg(func);
-        let dtree = dominator_tree(&cfg, &mut func.blocks);
-
-        let phis = insert_phi_functions(&mut func.blocks, &dtree.fdom_map);
-
-        let mut meta = HashMap::new();
-        for (_blk_label, register_set) in phis {
-            meta.extend(register_set.iter().map(|op| (op.clone(), RenameMeta::default())));
-        }
-        let mut stack = VecDeque::new();
-        dom_val_num(&mut func.blocks, 0, &mut meta, &dtree, &mut stack);
-
-        // rename_values(&mut func.blocks, 0, &mut meta, &dtree.cfg_succs_map,
-        // &dtree.dom_succs_map);
-
-        print_blocks(&func.blocks);
-    }
-}
-
-#[test]
-fn ssa_cfg() {
-    use std::fs;
-
-    use crate::iloc::{make_blks, parse_text};
-
-    let input = fs::read_to_string("input/check.il").unwrap();
-    let iloc = parse_text(&input).unwrap();
-    let blocks = make_blks(iloc);
-
-    let cfg = build_cfg(&blocks.functions[0]);
-    println!("{:?}", cfg);
-    emit_cfg_viz(&cfg, "check.dot");
-}
-
-#[test]
-fn ssa_cfg_while() {
-    use std::fs;
-
-    use crate::iloc::{make_blks, parse_text};
-
-    let input = fs::read_to_string("input/while_array.il").unwrap();
-    let iloc = parse_text(&input).unwrap();
-    let mut blocks = make_blks(iloc);
-
-    let cfg = build_cfg(&blocks.functions[0]);
-    // println!("{:?}", cfg);
-
-    emit_cfg_viz(&cfg, "while_array.dot");
-
-    dominator_tree(&cfg, &mut blocks.functions[0].blocks);
-}
-
-#[test]
-fn ssa_cfg_dumb() {
-    use std::fs;
-
-    use crate::iloc::{make_blks, parse_text};
-
-    let input = fs::read_to_string("input/dumb.il").unwrap();
-    let iloc = parse_text(&input).unwrap();
-    let blocks = make_blks(iloc);
-    ssa_optimization(blocks);
-}
-
-#[test]
-fn ssa_cfg_trap() {
-    use std::fs;
-
-    use crate::iloc::{make_blks, parse_text};
-
-    let input = fs::read_to_string("input/trap.il").unwrap();
-    let iloc = parse_text(&input).unwrap();
-    let mut blocks = make_blks(iloc);
-
-    let cfg = build_cfg(&blocks.functions[0]);
-
-    println!("{:?}", cfg);
-    emit_cfg_viz(&cfg, "trap.dot");
-
-    dominator_tree(&cfg, &mut blocks.functions[0].blocks);
-}
-
-#[allow(unused)]
-fn emit_cfg_viz(cfg: &ControlFlowGraph, file: &str) {
-    use std::{
-        collections::hash_map::DefaultHasher,
-        fmt::Write,
-        fs,
-        hash::{Hash, Hasher},
-    };
-
-    fn str_id(s: &str) -> u64 {
-        let mut state = DefaultHasher::default();
-        s.hash(&mut state);
-        state.finish()
-    }
-
-    let mut seen = HashSet::new();
-    let mut buf = String::new();
-    writeln!(buf, "digraph cfg {{").unwrap();
-    for (n, map) in &cfg.paths {
-        writeln!(buf, "{} [ label = \"{}\", shape = square]", str_id(n), n).unwrap();
-        seen.insert(n.clone());
-        for BlockNode { label: e, .. } in map.values() {
-            if !seen.contains(e) {
-                writeln!(buf, "{} [ label = \"{}\", shape = square]", str_id(e), e).unwrap();
-                seen.insert(e.clone());
-            }
-            writeln!(buf, "{} -> {}", str_id(n), str_id(e)).unwrap();
-        }
-    }
-    writeln!(buf, "}}").unwrap();
-    fs::write(file, buf).unwrap();
 }

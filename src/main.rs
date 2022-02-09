@@ -19,7 +19,7 @@ mod ssa;
 
 use iloc::{make_blks, parse_text};
 #[allow(unused)]
-use ssa::{build_cfg, dominator_tree, rename_values, ssa_optimization};
+use ssa::{build_cfg, dominator_tree, ssa_optimization};
 
 const JAVA_ILOC_BENCH: &[&str] =
     &["-jar", "/home/devinr/Downloads/my-cs6810-ssa-opt-project/iloc.jar", "-s"];
@@ -54,6 +54,9 @@ fn main() {
                     }
                 }
             }
+
+            ssa::ssa_optimization(&mut blocks);
+
             let mut buf = String::new();
             for inst in blocks.instruction_iter() {
                 // println!("{:?}", inst);
@@ -62,7 +65,7 @@ fn main() {
 
             let mut path = PathBuf::from(&file);
             let file = path.file_stem().unwrap().to_string_lossy().to_string();
-            path.set_file_name(&format!("{}.lvn.il", file));
+            path.set_file_name(&format!("{}.lvn.dbre.il", file));
             let mut fd =
                 fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
             fd.write_all(buf.as_bytes()).unwrap();
