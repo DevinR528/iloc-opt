@@ -457,7 +457,7 @@ pub enum Instruction {
     Label(String),
 
     /// This is a signal to the output generator to skip this instruction.
-    SKIP,
+    Skip(String),
     // TODO: use something that doesn't make this variant huge
     /// Phi nodes that are inserted when blocks are converted to pruned SSA.
     Phi(Reg, BTreeSet<usize>, Option<usize>),
@@ -1048,7 +1048,8 @@ impl fmt::Display for Instruction {
                 }
             }
             Instruction::Text | Instruction::Data => writeln!(f, "    .{}", self.inst_name()),
-            Instruction::SKIP => Ok(()),
+            Instruction::Skip(s) => writeln!(f, "    # {}", s),
+            Instruction::Phi(..) => Ok(()),
             _ => writeln!(f, "    {}", self.inst_name()),
         }
     }
@@ -1464,7 +1465,7 @@ impl Instruction {
             Instruction::String { .. } => "string",
             Instruction::Float { .. } => "float",
             Instruction::Label(_) => "label",
-            Instruction::SKIP | Instruction::Phi(..) => {
+            Instruction::Skip(..) | Instruction::Phi(..) => {
                 panic!("should never print a skip or phi instruction")
             }
         }
@@ -1483,6 +1484,20 @@ impl Instruction {
             Instruction::CbrNE { loc, .. } => Some(&loc.0),
             _ => None,
         }
+    }
+
+    pub fn is_cnd_jump(&self) -> bool {
+        matches!(
+            self,
+            Instruction::CbrT { .. }
+                | Instruction::CbrF { .. }
+                | Instruction::CbrLT { .. }
+                | Instruction::CbrLE { .. }
+                | Instruction::CbrGT { .. }
+                | Instruction::CbrGE { .. }
+                | Instruction::CbrEQ { .. }
+                | Instruction::CbrNE { .. }
+        )
     }
 
     pub fn unconditional_jmp(&self) -> bool {
@@ -2238,7 +2253,7 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
     let mut functions = vec![];
     let mut fn_idx = 0;
     let mut blk_idx = 0;
-    for inst in rest {
+    for (idx, inst) in rest.iter().enumerate() {
         if let Instruction::Frame { name, size, params } = inst {
             let label = format!(".L_{}:", name);
             functions.push(Function {
@@ -2267,6 +2282,25 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
 
             all_labels.insert(label.to_string());
 
+            blk_idx = functions[fn_idx].blocks.len().saturating_sub(1);
+        } else if inst.is_cnd_jump()
+            && !matches!(rest[idx + 1], Instruction::Label(..) | Instruction::Frame { .. })
+        {
+            functions[fn_idx].blocks[blk_idx].instructions.push(inst.clone());
+
+            let label = format!(
+                ".{}_{}",
+                all_labels.len(),
+                functions[fn_idx].blocks[blk_idx].label.replace('.', "")
+            );
+            println!("LLLOLOLLOL {}", label);
+
+            functions[fn_idx].blocks.push(Block {
+                label: label.to_string(),
+                inst: Instruction::Label(label.to_string()),
+                instructions: vec![],
+            });
+            all_labels.insert(label.to_string());
             blk_idx = functions[fn_idx].blocks.len().saturating_sub(1);
         } else {
             if let Some(label) = inst.uses_label() {

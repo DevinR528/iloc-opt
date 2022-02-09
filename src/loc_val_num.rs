@@ -1,4 +1,4 @@
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 use crate::iloc::{Block, Instruction, Loc, Operand, Reg, Val};
 
@@ -103,7 +103,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                         // if we have what is effectively a move to self
                         // `x = x;`
                         if value == dst {
-                            new_instr[idx] = Instruction::SKIP;
+                            new_instr[idx] = Instruction::Skip(format!("{}", new_instr[idx]));
                             continue;
                         }
 
@@ -146,7 +146,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                         // if we have what is effectively a move to self
                         // `x = x;`
                         if value == dst {
-                            new_instr[idx] = Instruction::SKIP;
+                            new_instr[idx] = Instruction::Skip(format!("{}", new_instr[idx]));
                             continue;
                         }
 
@@ -175,14 +175,16 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
             || new_instr[idx].is_load_imm()
         {
             transformed_block |= true;
-            new_instr[idx] = Instruction::SKIP;
+            new_instr[idx] = Instruction::Skip(format!("{}", new_instr[idx]));
         }
     }
 
     transformed_block |= compress_conditional_branches(&mut new_instr);
 
     // if then -> Some(instructions)
-    transformed_block.then(|| new_instr)
+    transformed_block.then(|| {
+        new_instr.into_iter().filter(|inst| !matches!(inst, Instruction::Skip(..))).collect()
+    })
 }
 
 pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
@@ -323,8 +325,8 @@ pub fn compress_conditional_branches(instructions: &mut [Instruction]) -> bool {
                 }
             };
 
-            instructions[idx] = Instruction::SKIP;
-            instructions[idx + 1] = Instruction::SKIP;
+            instructions[idx] = Instruction::Skip(format!("{}", instructions[idx]));
+            instructions[idx + 1] = Instruction::Skip(format!("{}", instructions[idx + 1]));
             instructions[idx + 2] = new_instruction;
             modified = true;
         }
