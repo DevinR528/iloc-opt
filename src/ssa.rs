@@ -117,6 +117,7 @@ fn traverse(val: &str, align: usize, cfg: &ControlFlowGraph, paths: &mut Vec<Vec
     }
 }
 
+#[derive(Debug)]
 pub struct DominatorTree {
     fdom_map: HashMap<String, HashSet<String>>,
     dom_succs_map: HashMap<String, BTreeSet<String>>,
@@ -373,13 +374,9 @@ pub fn dom_val_num(
             let expr =
                 (Operand::Register(Reg::Phi(r.as_usize(), dst.unwrap())), None, "phi".to_string());
             if let Some(val_num) = expr_tree.iter().find_map(|map| map.get(&expr)).copied() {
-                println!("phi found {:?} {:?}", expr, val_num);
-
                 expr_tree.back_mut().unwrap().insert(expr, val_num);
-                *phi = Instruction::Skip(format!("{}", phi));
+                *phi = Instruction::Skip(format!("[ssa this will never happen] {}", phi));
             } else {
-                println!("phis {:?}", expr);
-
                 expr_tree.back_mut().unwrap().insert(expr, Reg::Phi(r.as_usize(), dst.unwrap()));
             }
         }
@@ -400,6 +397,7 @@ pub fn dom_val_num(
             rewrite_name(b, meta);
         }
 
+        // This needs to run before we bail out for calls/stores, stuff like that...
         if let Some(dst) = op.target_reg_mut() {
             if let Some(meta) = meta.get_mut(&Operand::Register(*dst)) {
                 // This is `new_name` minus the set addition
@@ -416,11 +414,29 @@ pub fn dom_val_num(
             // TODO: if expr can be simplified to expr' the replace assign with `x <- expr'`
 
             if let Some(val_num) = expr_tree.iter().find_map(|map| map.get(&expr)).copied() {
-                // VN[x] = val_num??
-                // Or does that happen by not calling new_name or the meta.get_mut thing below??
-                *op = Instruction::Skip(format!("{}", op));
-            } else if let Some(dst) = op.target_reg() {
+                // expr_tree.back_mut().unwrap().insert(expr, val_num);
+                if !op.is_tmp_expr() {
+                    continue;
+                }
+                if op.is_call_instruction() {
+                    expr_tree.back_mut().unwrap().clear();
+                    continue;
+                }
+                *op = Instruction::Skip(format!("[ssa] {:?} {:?}", op, val_num));
+                // let dst = *op.target_reg().unwrap();
+                // if dst == val_num {
+                //     *op = Instruction::Skip(format!("[ssa] {:?} {:?}", op, val_num));
+                // } else {
+                //     op.as_new_move_instruction(val_num, dst);
+                // }
+            } else if let Some(dst) = op.target_reg_mut() {
                 expr_tree.back_mut().unwrap().insert(expr, *dst);
+                // We value number the assignments
+                let m = meta.entry(Operand::Register(*dst)).or_default();
+                let i = m.counter;
+                m.counter += 1;
+                m.stack.push_back(i);
+                dst.as_phi(i);
             }
         }
     }
@@ -434,16 +450,14 @@ pub fn dom_val_num(
         let rng = phi_range(&blks[idx].instructions);
 
         for phi in &mut blks[idx].instructions[rng] {
-            let p = phi.clone();
             if let Instruction::Phi(r, set, ..) = phi {
-                println!("{:?} {}", p, blk);
-
-                let fill = meta
-                    .get(&Operand::Register(*r))
-                    .unwrap()
-                    .stack
-                    .back()
-                    .unwrap_or_else(|| panic!("{:?} {:?}", meta, r));
+                let m = meta.get_mut(&Operand::Register(*r)).unwrap();
+                if m.stack.is_empty() {
+                    let i = m.counter;
+                    m.counter += 1;
+                    m.stack.push_back(i);
+                }
+                let fill = m.stack.back().unwrap();
                 set.insert(*fill);
             }
         }
@@ -469,10 +483,12 @@ pub fn dom_val_num(
 pub fn ssa_optimization(iloc: &mut IlocProgram) {
     for func in &mut iloc.functions {
         let cfg = build_cfg(func);
+
         let dtree = dominator_tree(&cfg, &mut func.blocks);
 
+        println!("{:#?}", dtree);
+
         let phis = insert_phi_functions(&mut func.blocks, &dtree.fdom_map);
-        print_blocks(&func.blocks);
 
         let mut meta = HashMap::new();
         for (_blk_label, register_set) in phis {
@@ -480,9 +496,6 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         }
         let mut stack = VecDeque::new();
         dom_val_num(&mut func.blocks, 0, &mut meta, &dtree, &mut stack);
-
-        // rename_values(&mut func.blocks, 0, &mut meta, &dtree.cfg_succs_map,
-        // &dtree.dom_succs_map);
 
         print_blocks(&func.blocks);
     }

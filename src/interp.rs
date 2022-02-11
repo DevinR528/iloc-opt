@@ -132,6 +132,7 @@ impl Interpreter {
         // Skip these instructions
         match instrs[self.inst_idx].1 {
             Instruction::Label(..) => {
+                // WHAT THE FUCK labels count as instructions...
                 *count += 1;
                 self.inst_idx += 1
             }

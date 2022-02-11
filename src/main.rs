@@ -46,6 +46,7 @@ fn main() {
             println!("performing optimization on: {}", file);
             let input = fs::read_to_string(&file).unwrap();
             let iloc = parse_text(&input).unwrap();
+
             let mut blocks = make_blks(iloc, false);
             for func in &mut blocks.functions {
                 for blk in &mut func.blocks {

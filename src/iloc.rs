@@ -1041,7 +1041,10 @@ impl fmt::Display for Instruction {
                 writeln!(f, "    .{} {}, {}", self.inst_name(), name, content)
             }
             Instruction::Label(label) => {
-                if label == ".L_main:" {
+                if label == ".L_main:"
+                // Remove the labels that are added as a result of basic blocks
+                    || label.chars().take(3).all(|c| c == '.' || c.is_numeric() || c == '_')
+                {
                     Ok(())
                 } else {
                     writeln!(f, "{} nop", label)
@@ -1839,6 +1842,30 @@ impl Instruction {
 
     pub fn is_phi(&self) -> bool {
         matches!(self, Instruction::Phi(..))
+    }
+
+    pub fn is_tmp_expr(&self) -> bool {
+        matches!(
+            self,
+            Self::Add { .. }
+                | Self::Sub { .. }
+                | Self::Mult { .. }
+                | Self::LShift { .. }
+                | Self::RShift { .. }
+                | Self::Mod { .. }
+                | Self::And { .. }
+                | Self::Or { .. }
+                | Self::Not { .. }
+                | Self::ImmAdd { .. }
+                | Self::ImmSub { .. }
+                | Self::ImmMult { .. }
+                | Self::ImmLShift { .. }
+                | Self::ImmRShift { .. }
+                | Self::FAdd { .. }
+                | Self::FSub { .. }
+                | Self::FMult { .. }
+                | Self::ImmLoad { src: Val::Integer(..) | Val::Float(..), .. }
+        )
     }
 }
 
