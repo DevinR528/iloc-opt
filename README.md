@@ -19,7 +19,7 @@ My instruction counts
 |`arrayparam.il`  |841       | 442    | 432      | N/A     | N/A      | 47.3%       |
 |`bubble.il`      |4374      | 2374   | 2225     | N/A     | N/A      | 43.3%       |
 |`check.il`       |140       | 87     | 77       | N/A     | N/A      | 97.9%       |
-|`dynamic.il`     |39155     | 19129  | ???      | N/A     | N/A      | 50.7%       |
+|`dynamic.il`     |39155     | 19129  | 17998    | N/A     | N/A      | 50.7%       |
 |`fib.il`         |274       | 209    | 189      | N/A     | N/A      | 23%         |
 |`gcd.il`         |103       | 72     | 67       | N/A     | N/A      | 29.1%       |
 |`newdyn.il`      |136919    | 58436  | 55042    | N/A     | N/A      | 52.4%       |

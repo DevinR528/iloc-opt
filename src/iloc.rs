@@ -1080,6 +1080,13 @@ impl Operand {
             _ => panic!("`Operand` is not a register {:?}", self),
         }
     }
+
+    pub fn opt_reg(&self) -> Option<Reg> {
+        match self {
+            Operand::Register(r) => Some(*r),
+            _ => None,
+        }
+    }
 }
 
 impl Instruction {
@@ -1608,6 +1615,7 @@ impl Instruction {
     pub fn fold_two_address(&self, a: &Val) -> Option<Instruction> {
         Some(match self {
             Instruction::Load { dst, .. } => Instruction::ImmLoad { src: a.clone(), dst: *dst },
+            Instruction::I2I { dst, .. } => Instruction::ImmLoad { src: a.clone(), dst: *dst },
             _ => {
                 return None;
             }
