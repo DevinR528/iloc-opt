@@ -1042,7 +1042,7 @@ impl fmt::Display for Instruction {
             }
             Instruction::Label(label) => {
                 if label == ".L_main:"
-                // Remove the labels that are added as a result of basic blocks
+                // Remove the labels that are added as a result of basic block construction
                     || label.chars().take(3).all(|c| c == '.' || c.is_numeric() || c == '_')
                 {
                     Ok(())
@@ -1052,7 +1052,7 @@ impl fmt::Display for Instruction {
             }
             Instruction::Text | Instruction::Data => writeln!(f, "    .{}", self.inst_name()),
             Instruction::Skip(s) => writeln!(f, "    # {}", s.trim()),
-            Instruction::Phi(..) => Ok(()),
+            Instruction::Phi(reg, _s, sub) => writeln!(f, "# phi({}_{})", reg, sub.unwrap_or(0)),
             _ => writeln!(f, "    {}", self.inst_name()),
         }
     }

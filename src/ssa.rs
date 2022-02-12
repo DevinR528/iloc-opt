@@ -4,7 +4,7 @@ use std::{
     ops::Range,
 };
 
-use crate::iloc::{Block, Function, IlocProgram, Instruction, Operand, Reg};
+use crate::iloc::{Block, Function, IlocProgram, Instruction, Operand, Reg, Val};
 
 fn print_blocks(blocks: &[Block]) {
     for blk in &*blocks {
@@ -370,19 +370,26 @@ pub fn dom_val_num(
 
     expr_tree.push_back(HashMap::new());
     for phi in &mut blks[blk_idx].instructions[rng.clone()] {
-        if let Instruction::Phi(r, _set, dst) = phi {
-            let expr =
-                (Operand::Register(Reg::Phi(r.as_usize(), dst.unwrap())), None, "phi".to_string());
-            if let Some(val_num) = expr_tree.iter().find_map(|map| map.get(&expr)).copied() {
-                expr_tree.back_mut().unwrap().insert(expr, val_num);
-                *phi = Instruction::Skip(format!("[ssa this will never happen] {}", phi));
+        if let Instruction::Phi(r, set, dst) = phi {
+            let phi_reg = Reg::Phi(r.as_usize(), dst.unwrap());
+            let expr = (Operand::Register(phi_reg), None, "phi".to_string());
+            if expr_tree.iter().find_map(|map| map.get(&expr)).is_some() {
+                *phi = Instruction::Skip(format!("[redundant phi] {}", phi));
             } else {
-                expr_tree.back_mut().unwrap().insert(expr, Reg::Phi(r.as_usize(), dst.unwrap()));
+                expr_tree.back_mut().unwrap().insert(expr, phi_reg);
+                if set.len() == 1 {
+                    *phi = Instruction::Skip(format!("[meaningless phi] {}", phi));
+                } else {
+                    const_map.add_def(phi_reg, ConstSemilat::Maybe);
+                }
             }
+        } else {
+            unreachable!("must be φ(x, y)")
         }
     }
 
-    for op in &mut blks[blk_idx].instructions[rng.end..] {
+    let start = rng.end;
+    for (idx, op) in &mut blks[blk_idx].instructions[start..].iter_mut().enumerate() {
         let (mut a, mut b) = op.operands_mut();
         if let Some((a, meta)) = a.as_mut().and_then(|reg| {
             let cpy = **reg;
@@ -408,27 +415,18 @@ pub fn dom_val_num(
             }
         }
 
+        let idx = start + idx;
         if let (Some(a), b) = op.operands() {
-            let expr = (a, b, op.inst_name().to_string());
-
+            let expr = (a.clone(), b.clone(), op.inst_name().to_string());
             // TODO: if expr can be simplified to expr' the replace assign with `x <- expr'`
 
-            if let Some(val_num) = expr_tree.iter().find_map(|map| map.get(&expr)).copied() {
-                // expr_tree.back_mut().unwrap().insert(expr, val_num);
-                if !op.is_tmp_expr() {
+            if expr_tree.iter().find_map(|map| map.get(&expr)).is_some() {
+                if !op.is_tmp_expr() || op.is_call_instruction() {
+                    // expr_tree.back_mut().unwrap().clear();
                     continue;
                 }
-                if op.is_call_instruction() {
-                    expr_tree.back_mut().unwrap().clear();
-                    continue;
-                }
-                *op = Instruction::Skip(format!("[ssa] {:?} {:?}", op, val_num));
-                // let dst = *op.target_reg().unwrap();
-                // if dst == val_num {
-                //     *op = Instruction::Skip(format!("[ssa] {:?} {:?}", op, val_num));
-                // } else {
-                //     op.as_new_move_instruction(val_num, dst);
-                // }
+
+                *op = Instruction::Skip(format!("[ssa] {op}"));
             } else if let Some(dst) = op.target_reg_mut() {
                 expr_tree.back_mut().unwrap().insert(expr, *dst);
                 // We value number the assignments
@@ -485,8 +483,6 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         let cfg = build_cfg(func);
 
         let dtree = dominator_tree(&cfg, &mut func.blocks);
-
-        println!("{:#?}", dtree);
 
         let phis = insert_phi_functions(&mut func.blocks, &dtree.fdom_map);
 

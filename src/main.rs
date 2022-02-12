@@ -1,4 +1,4 @@
-#![feature(stdio_locked)]
+#![feature(stdio_locked, let_else)]
 
 use std::{
     env, fs,

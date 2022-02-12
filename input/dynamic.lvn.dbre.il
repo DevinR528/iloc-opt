@@ -429,7 +429,7 @@
     sub %vr119, %vr121 => %vr122
     store %vr115 => %vr122
     # [lvn]     loadI 1 => %vr10
-    addI %vr4, 1 => %vr108
+    # [ssa]     addI %vr4, 1 => %vr108
     i2i %vr108 => %vr4
     # [lvn]     loadI 1 => %vr10
     # [lvn]     addI %vr4, 1 => %vr108
@@ -442,12 +442,12 @@
     multI %vr109, 4 => %vr110
     sub %vr13, %vr110 => %vr111
     load %vr111 => %vr112
-    loadI 0 => %vr9
+    # [ssa]     loadI 0 => %vr9
     # [lvn]     comp %vr112, %vr9 => %vr113
     # [lvn]     testne %vr113 => %vr114
     cbr_NE %vr112, %vr9 -> .L1
 .L0: nop
-    loadI 1 => %vr10
+    # [ssa]     loadI 1 => %vr10
     i2i %vr10 => %vr5
     # [lvn]     loadI 1 => %vr10
     addI %vr5, 1 => %vr123
@@ -460,7 +460,7 @@
     multI %vr124, 4 => %vr125
     sub %vr90, %vr125 => %vr126
     load %vr126 => %vr127
-    loadI 0 => %vr9
+    # [ssa]     loadI 0 => %vr9
     # [lvn]     comp %vr127, %vr9 => %vr128
     # [lvn]     testeq %vr128 => %vr129
     cbr_EQ %vr127, %vr9 -> .L2
@@ -480,7 +480,7 @@
     sub %vr119, %vr134 => %vr135
     store %vr130 => %vr135
     # [lvn]     loadI 1 => %vr10
-    addI %vr5, 1 => %vr123
+    # [ssa]     addI %vr5, 1 => %vr123
     i2i %vr123 => %vr5
     # [lvn]     loadI 1 => %vr10
     # [lvn]     addI %vr5, 1 => %vr123
@@ -493,18 +493,18 @@
     multI %vr124, 4 => %vr125
     sub %vr90, %vr125 => %vr126
     load %vr126 => %vr127
-    loadI 0 => %vr9
+    # [ssa]     loadI 0 => %vr9
     # [lvn]     comp %vr127, %vr9 => %vr128
     # [lvn]     testne %vr128 => %vr129
     cbr_NE %vr127, %vr9 -> .L3
 .L2: nop
-    loadI 2 => %vr18
+    # [ssa]     loadI 2 => %vr18
     i2i %vr18 => %vr6
     # [lvn]     comp %vr6, %vr5 => %vr136
     # [lvn]     testgt %vr136 => %vr137
     cbr_GT %vr6, %vr5 -> .L4
 .L5: nop
-    loadI 2 => %vr18
+    # [ssa]     loadI 2 => %vr18
     i2i %vr18 => %vr7
     # [lvn]     comp %vr7, %vr4 => %vr138
     # [lvn]     testgt %vr138 => %vr139
@@ -583,7 +583,7 @@
     store %vr162 => %vr152
 .L8: nop
     # [lvn]     loadI 1 => %vr10
-    subI %vr6, 1 => %vr140
+    # [ssa]     subI %vr6, 1 => %vr140
     mult %vr140, %vr8 => %vr141
     add %vr141, %vr7 => %vr163
     i2i %vr0 => %vr11
@@ -595,7 +595,7 @@
     multI %vr164, 4 => %vr165
     sub %vr119, %vr165 => %vr166
     load %vr166 => %vr167
-    mult %vr6, %vr8 => %vr148
+    # [ssa]     mult %vr6, %vr8 => %vr148
     add %vr148, %vr7 => %vr149
     # [lvn]     i2i %vr0 => %vr11
     # [lvn]     loadI -144 => %vr118
@@ -636,9 +636,9 @@
     # [lvn]     sub %vr119, %vr151 => %vr152
     store %vr170 => %vr152
 .L9: nop
-    mult %vr6, %vr8 => %vr148
+    # [ssa]     mult %vr6, %vr8 => %vr148
     # [lvn]     loadI 1 => %vr10
-    subI %vr7, 1 => %vr142
+    # [ssa]     subI %vr7, 1 => %vr142
     add %vr148, %vr142 => %vr171
     i2i %vr0 => %vr11
     # [lvn]     loadI -144 => %vr118
