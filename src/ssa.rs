@@ -352,54 +352,6 @@ fn phi_range(insts: &[Instruction]) -> Range<usize> {
     0..insts.iter().take_while(|i| i.is_phi()).count()
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ConstSemilat {
-    /// T = maybe knowable (phi, or unknown)
-    Maybe,
-    /// C = constant
-    Known(Val),
-    /// ⊥ = unknowable, because a const register has been reassigned.
-    Unknowable,
-}
-#[derive(Debug, Default)]
-pub struct ConstMap {
-    /// Register to a set of block index, instruction index.
-    use_to_inst: HashMap<Reg, HashSet<(usize, usize)>>,
-    defined: HashMap<Reg, ((usize, usize), ConstSemilat)>,
-}
-
-impl ConstMap {
-    pub fn add_def(&mut self, reg: Reg, val: ConstSemilat, blk_inst: (usize, usize)) {
-        match &val {
-            ConstSemilat::Maybe => {
-                self.defined.insert(reg, (blk_inst, val));
-            }
-            curr @ ConstSemilat::Known(..) => {
-                match self.defined.entry(reg).or_insert_with(|| (blk_inst, val.clone())) {
-                    // T ∧ x = x  ∀x
-                    (_, old @ ConstSemilat::Maybe) => {
-                        *old = val;
-                    }
-                    // ci ∧ cj = ⊥ if ci != cj
-                    (_, old @ ConstSemilat::Known(..)) if &*old != curr => {
-                        *old = ConstSemilat::Unknowable
-                    }
-                    // ci ∧ cj = ci if ci = cj
-                    _ => {}
-                }
-            }
-            // ⊥ ∧ x = ⊥  ∀x
-            ConstSemilat::Unknowable => {
-                self.defined.insert(reg, (blk_inst, val));
-            }
-        }
-    }
-
-    pub fn add_use(&mut self, reg: Reg, blk_idx: usize, inst_idx: usize) {
-        self.use_to_inst.entry(reg).or_default().insert((blk_idx, inst_idx));
-    }
-}
-
 pub type ScopedExprTree = VecDeque<HashMap<(Operand, Option<Operand>, String), Reg>>;
 
 pub fn dom_val_num(
@@ -408,9 +360,9 @@ pub fn dom_val_num(
     meta: &mut HashMap<Operand, RenameMeta>,
     dtree: &DominatorTree,
     expr_tree: &mut ScopedExprTree,
-    const_map: &mut ConstMap,
 ) {
     let rng = phi_range(&blks[blk_idx].instructions);
+    // The phi instructions must be filled in before their expressions are saved
     for phi in &mut blks[blk_idx].instructions[rng.clone()] {
         if let Instruction::Phi(r, _, dst) = phi {
             new_name(r, dst, meta);
@@ -418,7 +370,9 @@ pub fn dom_val_num(
     }
 
     expr_tree.push_back(HashMap::new());
-    for (idx, phi) in blks[blk_idx].instructions[rng.clone()].iter_mut().enumerate() {
+
+    // Remove redundant/meaningless phi instructions
+    for phi in &mut blks[blk_idx].instructions[rng.clone()] {
         if let Instruction::Phi(r, set, dst) = phi {
             let phi_reg = Reg::Phi(r.as_usize(), dst.unwrap());
             let expr = (Operand::Register(phi_reg), None, "phi".to_string());
@@ -428,8 +382,6 @@ pub fn dom_val_num(
                 expr_tree.back_mut().unwrap().insert(expr, phi_reg);
                 if set.len() == 1 {
                     *phi = Instruction::Skip(format!("[meaningless phi] {}", phi));
-                } else {
-                    const_map.add_def(phi_reg, ConstSemilat::Maybe, (blk_idx, idx + rng.start));
                 }
             }
         } else {
@@ -437,8 +389,7 @@ pub fn dom_val_num(
         }
     }
 
-    let start = rng.end;
-    for (idx, op) in &mut blks[blk_idx].instructions[start..].iter_mut().enumerate() {
+    for op in &mut blks[blk_idx].instructions[rng.end..] {
         let (mut a, mut b) = op.operands_mut();
         if let Some((a, meta)) = a.as_mut().and_then(|reg| {
             let cpy = **reg;
@@ -464,7 +415,6 @@ pub fn dom_val_num(
             }
         }
 
-        let idx = start + idx;
         if let (Some(a), b) = op.operands() {
             let expr = (a.clone(), b.clone(), op.inst_name().to_string());
             // TODO: if expr can be simplified to expr' then replace assign with `x <- expr'`
@@ -483,27 +433,6 @@ pub fn dom_val_num(
                 m.counter += 1;
                 m.stack.push_back(i);
                 dst.as_phi(i);
-
-                match (a, b) {
-                    (Operand::Register(a), Some(Operand::Register(b))) => {
-                        const_map.add_use(a, blk_idx, idx);
-                        const_map.add_use(b, blk_idx, idx);
-                        const_map.add_def(*dst, ConstSemilat::Maybe, (blk_idx, idx));
-                    }
-                    (Operand::Register(a), _) | (_, Some(Operand::Register(a))) => {
-                        const_map.add_use(a, blk_idx, idx);
-                        const_map.add_def(*dst, ConstSemilat::Maybe, (blk_idx, idx));
-                    }
-                    (Operand::Value(val), None) if op.is_load_imm() => {
-                        const_map.add_def(
-                            *op.target_reg().unwrap(),
-                            ConstSemilat::Known(val.clone()),
-                            (blk_idx, idx),
-                        );
-                    }
-
-                    _ => (),
-                }
             }
         }
     }
@@ -534,7 +463,7 @@ pub fn dom_val_num(
     for blk in dtree.dom_succs_map.get(&blk_label).unwrap_or(&empty) {
         // TODO: make block -> index map
         let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
-        dom_val_num(blks, idx, meta, dtree, expr_tree, const_map);
+        dom_val_num(blks, idx, meta, dtree, expr_tree);
     }
 
     for op in &blks[blk_idx].instructions {
@@ -545,6 +474,91 @@ pub fn dom_val_num(
         }
     }
     expr_tree.pop_back();
+}
+
+fn eval_jump(
+    expr: &Instruction,
+    const_map: &HashMap<Reg, ((usize, usize), ConstSemilat)>,
+) -> Option<Instruction> {
+    let (l, r) = expr.operands();
+    match (
+        l.as_ref().and_then(|reg| reg.opt_reg()).and_then(|l| const_map.get(&l).map(|(_, c)| c)),
+        r.as_ref().and_then(|reg| reg.opt_reg()).and_then(|r| const_map.get(&r).map(|(_, c)| c)),
+    ) {
+        (Some(ConstSemilat::Known(a)), Some(ConstSemilat::Known(b))) => match expr {
+            Instruction::CbrEQ { loc, .. } => {
+                let should_jump = a.cmp_eq(b)?.is_one();
+                Some(if should_jump {
+                    Instruction::ImmJump(loc.clone())
+                } else {
+                    Instruction::Skip(format!("{}", expr))
+                })
+            }
+            Instruction::CbrNE { loc, .. } => {
+                let should_jump = a.cmp_ne(b)?.is_one();
+                Some(if should_jump {
+                    Instruction::ImmJump(loc.clone())
+                } else {
+                    Instruction::Skip(format!("{}", expr))
+                })
+            }
+            Instruction::CbrGT { loc, .. } => {
+                let should_jump = a.cmp_gt(b)?.is_one();
+                Some(if should_jump {
+                    Instruction::ImmJump(loc.clone())
+                } else {
+                    Instruction::Skip(format!("{}", expr))
+                })
+            }
+            Instruction::CbrGE { loc, .. } => {
+                let should_jump = a.cmp_ge(b)?.is_one();
+                Some(if should_jump {
+                    Instruction::ImmJump(loc.clone())
+                } else {
+                    Instruction::Skip(format!("{}", expr))
+                })
+            }
+            Instruction::CbrLT { loc, .. } => {
+                let should_jump = a.cmp_lt(b)?.is_one();
+                Some(if should_jump {
+                    Instruction::ImmJump(loc.clone())
+                } else {
+                    Instruction::Skip(format!("{}", expr))
+                })
+            }
+            Instruction::CbrLE { loc, .. } => {
+                let should_jump = a.cmp_le(b)?.is_one();
+                Some(if should_jump {
+                    Instruction::ImmJump(loc.clone())
+                } else {
+                    Instruction::Skip(format!("{}", expr))
+                })
+            }
+            _ => None,
+        },
+        (Some(ConstSemilat::Known(val)), None) | (None, Some(ConstSemilat::Known(val))) => {
+            match expr {
+                Instruction::CbrT { loc, .. } => {
+                    let should_jump = val.is_one();
+                    Some(if should_jump {
+                        Instruction::ImmJump(loc.clone())
+                    } else {
+                        Instruction::Skip(format!("{}", expr))
+                    })
+                }
+                Instruction::CbrF { loc, .. } => {
+                    let should_jump = val.is_zero();
+                    Some(if should_jump {
+                        Instruction::ImmJump(loc.clone())
+                    } else {
+                        Instruction::Skip(format!("{}", expr))
+                    })
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
 }
 
 fn eval_instruction(
@@ -641,6 +655,101 @@ fn eval_instruction(
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ConstSemilat {
+    /// T = maybe knowable (phi, or unknown)
+    Maybe,
+    /// C = constant
+    Known(Val),
+    /// ⊥ = unknowable, because a const register has been reassigned.
+    Unknowable,
+}
+#[derive(Debug, Default)]
+pub struct ConstMap {
+    /// Register to a set of block index, instruction index.
+    use_to_inst: HashMap<Reg, HashSet<(usize, usize)>>,
+    defined: HashMap<Reg, ((usize, usize), ConstSemilat)>,
+}
+
+impl ConstMap {
+    pub fn add_def(&mut self, reg: Reg, val: ConstSemilat, blk_inst: (usize, usize)) {
+        match &val {
+            ConstSemilat::Maybe => {
+                // TODO: is T ∧ T = ⊥
+                self.defined.insert(reg, (blk_inst, val));
+            }
+            curr @ ConstSemilat::Known(..) => {
+                match self.defined.entry(reg).or_insert_with(|| (blk_inst, val.clone())) {
+                    // T ∧ x = x  ∀x
+                    (_, old @ ConstSemilat::Maybe) => {
+                        *old = val;
+                    }
+                    // ci ∧ cj = ⊥ if ci != cj
+                    (_, old @ ConstSemilat::Known(..)) if &*old != curr => {
+                        *old = ConstSemilat::Unknowable
+                    }
+                    // ci ∧ cj = ci if ci = cj
+                    _ => {}
+                }
+            }
+            // ⊥ ∧ x = ⊥  ∀x
+            ConstSemilat::Unknowable => {
+                self.defined.insert(reg, (blk_inst, val));
+            }
+        }
+    }
+
+    pub fn add_use(&mut self, reg: Reg, blk_idx: usize, inst_idx: usize) {
+        self.use_to_inst.entry(reg).or_default().insert((blk_idx, inst_idx));
+    }
+}
+
+fn const_fold(
+    worklist: &mut VecDeque<(Reg, ((usize, usize), ConstSemilat))>,
+    const_vals: &mut ConstMap,
+    func: &mut Function,
+) {
+    while let Some((n, ((n_blk, n_inst), _val))) = worklist.pop_front() {
+        // TODO: not great cloning this whole use_to_inst map...
+        for (blk, inst) in const_vals.use_to_inst.get(&n).cloned().unwrap_or_default() {
+            let Some(m) = func.blocks[blk].instructions[inst].target_reg().copied() else {
+                let Some(folded) = eval_jump(&func.blocks[blk].instructions[inst], &const_vals.defined) else {
+                    continue;
+                };
+                if matches!(folded, Instruction::ImmJump(_)) {
+                    // for missed in &mut func.blocks[blk].instructions[(inst + 1)..] {
+                    //     *missed = Instruction::Skip(format!("[ssabf] {}", missed))
+                    // }
+                }
+                func.blocks[blk].instructions[inst] = folded;
+
+                continue;
+            };
+            let ((mb, mi), m_val) =
+                const_vals.defined.entry(m).or_insert(((blk, inst), ConstSemilat::Maybe)).clone();
+            if !matches!(m_val, ConstSemilat::Unknowable) {
+                let Some((new, folded)) =
+                    eval_instruction(&func.blocks[mb].instructions[mi], &const_vals.defined) else {
+                        continue;
+                    };
+
+                const_vals.add_def(m, new.clone(), (mb, mi));
+
+                func.blocks[n_blk].instructions[n_inst] = Instruction::Skip(format!(
+                    "[ssacf] {}",
+                    func.blocks[n_blk].instructions[n_inst]
+                ));
+
+                func.blocks[mb].instructions[mi] = folded;
+
+                if m_val != new {
+                    worklist.push_back((m, ((blk, inst), new)));
+                }
+            }
+        }
+    }
+}
+
 pub fn ssa_optimization(iloc: &mut IlocProgram) {
     for func in &mut iloc.functions {
         let cfg = build_cfg(func);
@@ -654,74 +763,51 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
             meta.extend(register_set.iter().map(|op| (op.clone(), RenameMeta::default())));
         }
         let mut stack = VecDeque::new();
+        dom_val_num(&mut func.blocks, 0, &mut meta, &dtree, &mut stack);
+
+        let mut worklist = VecDeque::default();
         let mut const_vals = ConstMap::default();
-        dom_val_num(&mut func.blocks, 0, &mut meta, &dtree, &mut stack, &mut const_vals);
-
-        let mut worklist =
-            const_vals.defined.iter().map(|(a, b)| (*a, b.clone())).collect::<VecDeque<_>>();
-        const_fold(&mut worklist, &mut const_vals, func);
-        // print_blocks(&func.blocks);
-    }
-}
-
-fn const_fold(
-    worklist: &mut VecDeque<(Reg, ((usize, usize), ConstSemilat))>,
-    const_vals: &mut ConstMap,
-    func: &mut Function,
-) {
-    while let Some((n, ((n_blk, n_inst), val))) = worklist.pop_front() {
-        // TODO: not great cloning this whole use_to_inst map...
-        for (blk, inst) in const_vals.use_to_inst.get(&n).cloned().unwrap_or_default() {
-            let Some(m) = func.blocks[blk].instructions[inst].target_reg().copied() else {
-                continue;
-            };
-            let (_, m_val) =
-                const_vals.defined.entry(m).or_insert(((blk, inst), ConstSemilat::Maybe)).clone();
-
-            println!(
-                "worklist: {} orig: {:?} m: {} def: {:?} {:?}",
-                n,
-                val,
-                m,
-                const_vals.defined.get(&m),
-                &func.blocks[blk].instructions[inst],
-            );
-
-            if !matches!(m_val, ConstSemilat::Unknowable) {
-                let (a, b) = func.blocks[blk].instructions[inst].operands();
-                let mut stack = VecDeque::from_iter(
-                    a.into_iter().chain(b.into_iter()).filter_map(|r| r.opt_reg()),
-                );
-                while let Some(r) = stack.pop_front() {
-                    if let Some(((iblk, iinst), lat)) = const_vals.defined.get(&r).cloned() {
-                        if let ConstSemilat::Maybe = lat {
-                            let (a, b) = func.blocks[iblk].instructions[iinst].operands();
-                            stack.extend(
-                                a.into_iter().chain(b.into_iter()).filter_map(|r| r.opt_reg()),
-                            )
-                        } else if let ConstSemilat::Known(_) = lat {
-                            let Some((new, folded)) =
-                                eval_instruction(&func.blocks[iblk].instructions[iinst], &const_vals.defined) else {
-                                    continue;
-                                };
-
-                            const_vals.add_def(m, new.clone(), (iblk, iinst));
-
-                            func.blocks[n_blk].instructions[n_inst] = Instruction::Skip(format!(
-                                "{}",
-                                func.blocks[n_blk].instructions[n_inst]
-                            ));
-
-                            func.blocks[iblk].instructions[iinst] = folded;
-
-                            if m_val != new {
-                                worklist.push_back((m, ((blk, inst), new)));
-                            }
-                        }
+        for (b, block) in func.blocks.iter().enumerate() {
+            for (i, inst) in block.instructions.iter().enumerate() {
+                if let Some(dst) = inst.target_reg() {
+                    if inst.is_load_imm() {
+                        let latice =
+                            ConstSemilat::Known(inst.operands().0.unwrap().clone_to_value());
+                        const_vals.add_def(*dst, latice.clone(), (b, i));
+                        worklist.push_back((*dst, ((b, i), latice)));
+                    } else if inst.is_store()
+                    // TODO: any way around this PLEASE...
+                        || matches!(inst, Instruction::I2I { .. } | Instruction::I2F { .. })
+                    {
+                        const_vals.add_def(*dst, ConstSemilat::Unknowable, (b, i))
+                    } else {
+                        const_vals.add_def(*dst, ConstSemilat::Maybe, (b, i))
                     }
+                }
+                match inst.operands() {
+                    (Some(Operand::Register(a_reg)), Some(Operand::Register(b_reg))) => {
+                        const_vals.add_use(a_reg, b, i);
+                        const_vals.add_use(b_reg, b, i);
+                    }
+                    (Some(Operand::Register(a)), None) | (None, Some(Operand::Register(a))) => {
+                        const_vals.add_use(a, b, i);
+                    }
+                    _ => {}
                 }
             }
         }
+
+        const_fold(&mut worklist, &mut const_vals, func);
+
+        // println!("[");
+        // for inst in const_vals.use_to_inst.iter().flat_map(|(_, set)| {
+        //     set.iter().map(|(b, i)| &func.blocks[*b].instructions[*i]).collect::<Vec<_>>()
+        // }) {
+        //     println!("    {:?},", inst);
+        // }
+        // println!("]");
+
+        // print_blocks(&func.blocks);
     }
 }
 

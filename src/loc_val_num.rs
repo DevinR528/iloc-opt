@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::iloc::{Block, Instruction, Loc, Operand, Reg, Val};
 
@@ -103,7 +103,8 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                         // if we have what is effectively a move to self
                         // `x = x;`
                         if value == dst {
-                            new_instr[idx] = Instruction::Skip(format!("[lvn] {}", new_instr[idx]));
+                            new_instr[idx] =
+                                Instruction::Skip(format!("[lvn ==] {}", new_instr[idx]));
                             continue;
                         }
 
@@ -146,7 +147,8 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                         // if we have what is effectively a move to self
                         // `x = x;`
                         if value == dst {
-                            new_instr[idx] = Instruction::Skip(format!("[lvn] {}", new_instr[idx]));
+                            new_instr[idx] =
+                                Instruction::Skip(format!("[lvn ==] {}", new_instr[idx]));
                             continue;
                         }
 
@@ -175,7 +177,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
             || new_instr[idx].is_load_imm()
         {
             transformed_block |= true;
-            new_instr[idx] = Instruction::Skip(format!("[lvn] {}", new_instr[idx]));
+            new_instr[idx] = Instruction::Skip(format!("[lvn unused] {}", new_instr[idx]));
         }
     }
 
@@ -187,7 +189,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
 
 pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
     let mut used_reg: HashMap<_, usize> = HashMap::new();
-
+    let mut live_vars = HashSet::new();
     let mut indexes = vec![];
     for (idx, expr) in instructions.iter().enumerate().rev() {
         let (l, r) = expr.operands();
@@ -198,6 +200,24 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
             for op in l.iter().chain(r.iter()) {
                 used_reg.insert(op.clone(), 1);
             }
+            continue;
+        }
+
+        if let Some(dst) = dst {
+            if live_vars.contains(dst) {
+                continue;
+            }
+        }
+        if let Instruction::I2I { src, .. } | Instruction::I2F { src, .. } = expr {
+            if let Some(dst) = dst {
+                live_vars.insert(dst);
+            }
+            used_reg.insert(Operand::Register(*src), 1);
+
+            continue;
+        }
+
+        if matches!(expr, Instruction::ImmLoad { src: Val::Location(_), .. }) {
             continue;
         }
 

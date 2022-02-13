@@ -21,6 +21,8 @@ use iloc::{make_blks, parse_text};
 #[allow(unused)]
 use ssa::{build_cfg, dominator_tree, ssa_optimization};
 
+use crate::iloc::Instruction;
+
 const JAVA_ILOC_BENCH: &[&str] =
     &["-jar", "/home/devinr/Downloads/my-cs6810-ssa-opt-project/iloc.jar", "-s"];
 
@@ -61,6 +63,9 @@ fn main() {
 
             let mut buf = String::new();
             for inst in blocks.instruction_iter() {
+                if matches!(inst, Instruction::Skip(..)) {
+                    // continue;
+                }
                 // println!("{:?}", inst);
                 buf.push_str(&inst.to_string())
             }
