@@ -466,11 +466,7 @@ impl Interpreter {
             // cbr
             Instruction::CbrT { cond, loc } => {
                 let a = self.registers().get(cond)?;
-                let should_jump = match a {
-                    Val::Integer(i) if *i == 1 => true,
-                    Val::Float(f) if *f == 1.0 => true,
-                    _ => false,
-                };
+                let should_jump = a.is_one();
                 if should_jump {
                     let jmp_idx = self.label_map.get(loc)?;
                     self.inst_idx = *jmp_idx;
@@ -480,11 +476,7 @@ impl Interpreter {
             // cbrne
             Instruction::CbrF { cond, loc } => {
                 let a = self.registers().get(cond)?;
-                let should_jump = match a {
-                    Val::Integer(i) if *i == 0 => true,
-                    Val::Float(f) if *f == 0.0 => true,
-                    _ => false,
-                };
+                let should_jump = a.is_zero();
                 // This is conditional branch if NOT equal
                 if should_jump {
                     let jmp_idx = self.label_map.get(loc)?;
@@ -495,11 +487,7 @@ impl Interpreter {
             Instruction::CbrLT { a, b, loc } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
-                let should_jump = match a.cmp_lt(b)? {
-                    Val::Integer(i) if i == 1 => true,
-                    Val::Float(f) if f == 1.0 => true,
-                    _ => false,
-                };
+                let should_jump = a.cmp_lt(b)?.is_one();
                 if should_jump {
                     let jmp_idx = self.label_map.get(loc)?;
                     self.inst_idx = *jmp_idx;
@@ -509,11 +497,7 @@ impl Interpreter {
             Instruction::CbrLE { a, b, loc } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
-                let should_jump = match a.cmp_le(b)? {
-                    Val::Integer(i) if i == 1 => true,
-                    Val::Float(f) if f == 1.0 => true,
-                    _ => false,
-                };
+                let should_jump = a.cmp_le(b)?.is_one();
                 if should_jump {
                     let jmp_idx = self.label_map.get(loc)?;
                     self.inst_idx = *jmp_idx;
@@ -523,11 +507,7 @@ impl Interpreter {
             Instruction::CbrGT { a, b, loc } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
-                let should_jump = match a.cmp_gt(b)? {
-                    Val::Integer(i) if i == 1 => true,
-                    Val::Float(f) if f == 1.0 => true,
-                    _ => false,
-                };
+                let should_jump = a.cmp_gt(b)?.is_one();
                 if should_jump {
                     let jmp_idx = self.label_map.get(loc)?;
                     self.inst_idx = *jmp_idx;
@@ -537,11 +517,7 @@ impl Interpreter {
             Instruction::CbrGE { a, b, loc } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
-                let should_jump = match a.cmp_ge(b)? {
-                    Val::Integer(i) if i == 1 => true,
-                    Val::Float(f) if f == 1.0 => true,
-                    _ => false,
-                };
+                let should_jump = a.cmp_ge(b)?.is_one();
                 if should_jump {
                     let jmp_idx = self.label_map.get(loc)?;
                     self.inst_idx = *jmp_idx;
@@ -551,11 +527,7 @@ impl Interpreter {
             Instruction::CbrEQ { a, b, loc } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
-                let should_jump = match a.cmp_eq(b)? {
-                    Val::Integer(i) if i == 1 => true,
-                    Val::Float(f) if f == 1.0 => true,
-                    _ => false,
-                };
+                let should_jump = a.cmp_eq(b)?.is_one();
                 if should_jump {
                     let jmp_idx = self.label_map.get(loc)?;
                     self.inst_idx = *jmp_idx;
@@ -565,11 +537,7 @@ impl Interpreter {
             Instruction::CbrNE { a, b, loc } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
-                let should_jump = match a.cmp_ne(b)? {
-                    Val::Integer(i) if i == 1 => true,
-                    Val::Float(f) if f == 1.0 => true,
-                    _ => false,
-                };
+                let should_jump = a.cmp_ne(b)?.is_one();
                 if should_jump {
                     let jmp_idx = self.label_map.get(loc)?;
                     self.inst_idx = *jmp_idx;

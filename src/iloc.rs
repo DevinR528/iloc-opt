@@ -1290,6 +1290,26 @@ impl Instruction {
             Instruction::Comp { a, b, .. } => {
                 (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
             }
+            Instruction::CbrT { cond, .. } => (Some(Operand::Register(*cond)), None),
+            Instruction::CbrF { cond, .. } => (Some(Operand::Register(*cond)), None),
+            Instruction::CbrEQ { a, b, .. } => {
+                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
+            }
+            Instruction::CbrNE { a, b, .. } => {
+                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
+            }
+            Instruction::CbrGT { a, b, .. } => {
+                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
+            }
+            Instruction::CbrGE { a, b, .. } => {
+                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
+            }
+            Instruction::CbrLT { a, b, .. } => {
+                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
+            }
+            Instruction::CbrLE { a, b, .. } => {
+                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
+            }
             Instruction::TestEQ { test, .. } => (Some(Operand::Register(*test)), None),
             Instruction::TestNE { test, .. } => (Some(Operand::Register(*test)), None),
             Instruction::TestGT { test, .. } => (Some(Operand::Register(*test)), None),
@@ -1364,6 +1384,14 @@ impl Instruction {
             Instruction::CmpEQ { a, b, .. } => (Some(a), Some(b)),
             Instruction::CmpNE { a, b, .. } => (Some(a), Some(b)),
             Instruction::Comp { a, b, .. } => (Some(a), Some(b)),
+            Instruction::CbrT { cond, .. } => (Some(cond), None),
+            Instruction::CbrF { cond, .. } => (Some(cond), None),
+            Instruction::CbrLT { a, b, .. } => (Some(a), Some(b)),
+            Instruction::CbrLE { a, b, .. } => (Some(a), Some(b)),
+            Instruction::CbrGT { a, b, .. } => (Some(a), Some(b)),
+            Instruction::CbrGE { a, b, .. } => (Some(a), Some(b)),
+            Instruction::CbrEQ { a, b, .. } => (Some(a), Some(b)),
+            Instruction::CbrNE { a, b, .. } => (Some(a), Some(b)),
             Instruction::TestEQ { test, .. } => (Some(test), None),
             Instruction::TestNE { test, .. } => (Some(test), None),
             Instruction::TestGT { test, .. } => (Some(test), None),
