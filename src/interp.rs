@@ -120,7 +120,7 @@ impl Interpreter {
         &self.call_stack.last().unwrap().registers
     }
 
-    pub fn run_next_instruction(&mut self, count: &mut usize) -> Option<bool> {
+    pub fn run_next_instruction(&mut self) -> Option<bool> {
         if self.call_stack.is_empty() {
             return Some(false);
         }
@@ -131,14 +131,7 @@ impl Interpreter {
 
         // Skip these instructions
         match instrs[self.inst_idx].1 {
-            Instruction::Label(..) => {
-                // WHAT THE FUCK labels count as instructions...
-                *count += 1;
-                self.inst_idx += 1
-            }
-            Instruction::Frame { .. } => {
-                self.inst_idx += 1;
-            }
+            Instruction::Label(..) | Instruction::Frame { .. } => self.inst_idx += 1,
             _ => {}
         }
 
@@ -743,7 +736,7 @@ pub fn run_interpreter(iloc: IlocProgram, debug: bool) -> Result<(), &'static st
     let mut continue_flag = false;
     // Now we can get input from the user
     loop {
-        match interpreter.run_next_instruction(&mut instruction_count) {
+        match interpreter.run_next_instruction() {
             Some(true) => {
                 let line = if let Some(l) = interpreter.curr_line() {
                     l

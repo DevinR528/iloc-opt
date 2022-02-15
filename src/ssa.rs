@@ -798,16 +798,6 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         }
 
         const_fold(&mut worklist, &mut const_vals, func);
-
-        // println!("[");
-        // for inst in const_vals.use_to_inst.iter().flat_map(|(_, set)| {
-        //     set.iter().map(|(b, i)| &func.blocks[*b].instructions[*i]).collect::<Vec<_>>()
-        // }) {
-        //     println!("    {:?},", inst);
-        // }
-        // println!("]");
-
-        // print_blocks(&func.blocks);
     }
 }
 
