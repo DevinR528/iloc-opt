@@ -795,54 +795,80 @@ fn reverse_postoder(succs: &HashMap<String, BTreeSet<String>>) -> impl Iterator<
     })
 }
 
+#[derive(Debug)]
+pub enum LoopInfo {
+    Loop { header: String, parent: Option<String> },
+    PartOf(String),
+}
+impl LoopInfo {
+    pub fn new(header: &str) -> Self {
+        Self::Loop { header: header.to_string(), parent: None }
+    }
+    pub fn header(&self) -> &str {
+        match self {
+            LoopInfo::Loop { header, .. } | LoopInfo::PartOf(header) => header,
+        }
+    }
+    pub fn parent(&self) -> Option<&str> {
+        if let LoopInfo::Loop { parent, .. } = self {
+            parent.as_deref()
+        } else {
+            None
+        }
+    }
+}
+
 pub fn find_loops(func: &mut Function, domtree: &DominatorTree) {
     println!("{:#?}", domtree);
-    let mut loops = BTreeMap::<_, Option<String>>::new();
+    let mut loops = BTreeMap::<_, String>::new();
     let mut loop_ord = vec![];
     // We traverse the CFG in reverse postorder
     for blk in reverse_postoder(&domtree.cfg_succs_map) {
-        println!("{}", blk);
         // We check each predecessor of the control flow graph
-        'inner: for pred in domtree.cfg_preds_map.get(blk).unwrap_or(&BTreeSet::default()) {
+        for pred in domtree.cfg_preds_map.get(blk).unwrap_or(&BTreeSet::default()) {
             // If the block dominates one of it's preds it is a back edge to a loop
-            if domtree.dom_succs_map.get(blk).map_or(false, |set| set.contains(pred)) {
-                if loops.insert(blk.to_string(), Some(blk.to_string())).is_none() {
+            if domtree.fdom_map.get(pred).map_or(false, |set| set.contains(blk)) {
+                if loops.insert(blk.to_string(), blk.to_string()).is_none() {
                     loop_ord.push(blk);
                 }
                 // We only need to identify one back edge to know we are in a loop
-                break 'inner;
+                break;
             }
         }
     }
 
-    println!("{:#?}", loops);
-
     let empty = BTreeSet::default();
-    let mut loop_map: BTreeMap<_, _> = loops.clone();
+    let mut loop_map =
+        loops.iter().map(|(k, v)| (k.clone(), LoopInfo::new(v))).collect::<BTreeMap<_, _>>();
     let mut stack = vec![];
     for lp in loop_ord.into_iter().rev() {
         for pred in domtree.cfg_preds_map.get(lp).unwrap_or(&empty) {
             // Add the back edges to the stack/worklist
-            if domtree.dom_preds_map.get(lp).map_or(false, |set| set.contains(pred)) {
+            if domtree.fdom_map.get(pred).map_or(false, |set| set.contains(lp)) {
                 stack.push(pred);
             }
         }
 
         while let Some(node) = stack.pop() {
+            // println!("{:#?}", loop_map);
             let mut continue_dfs = None;
-            if let unseen @ None = loop_map.entry(node.clone()).or_default() {
-                unseen.replace(lp.to_string());
-                continue_dfs = Some(node.as_str());
-            } else if let Some(node_loop) = loop_map.get(node).unwrap() {
-                let mut node_loop = node_loop;
-                let mut nlp_opt = loop_map.get(node_loop).unwrap();
+            if let Entry::Vacant(unseen) = loop_map.entry(node.clone()) {
+                unseen.insert(LoopInfo::PartOf(lp.to_string()));
+                continue_dfs = Some(node.to_string());
+            } else if let Some(node_loop) = loop_map.get(node) {
+                let mut node_loop = node_loop.header().to_string();
+                let mut nlp_opt = loop_map.get(&node_loop).and_then(|l| l.parent());
+
+                println!("{:?} {} {}", nlp_opt, node_loop, lp);
+
                 while let Some(nlp) = nlp_opt {
+                    // println!("{} {}", nlp, lp);
                     if nlp == lp {
                         // We have walked back to the start of the loop
                         break;
                     } else {
-                        node_loop = nlp;
-                        nlp_opt = loop_map.get(node_loop).unwrap();
+                        node_loop = nlp.to_string();
+                        nlp_opt = loop_map.get(&node_loop).and_then(|n| n.parent());
                     }
                 }
 
@@ -853,8 +879,16 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) {
                     None => {
                         if node_loop != lp {
                             let key = node_loop.to_string();
-                            loop_map.insert(key, Some(lp.to_string()));
-                            continue_dfs = Some(lp)
+                            println!("Parent {} {}", key, lp);
+                            println!("{:?}", loop_map);
+                            match loop_map.entry(key) {
+                                Entry::Occupied(mut o) => match o.get_mut() {
+                                    LoopInfo::Loop { parent, .. } => *parent = Some(lp.to_string()),
+                                    it => panic!("{} {:?}", node_loop, it),
+                                },
+                                it => panic!("{} {:?}", node_loop, it),
+                            }
+                            continue_dfs = Some(node_loop)
                         } else {
                             continue_dfs = None;
                         }
@@ -863,7 +897,7 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) {
             }
 
             if let Some(cont) = continue_dfs {
-                for blk in domtree.cfg_preds_map.get(cont).unwrap_or(&empty) {
+                for blk in domtree.cfg_preds_map.get(&cont).unwrap_or(&empty) {
                     stack.push(blk);
                 }
             }
