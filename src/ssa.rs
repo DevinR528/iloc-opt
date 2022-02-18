@@ -762,10 +762,115 @@ fn const_fold(worklist: &mut VecDeque<WorkStuff>, const_vals: &mut ConstMap, fun
         }
     }
 }
+
+// pub fn eliminate_unreachable(
+//     func: &mut Function,
+//     cfg: &mut ControlFlowGraph,
+//     domtree: &DominatorTree,
+// ) {
+//     for blk in func.blocks {
+//         if domtree.dom_preds_map
+//     }
+// }
+
+fn reverse_postoder(succs: &HashMap<String, BTreeSet<String>>) -> impl Iterator<Item = &str> + '_ {
+    let mut stack = VecDeque::from_iter([".L_main"]);
+    let mut seen = HashSet::<_, RandomState>::from_iter([".L_main"]);
+    std::iter::from_fn(move || {
+        let val = stack.pop_front()?;
+        if let Some(set) = succs.get(val) {
+            for children in set {
+                if seen.contains(children.as_str()) {
+                    continue;
+                }
+                stack.push_back(children)
+            }
+        }
+        if seen.contains(val) {
+            // return stack.pop_front();
+        }
+        seen.insert(val);
+
+        Some(val)
+    })
+}
+
+pub fn find_loops(func: &mut Function, domtree: &DominatorTree) {
+    println!("{:#?}", domtree);
+    let mut loops = BTreeMap::<_, Option<String>>::new();
+    let mut loop_ord = vec![];
+    // We traverse the CFG in reverse postorder
+    for blk in reverse_postoder(&domtree.cfg_succs_map) {
+        println!("{}", blk);
+        // We check each predecessor of the control flow graph
+        'inner: for pred in domtree.cfg_preds_map.get(blk).unwrap_or(&BTreeSet::default()) {
+            // If the block dominates one of it's preds it is a back edge to a loop
+            if domtree.dom_succs_map.get(blk).map_or(false, |set| set.contains(pred)) {
+                if loops.insert(blk.to_string(), Some(blk.to_string())).is_none() {
+                    loop_ord.push(blk);
+                }
+                // We only need to identify one back edge to know we are in a loop
+                break 'inner;
+            }
+        }
+    }
+
+    println!("{:#?}", loops);
+
+    let empty = BTreeSet::default();
+    let mut loop_map: BTreeMap<_, _> = loops.clone();
+    let mut stack = vec![];
+    for lp in loop_ord.into_iter().rev() {
+        for pred in domtree.cfg_preds_map.get(lp).unwrap_or(&empty) {
+            // Add the back edges to the stack/worklist
+            if domtree.dom_preds_map.get(lp).map_or(false, |set| set.contains(pred)) {
+                stack.push(pred);
+            }
+        }
+
+        while let Some(node) = stack.pop() {
+            let mut continue_dfs = None;
+            if let unseen @ None = loop_map.entry(node.clone()).or_default() {
+                unseen.replace(lp.to_string());
+                continue_dfs = Some(node.as_str());
+            } else if let Some(node_loop) = loop_map.get(node).unwrap() {
+                let mut node_loop = node_loop;
+                let mut nlp_opt = loop_map.get(node_loop).unwrap();
+                while let Some(nlp) = nlp_opt {
+                    if nlp == lp {
+                        // We have walked back to the start of the loop
+                        break;
+                    } else {
+                        node_loop = nlp;
+                        nlp_opt = loop_map.get(node_loop).unwrap();
+                    }
+                }
+
+                // We either have `nlp_opt` as `None` and `node_loop` is a new inner loop
+                // or `nlp_opt` is `Some` and `node_loop` is a known inner loop
+                match nlp_opt {
+                    Some(..) => continue_dfs = None,
+                    None => {
+                        if node_loop != lp {
+                            let key = node_loop.to_string();
+                            loop_map.insert(key, Some(lp.to_string()));
+                            continue_dfs = Some(lp)
+                        } else {
+                            continue_dfs = None;
+                        }
+                    }
+                }
+            }
+
+            if let Some(cont) = continue_dfs {
+                for blk in domtree.cfg_preds_map.get(cont).unwrap_or(&empty) {
+                    stack.push(blk);
                 }
             }
         }
     }
+
+    println!("{:#?}", loop_map);
 }
 
 pub fn ssa_optimization(iloc: &mut IlocProgram) {
@@ -817,6 +922,8 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         }
 
         const_fold(&mut worklist, &mut const_vals, func);
+
+        find_loops(func, &dtree);
     }
 }
 
@@ -871,14 +978,16 @@ fn ssa_cfg_trap() {
 
     use crate::iloc::{make_blks, parse_text};
 
-    let input = fs::read_to_string("input/trap.il").unwrap();
+    let input = fs::read_to_string("input/dumb.il").unwrap();
     let iloc = parse_text(&input).unwrap();
     let mut blocks = make_blks(iloc, true);
 
     let cfg = build_cfg(&blocks.functions[0]);
+    let dom = dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 
     println!("{:?}", cfg);
-    emit_cfg_viz(&cfg, "trap.dot");
+    println!("{:#?}", dom);
+    emit_cfg_viz(&cfg, "dumb.dot");
 
     dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }
