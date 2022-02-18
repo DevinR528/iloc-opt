@@ -1,7 +1,12 @@
 use std::{
-    cell::Cell,
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
-    ops::Range,
+    cell::{Cell, RefCell},
+    collections::{
+        btree_map::Entry, hash_map::RandomState, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque,
+    },
+    iter::successors,
+    ops::{Deref, Range},
+    slice::SliceIndex,
+    vec,
 };
 
 use crate::iloc::{Block, Function, IlocProgram, Instruction, Operand, Reg, Val};
@@ -121,7 +126,9 @@ fn traverse(val: &str, align: usize, cfg: &ControlFlowGraph, paths: &mut Vec<Vec
 pub struct DominatorTree {
     fdom_map: HashMap<String, HashSet<String>>,
     dom_succs_map: HashMap<String, BTreeSet<String>>,
+    dom_preds_map: HashMap<String, BTreeSet<String>>,
     cfg_succs_map: HashMap<String, BTreeSet<String>>,
+    cfg_preds_map: HashMap<String, BTreeSet<String>>,
 }
 
 // TODO: Cleanup (see todo's above loops and such)
@@ -158,8 +165,8 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
     let mut dom_preds_map = HashMap::with_capacity(blocks_label.len());
     let mut cfg_preds_map = HashMap::with_capacity(blocks_label.len());
     for label in &blocks_label {
-        let mut pred = HashSet::new();
-        let mut cfg_pred = HashSet::new();
+        let mut pred = BTreeSet::new();
+        let mut cfg_pred = BTreeSet::new();
         // For each index we find the label (this detects loops back to a node,
         // which is important when computing frontiers) we save the that index to check
         // what the previous label is in that path
@@ -179,12 +186,12 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
                 while let Some(i) = idx.checked_sub(1) {
                     let prev = &path[i];
                     if cfg_first {
-                        cfg_pred.insert(prev);
+                        cfg_pred.insert(prev.to_string());
                         cfg_first = false;
                     }
                     if prev != label {
                         if dom_map.get(label).map_or(false, |dom_preds| dom_preds.contains(prev)) {
-                            pred.insert(prev);
+                            pred.insert(prev.to_string());
                             break;
                         } else {
                             idx -= 1;
@@ -245,7 +252,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
         {
             // For each previous node find a predecessor of `label` that also dominates `label
             for p in preds {
-                let mut run = *p;
+                let mut run = p;
                 while Some(run) != idom_map.get(label) {
                     // TODO: I think this works because a dom frontier will only ever be a single
                     // node since no node with multiple predecessors can be in the `idom_map`.
@@ -263,7 +270,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
         }
     }
 
-    DominatorTree { fdom_map, dom_succs_map, cfg_succs_map }
+    DominatorTree { fdom_map, dom_succs_map, dom_preds_map, cfg_preds_map, cfg_succs_map }
 }
 
 pub fn insert_phi_functions(
@@ -478,14 +485,14 @@ pub fn dom_val_num(
 
 fn eval_jump(
     expr: &Instruction,
-    const_map: &HashMap<Reg, ((usize, usize), ConstSemilat)>,
+    const_map: &HashMap<Reg, ((usize, usize), ValueKind)>,
 ) -> Option<Instruction> {
     let (l, r) = expr.operands();
     match (
         l.as_ref().and_then(|reg| reg.opt_reg()).and_then(|l| const_map.get(&l).map(|(_, c)| c)),
         r.as_ref().and_then(|reg| reg.opt_reg()).and_then(|r| const_map.get(&r).map(|(_, c)| c)),
     ) {
-        (Some(ConstSemilat::Known(a)), Some(ConstSemilat::Known(b))) => match expr {
+        (Some(ValueKind::Known(a)), Some(ValueKind::Known(b))) => match expr {
             Instruction::CbrEQ { loc, .. } => {
                 let should_jump = a.cmp_eq(b)?.is_one();
                 Some(if should_jump {
@@ -536,35 +543,33 @@ fn eval_jump(
             }
             _ => None,
         },
-        (Some(ConstSemilat::Known(val)), None) | (None, Some(ConstSemilat::Known(val))) => {
-            match expr {
-                Instruction::CbrT { loc, .. } => {
-                    let should_jump = val.is_one();
-                    Some(if should_jump {
-                        Instruction::ImmJump(loc.clone())
-                    } else {
-                        Instruction::Skip(format!("{}", expr))
-                    })
-                }
-                Instruction::CbrF { loc, .. } => {
-                    let should_jump = val.is_zero();
-                    Some(if should_jump {
-                        Instruction::ImmJump(loc.clone())
-                    } else {
-                        Instruction::Skip(format!("{}", expr))
-                    })
-                }
-                _ => None,
+        (Some(ValueKind::Known(val)), None) | (None, Some(ValueKind::Known(val))) => match expr {
+            Instruction::CbrT { loc, .. } => {
+                let should_jump = val.is_one();
+                Some(if should_jump {
+                    Instruction::ImmJump(loc.clone())
+                } else {
+                    Instruction::Skip(format!("{}", expr))
+                })
             }
-        }
+            Instruction::CbrF { loc, .. } => {
+                let should_jump = val.is_zero();
+                Some(if should_jump {
+                    Instruction::ImmJump(loc.clone())
+                } else {
+                    Instruction::Skip(format!("{}", expr))
+                })
+            }
+            _ => None,
+        },
         _ => None,
     }
 }
 
 fn eval_instruction(
     expr: &Instruction,
-    const_map: &HashMap<Reg, ((usize, usize), ConstSemilat)>,
-) -> Option<(ConstSemilat, Instruction)> {
+    const_map: &HashMap<Reg, ((usize, usize), ValueKind)>,
+) -> Option<(ValueKind, Instruction)> {
     let (l, r) = expr.operands();
     let dst = expr.target_reg();
     match (
@@ -577,37 +582,37 @@ fn eval_instruction(
         (Some(n_val), Some(m_val), Some(dst)) => {
             // Can we fold this
             match (n_val, m_val) {
-                (ConstSemilat::Known(l), ConstSemilat::Known(r)) => expr.fold(l, r).map(|folded| {
-                    (ConstSemilat::Known(folded.operands().0.unwrap().clone_to_value()), folded)
+                (ValueKind::Known(l), ValueKind::Known(r)) => expr.fold(l, r).map(|folded| {
+                    (ValueKind::Known(folded.operands().0.unwrap().clone_to_value()), folded)
                 }),
-                (ConstSemilat::Known(c), ConstSemilat::Maybe) => {
+                (ValueKind::Known(c), ValueKind::Maybe) => {
                     if let Some(id) = expr.identity_with_const_prop_left(c) {
                         // modify instruction with a move
-                        Some((ConstSemilat::Maybe, expr.as_new_move_instruction(*id, *dst)))
+                        Some((ValueKind::Maybe, expr.as_new_move_instruction(*id, *dst)))
                     } else if matches!(expr, Instruction::Mult { .. } | Instruction::FMult { .. })
                         && c.is_zero()
                     {
                         Some((
-                            ConstSemilat::Known(Val::Integer(0)),
+                            ValueKind::Known(Val::Integer(0)),
                             Instruction::ImmLoad { src: Val::Integer(0), dst: *dst },
                         ))
                     } else {
-                        Some((ConstSemilat::Maybe, expr.as_immediate_instruction_left(c)?))
+                        Some((ValueKind::Maybe, expr.as_immediate_instruction_left(c)?))
                     }
                 }
-                (ConstSemilat::Maybe, ConstSemilat::Known(c)) => {
+                (ValueKind::Maybe, ValueKind::Known(c)) => {
                     if let Some(id) = expr.identity_with_const_prop_right(c) {
                         // modify instruction with a move
-                        Some((ConstSemilat::Maybe, expr.as_new_move_instruction(*id, *dst)))
+                        Some((ValueKind::Maybe, expr.as_new_move_instruction(*id, *dst)))
                     } else if matches!(expr, Instruction::Mult { .. } | Instruction::FMult { .. })
                         && c.is_zero()
                     {
                         Some((
-                            ConstSemilat::Known(Val::Integer(0)),
+                            ValueKind::Known(Val::Integer(0)),
                             Instruction::ImmLoad { src: Val::Integer(0), dst: *dst },
                         ))
                     } else {
-                        Some((ConstSemilat::Maybe, expr.as_immediate_instruction_right(c)?))
+                        Some((ValueKind::Maybe, expr.as_immediate_instruction_right(c)?))
                     }
                 }
                 _ => {
@@ -615,17 +620,16 @@ fn eval_instruction(
                     // This catches things like:
                     // `addI %vr3, 0 => %vr8`
                     expr.identity_register()
-                        .map(|id| (ConstSemilat::Maybe, expr.as_new_move_instruction(id, *dst)))
+                        .map(|id| (ValueKind::Maybe, expr.as_new_move_instruction(id, *dst)))
                 }
             }
         }
-        // USUALLY VAR REGISTERS
         // This is basically a move/copy
         (Some(val), None, Some(_)) => {
             // TODO: this may do nothing..
             match val {
-                ConstSemilat::Known(a) => {
-                    Some((ConstSemilat::Known(a.clone()), expr.fold_two_address(a)?))
+                ValueKind::Known(a) => {
+                    Some((ValueKind::Known(a.clone()), expr.fold_two_address(a)?))
                 }
                 _ => {
                     println!("{:?} {:?}", expr, val);
@@ -636,8 +640,8 @@ fn eval_instruction(
         (None, Some(val), Some(_)) => {
             // TODO: this may do nothing..
             match val {
-                ConstSemilat::Known(a) => {
-                    Some((ConstSemilat::Known(a.clone()), expr.fold_two_address(a)?))
+                ValueKind::Known(a) => {
+                    Some((ValueKind::Known(a.clone()), expr.fold_two_address(a)?))
                 }
                 _ => {
                     println!("{:?} {:?}", expr, val);
@@ -656,7 +660,7 @@ fn eval_instruction(
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ConstSemilat {
+pub enum ValueKind {
     /// T = maybe knowable (phi, or unknown)
     Maybe,
     /// C = constant
@@ -668,32 +672,32 @@ pub enum ConstSemilat {
 pub struct ConstMap {
     /// Register to a set of block index, instruction index.
     use_to_inst: HashMap<Reg, HashSet<(usize, usize)>>,
-    defined: HashMap<Reg, ((usize, usize), ConstSemilat)>,
+    defined: HashMap<Reg, ((usize, usize), ValueKind)>,
 }
 
 impl ConstMap {
-    pub fn add_def(&mut self, reg: Reg, val: ConstSemilat, blk_inst: (usize, usize)) {
+    pub fn add_def(&mut self, reg: Reg, val: ValueKind, blk_inst: (usize, usize)) {
         match &val {
-            ConstSemilat::Maybe => {
+            ValueKind::Maybe => {
                 // TODO: is T ∧ T = ⊥
                 self.defined.insert(reg, (blk_inst, val));
             }
-            curr @ ConstSemilat::Known(..) => {
+            curr @ ValueKind::Known(..) => {
                 match self.defined.entry(reg).or_insert_with(|| (blk_inst, val.clone())) {
                     // T ∧ x = x  ∀x
-                    (_, old @ ConstSemilat::Maybe) => {
+                    (_, old @ ValueKind::Maybe) => {
                         *old = val;
                     }
                     // ci ∧ cj = ⊥ if ci != cj
-                    (_, old @ ConstSemilat::Known(..)) if &*old != curr => {
-                        *old = ConstSemilat::Unknowable
+                    (_, old @ ValueKind::Known(..)) if &*old != curr => {
+                        *old = ValueKind::Unknowable
                     }
                     // ci ∧ cj = ci if ci = cj
                     _ => {}
                 }
             }
             // ⊥ ∧ x = ⊥  ∀x
-            ConstSemilat::Unknowable => {
+            ValueKind::Unknowable => {
                 self.defined.insert(reg, (blk_inst, val));
             }
         }
@@ -704,14 +708,23 @@ impl ConstMap {
     }
 }
 
-fn const_fold(
-    worklist: &mut VecDeque<(Reg, ((usize, usize), ConstSemilat))>,
-    const_vals: &mut ConstMap,
-    func: &mut Function,
-) {
-    while let Some((n, ((n_blk, n_inst), _val))) = worklist.pop_front() {
+pub struct WorkStuff {
+    register: Reg,
+    block_inst: (usize, usize),
+}
+
+impl WorkStuff {
+    pub fn new(register: Reg, block: usize, instr: usize) -> Self {
+        Self { register, block_inst: (block, instr) }
+    }
+}
+
+fn const_fold(worklist: &mut VecDeque<WorkStuff>, const_vals: &mut ConstMap, func: &mut Function) {
+    while let Some(WorkStuff { register: n_reg, block_inst: (n_blk, n_inst), .. }) =
+        worklist.pop_front()
+    {
         // TODO: not great cloning this whole use_to_inst map...
-        for (blk, inst) in const_vals.use_to_inst.get(&n).cloned().unwrap_or_default() {
+        for (blk, inst) in const_vals.use_to_inst.get(&n_reg).cloned().unwrap_or_default() {
             let Some(m) = func.blocks[blk].instructions[inst].target_reg().copied() else {
                 let Some(folded) = eval_jump(&func.blocks[blk].instructions[inst], &const_vals.defined) else {
                     continue;
@@ -726,8 +739,8 @@ fn const_fold(
                 continue;
             };
             let ((mb, mi), m_val) =
-                const_vals.defined.entry(m).or_insert(((blk, inst), ConstSemilat::Maybe)).clone();
-            if !matches!(m_val, ConstSemilat::Unknowable) {
+                const_vals.defined.entry(m).or_insert(((blk, inst), ValueKind::Maybe)).clone();
+            if !matches!(m_val, ValueKind::Unknowable) {
                 let Some((new, folded)) =
                     eval_instruction(&func.blocks[mb].instructions[mi], &const_vals.defined) else {
                         continue;
@@ -743,7 +756,12 @@ fn const_fold(
                 func.blocks[mb].instructions[mi] = folded;
 
                 if m_val != new {
-                    worklist.push_back((m, ((blk, inst), new)));
+                    worklist.push_back(WorkStuff::new(m, blk, inst));
+                }
+            }
+        }
+    }
+}
                 }
             }
         }
@@ -765,23 +783,24 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         let mut stack = VecDeque::new();
         dom_val_num(&mut func.blocks, 0, &mut meta, &dtree, &mut stack);
 
+        // TODO: move this and `const_fold` into `dom_val_num` so we aren't repeating
+        // the work...
         let mut worklist = VecDeque::default();
         let mut const_vals = ConstMap::default();
         for (b, block) in func.blocks.iter().enumerate() {
             for (i, inst) in block.instructions.iter().enumerate() {
                 if let Some(dst) = inst.target_reg() {
                     if inst.is_load_imm() {
-                        let latice =
-                            ConstSemilat::Known(inst.operands().0.unwrap().clone_to_value());
+                        let latice = ValueKind::Known(inst.operands().0.unwrap().clone_to_value());
                         const_vals.add_def(*dst, latice.clone(), (b, i));
-                        worklist.push_back((*dst, ((b, i), latice)));
+                        worklist.push_back(WorkStuff::new(*dst, b, i));
                     } else if inst.is_store()
                     // TODO: any way around this PLEASE...
                         || matches!(inst, Instruction::I2I { .. } | Instruction::I2F { .. })
                     {
-                        const_vals.add_def(*dst, ConstSemilat::Unknowable, (b, i))
+                        const_vals.add_def(*dst, ValueKind::Unknowable, (b, i))
                     } else {
-                        const_vals.add_def(*dst, ConstSemilat::Maybe, (b, i))
+                        const_vals.add_def(*dst, ValueKind::Maybe, (b, i))
                     }
                 }
                 match inst.operands() {
