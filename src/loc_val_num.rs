@@ -162,6 +162,8 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
             }
             // Jumps, rets, push, and I/O instructions
             (Some(_src), None, None) => {}
+            // Conditional branch with (cbr_GT, etc)
+            (Some(_a), Some(_b), None) => {}
             // No operands or target
             (None, None, None) => {}
             // All other combinations are invalid
@@ -241,6 +243,16 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
                     used_reg.insert(src, 1);
                 }
                 // There is no register to remove so continue
+                continue;
+            }
+            // Conditional branch with (cbr_GT, etc)
+            (Some(right), Some(left), None) => {
+                if matches!(left, Operand::Register(..)) {
+                    used_reg.insert(left, 1);
+                }
+                if matches!(right, Operand::Register(..)) {
+                    used_reg.insert(right, 1);
+                }
                 continue;
             }
             // No operands or target
