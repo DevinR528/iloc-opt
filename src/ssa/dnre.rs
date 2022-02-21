@@ -83,6 +83,24 @@ pub fn dom_val_num(
             rewrite_name(b, meta);
         }
 
+        // Rename registers that don't fit neatly into th operands category
+        match op {
+            Instruction::Call { args, .. } | Instruction::ImmCall { args, .. } => {
+                for arg in args {
+                    let Some(meta) = meta.get(&Operand::Register(*arg)) else { continue; };
+                    rewrite_name(arg, meta);
+                }
+            }
+            Instruction::Store { dst, .. }
+            | Instruction::StoreAdd { dst, .. }
+            | Instruction::StoreAddImm { dst, .. } => {
+                if let Some(meta) = meta.get(&Operand::Register(*dst)) {
+                    rewrite_name(dst, meta);
+                }
+            }
+            _ => {}
+        }
+
         // This needs to run before we bail out for calls/stores, stuff like that...
         if let Some(dst) = op.target_reg_mut() {
             if let Some(meta) = meta.get_mut(&Operand::Register(*dst)) {

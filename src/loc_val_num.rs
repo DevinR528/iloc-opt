@@ -255,12 +255,16 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
                 }
                 continue;
             }
+            // Call expressions with return can have this
+            (None, None, Some(..)) => {
+                continue;
+            }
             // No operands or target
             (None, None, None) => {
                 continue;
             }
             // All other combinations are invalid
-            _ => unreachable!(),
+            expr => unreachable!("{:?}", expr),
         }
 
         let dst = dst.unwrap();

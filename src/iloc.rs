@@ -1106,12 +1106,12 @@ impl Instruction {
             Instruction::FLoadAddImm { dst, .. } => Some(dst),
             Instruction::FLoadAdd { dst, .. } => Some(dst),
             // Stores
-            Instruction::Store { dst, .. } => Some(dst),
-            Instruction::StoreAddImm { dst, .. } => Some(dst),
-            Instruction::StoreAdd { dst, .. } => Some(dst),
-            Instruction::IWrite(dst) => Some(dst),
-            Instruction::SWrite(dst) => Some(dst),
-            Instruction::FWrite(dst) => Some(dst),
+            // Instruction::Store { dst, .. } => Some(dst),
+            // Instruction::StoreAddImm { dst, .. } => Some(dst),
+            // Instruction::StoreAdd { dst, .. } => Some(dst),
+            // Instruction::IWrite(dst) => Some(dst),
+            // Instruction::SWrite(dst) => Some(dst),
+            // Instruction::FWrite(dst) => Some(dst),
             Instruction::IRead(dst) => Some(dst),
             Instruction::FRead(dst) => Some(dst),
             // The phi instruction needs to return the original register
@@ -1143,9 +1143,9 @@ impl Instruction {
             Instruction::Load { dst, .. } => Some(dst),
             Instruction::LoadAddImm { dst, .. } => Some(dst),
             Instruction::LoadAdd { dst, .. } => Some(dst),
-            Instruction::Store { dst, .. } => Some(dst),
-            Instruction::StoreAddImm { dst, .. } => Some(dst),
-            Instruction::StoreAdd { dst, .. } => Some(dst),
+            // Instruction::Store { dst, .. } => Some(dst),
+            // Instruction::StoreAddImm { dst, .. } => Some(dst),
+            // Instruction::StoreAdd { dst, .. } => Some(dst),
             Instruction::CmpLT { dst, .. } => Some(dst),
             Instruction::CmpLE { dst, .. } => Some(dst),
             Instruction::CmpGT { dst, .. } => Some(dst),
@@ -1170,9 +1170,9 @@ impl Instruction {
             Instruction::FLoad { dst, .. } => Some(dst),
             Instruction::FLoadAddImm { dst, .. } => Some(dst),
             Instruction::FLoadAdd { dst, .. } => Some(dst),
-            Instruction::IWrite(dst) => Some(dst),
-            Instruction::SWrite(dst) => Some(dst),
-            Instruction::FWrite(dst) => Some(dst),
+            // Instruction::IWrite(dst) => Some(dst),
+            // Instruction::SWrite(dst) => Some(dst),
+            // Instruction::FWrite(dst) => Some(dst),
             Instruction::IRead(dst) => Some(dst),
             Instruction::FRead(dst) => Some(dst),
             _ => None,
@@ -1231,7 +1231,9 @@ impl Instruction {
             Instruction::LoadAdd { src, add, .. } => {
                 (Some(Operand::Register(*src)), Some(Operand::Register(*add)))
             }
-            Instruction::Store { src, .. } => (Some(Operand::Register(*src)), None),
+            Instruction::Store { src, dst } => {
+                (Some(Operand::Register(*src)), Some(Operand::Register(*dst)))
+            }
             Instruction::StoreAddImm { src, add, .. } => {
                 (Some(Operand::Register(*src)), Some(Operand::Value(add.clone())))
             }
@@ -1337,12 +1339,14 @@ impl Instruction {
             Instruction::ImmLShift { src, konst: _, .. } => (Some(src), None),
             Instruction::ImmRShift { src, konst: _, .. } => (Some(src), None),
             Instruction::Load { src, .. } => (Some(src), None),
-            Instruction::LoadAddImm { src, add: _, .. } => (Some(src), None),
+            Instruction::LoadAddImm { src, .. } => (Some(src), None),
             Instruction::LoadAdd { src, add, .. } => (Some(src), Some(add)),
             Instruction::Store { src, .. } => (Some(src), None),
-            Instruction::StoreAddImm { src, add: _, .. } => (Some(src), None),
+            Instruction::StoreAddImm { src, .. } => (Some(src), None),
             Instruction::StoreAdd { src, add, .. } => (Some(src), Some(add)),
-            Instruction::IWrite(r) | Instruction::FWrite(r) => (Some(r), None),
+            Instruction::IWrite(r) | Instruction::SWrite(r) | Instruction::FWrite(r) => {
+                (Some(r), None)
+            }
             Instruction::CmpLT { a, b, .. } => (Some(a), Some(b)),
             Instruction::CmpLE { a, b, .. } => (Some(a), Some(b)),
             Instruction::CmpGT { a, b, .. } => (Some(a), Some(b)),
