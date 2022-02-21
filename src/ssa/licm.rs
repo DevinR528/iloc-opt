@@ -1,33 +1,12 @@
 use std::{
-    collections::{
-        btree_map::Entry, hash_map::RandomState, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque,
-    },
+    collections::{btree_map::Entry, BTreeMap, BTreeSet},
     vec,
 };
 
-use crate::{iloc::Function, ssa::DominatorTree};
-
-fn reverse_postoder(succs: &HashMap<String, BTreeSet<String>>) -> impl Iterator<Item = &str> + '_ {
-    let mut stack = VecDeque::from_iter([".L_main"]);
-    let mut seen = HashSet::<_, RandomState>::from_iter([".L_main"]);
-    std::iter::from_fn(move || {
-        let val = stack.pop_front()?;
-        if let Some(set) = succs.get(val) {
-            for children in set {
-                if seen.contains(children.as_str()) {
-                    continue;
-                }
-                stack.push_back(children)
-            }
-        }
-        if seen.contains(val) {
-            // return stack.pop_front();
-        }
-        seen.insert(val);
-
-        Some(val)
-    })
-}
+use crate::{
+    iloc::Function,
+    ssa::{reverse_postoder, DominatorTree},
+};
 
 #[derive(Debug)]
 pub enum LoopInfo {

@@ -1,6 +1,6 @@
 use std::{
     cell::Cell,
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+    collections::{hash_map::RandomState, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
 };
 
 use crate::iloc::{Block, Function, IlocProgram, Instruction, Operand};
@@ -29,6 +29,30 @@ fn print_blocks(blocks: &[Block]) {
         }
         println!("]");
     }
+}
+
+pub fn reverse_postoder(
+    succs: &HashMap<String, BTreeSet<String>>,
+) -> impl Iterator<Item = &str> + '_ {
+    let mut stack = VecDeque::from_iter([".L_main"]);
+    let mut seen = HashSet::<_, RandomState>::from_iter([".L_main"]);
+    std::iter::from_fn(move || {
+        let val = stack.pop_front()?;
+        if let Some(set) = succs.get(val) {
+            for children in set {
+                if seen.contains(children.as_str()) {
+                    continue;
+                }
+                stack.push_back(children)
+            }
+        }
+        if seen.contains(val) {
+            // return stack.pop_front();
+        }
+        seen.insert(val);
+
+        Some(val)
+    })
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -278,13 +302,15 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
             }
         }
     }
-    let mut ctrl_dep_map = HashMap::with_capacity(blocks_label.len());
-    for (to, set) in &dom_frontier_map {
-        for from in set {
-            ctrl_dep_map
-                .entry(from.to_string())
-                .or_insert_with(BTreeSet::new)
-                .insert(to.to_string());
+
+    println!("{:#?}", idom_map);
+
+    let mut ctrl_dep_map = HashMap::<_, BTreeSet<_>>::with_capacity(blocks_label.len());
+    for node in reverse_postoder(&cfg_succs_map).collect::<Vec<_>>().iter().rev() {
+        for pred in cfg_preds_map.get(*node).unwrap_or(&BTreeSet::new()) {
+            // if dom_succs_map.get(pred).map_or(false, |set| set.contains(*node)) {
+            ctrl_dep_map.entry(node.to_string()).or_default().insert(pred.to_string());
+            // }
         }
     }
 
@@ -468,7 +494,7 @@ fn ssa_cfg_trap() {
 
     use crate::iloc::{make_blks, parse_text};
 
-    let input = fs::read_to_string("input/dumb.il").unwrap();
+    let input = fs::read_to_string("input/turd.il").unwrap();
     let iloc = parse_text(&input).unwrap();
     let mut blocks = make_blks(iloc, true);
 
@@ -477,9 +503,9 @@ fn ssa_cfg_trap() {
 
     println!("{:?}", cfg);
     println!("{:#?}", dom);
-    emit_cfg_viz(&cfg, "dumb.dot");
+    // emit_cfg_viz(&cfg, "turd.dot");
 
-    dominator_tree(&cfg, &mut blocks.functions[0].blocks);
+    // dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }
 
 #[allow(unused)]
