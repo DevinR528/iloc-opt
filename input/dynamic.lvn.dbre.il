@@ -12,433 +12,433 @@
     loadI 0 => %vr9
     loadI 1 => %vr10
     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
+    # [lvn unused]     loadI -4 => %vr12
     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 0 => %vr14
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 0 => %vr14
     loadI 4 => %vr15
-    # [lvn]     loadI 0 => %vr16
+    # [lvn unused]     loadI 0 => %vr16
     i2i %vr13 => %vr17
     store %vr9 => %vr17
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
     loadI 2 => %vr18
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 1 => %vr19
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 4 => %vr20
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 1 => %vr19
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 4 => %vr20
     subI %vr13, 4 => %vr21
     store %vr10 => %vr21
-    # [lvn]     loadI 2 => %vr18
+    # [lvn ==]     loadI 2 => %vr18
     loadI 3 => %vr22
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 2 => %vr23
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 8 => %vr24
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 2 => %vr23
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 8 => %vr24
     subI %vr13, 8 => %vr25
     store %vr18 => %vr25
-    # [lvn]     loadI 3 => %vr22
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 3 => %vr26
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 12 => %vr27
+    # [lvn ==]     loadI 3 => %vr22
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 3 => %vr26
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 12 => %vr27
     subI %vr13, 12 => %vr28
     store %vr22 => %vr28
-    # [lvn]     loadI 4 => %vr15
+    # [lvn ==]     loadI 4 => %vr15
     loadI 5 => %vr29
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 4 => %vr30
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 16 => %vr31
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 4 => %vr30
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 16 => %vr31
     subI %vr13, 16 => %vr32
     store %vr15 => %vr32
-    # [lvn]     loadI 5 => %vr29
+    # [lvn ==]     loadI 5 => %vr29
     loadI 6 => %vr33
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 5 => %vr34
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 20 => %vr35
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 5 => %vr34
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 20 => %vr35
     subI %vr13, 20 => %vr36
     store %vr29 => %vr36
-    # [lvn]     loadI 6 => %vr33
+    # [lvn ==]     loadI 6 => %vr33
     loadI 7 => %vr37
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 6 => %vr38
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 24 => %vr39
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 6 => %vr38
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 24 => %vr39
     subI %vr13, 24 => %vr40
     store %vr33 => %vr40
-    # [lvn]     loadI 7 => %vr37
+    # [lvn ==]     loadI 7 => %vr37
     loadI 8 => %vr41
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 7 => %vr42
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 28 => %vr43
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 7 => %vr42
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 28 => %vr43
     subI %vr13, 28 => %vr44
     store %vr37 => %vr44
-    # [lvn]     loadI 8 => %vr41
+    # [lvn ==]     loadI 8 => %vr41
     loadI 9 => %vr45
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 8 => %vr46
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 32 => %vr47
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 8 => %vr46
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 32 => %vr47
     subI %vr13, 32 => %vr48
     store %vr41 => %vr48
-    # [lvn]     loadI 9 => %vr45
-    # [lvn]     loadI 10 => %vr49
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 9 => %vr50
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 36 => %vr51
+    # [lvn ==]     loadI 9 => %vr45
+    # [lvn unused]     loadI 10 => %vr49
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 9 => %vr50
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 36 => %vr51
     subI %vr13, 36 => %vr52
     store %vr45 => %vr52
-    # [lvn]     loadI 8 => %vr41
+    # [lvn ==]     loadI 8 => %vr41
     loadI 11 => %vr53
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 10 => %vr54
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 40 => %vr55
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 10 => %vr54
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 40 => %vr55
     subI %vr13, 40 => %vr56
     store %vr41 => %vr56
-    # [lvn]     loadI 7 => %vr37
-    # [lvn]     loadI 12 => %vr57
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 11 => %vr58
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 44 => %vr59
+    # [lvn ==]     loadI 7 => %vr37
+    # [lvn unused]     loadI 12 => %vr57
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 11 => %vr58
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 44 => %vr59
     subI %vr13, 44 => %vr60
     store %vr37 => %vr60
-    # [lvn]     loadI 6 => %vr33
-    # [lvn]     loadI 13 => %vr61
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 12 => %vr62
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 48 => %vr63
+    # [lvn ==]     loadI 6 => %vr33
+    # [lvn unused]     loadI 13 => %vr61
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 12 => %vr62
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 48 => %vr63
     subI %vr13, 48 => %vr64
     store %vr33 => %vr64
-    # [lvn]     loadI 5 => %vr29
-    # [lvn]     loadI 14 => %vr65
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 13 => %vr66
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 52 => %vr67
+    # [lvn ==]     loadI 5 => %vr29
+    # [lvn unused]     loadI 14 => %vr65
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 13 => %vr66
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 52 => %vr67
     subI %vr13, 52 => %vr68
     store %vr29 => %vr68
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 15 => %vr69
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 14 => %vr70
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 56 => %vr71
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 15 => %vr69
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 14 => %vr70
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 56 => %vr71
     subI %vr13, 56 => %vr72
     store %vr15 => %vr72
-    # [lvn]     loadI 3 => %vr22
-    # [lvn]     loadI 16 => %vr73
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 15 => %vr74
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 60 => %vr75
+    # [lvn ==]     loadI 3 => %vr22
+    # [lvn unused]     loadI 16 => %vr73
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 15 => %vr74
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 60 => %vr75
     subI %vr13, 60 => %vr76
     store %vr22 => %vr76
-    # [lvn]     loadI 2 => %vr18
-    # [lvn]     loadI 17 => %vr77
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 16 => %vr78
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 64 => %vr79
+    # [lvn ==]     loadI 2 => %vr18
+    # [lvn unused]     loadI 17 => %vr77
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 16 => %vr78
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 64 => %vr79
     subI %vr13, 64 => %vr80
     store %vr18 => %vr80
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 18 => %vr81
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 17 => %vr82
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 68 => %vr83
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 18 => %vr81
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 17 => %vr82
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 68 => %vr83
     subI %vr13, 68 => %vr84
     store %vr10 => %vr84
-    # [lvn]     loadI 0 => %vr9
-    # [lvn]     loadI 19 => %vr85
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 18 => %vr86
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 72 => %vr87
+    # [lvn ==]     loadI 0 => %vr9
+    # [lvn unused]     loadI 19 => %vr85
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 18 => %vr86
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 72 => %vr87
     subI %vr13, 72 => %vr88
     store %vr9 => %vr88
-    # [lvn]     loadI 0 => %vr9
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
+    # [lvn ==]     loadI 0 => %vr9
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn unused]     loadI -80 => %vr89
     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 0 => %vr14
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 0 => %vr16
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 0 => %vr14
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 0 => %vr16
     i2i %vr90 => %vr91
     store %vr9 => %vr91
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 2 => %vr18
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 1 => %vr19
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 4 => %vr20
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     loadI 2 => %vr18
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 1 => %vr19
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 4 => %vr20
     subI %vr90, 4 => %vr92
     store %vr10 => %vr92
-    # [lvn]     loadI 3 => %vr22
-    # [lvn]     loadI 3 => %vr22
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 2 => %vr23
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 8 => %vr24
+    # [lvn ==]     loadI 3 => %vr22
+    # [lvn ==]     loadI 3 => %vr22
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 2 => %vr23
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 8 => %vr24
     subI %vr90, 8 => %vr93
     store %vr22 => %vr93
-    # [lvn]     loadI 5 => %vr29
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 3 => %vr26
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 12 => %vr27
+    # [lvn ==]     loadI 5 => %vr29
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 3 => %vr26
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 12 => %vr27
     subI %vr90, 12 => %vr94
     store %vr29 => %vr94
-    # [lvn]     loadI 7 => %vr37
-    # [lvn]     loadI 5 => %vr29
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 4 => %vr30
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 16 => %vr31
+    # [lvn ==]     loadI 7 => %vr37
+    # [lvn ==]     loadI 5 => %vr29
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 4 => %vr30
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 16 => %vr31
     subI %vr90, 16 => %vr95
     store %vr37 => %vr95
-    # [lvn]     loadI 9 => %vr45
-    # [lvn]     loadI 6 => %vr33
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 5 => %vr34
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 20 => %vr35
+    # [lvn ==]     loadI 9 => %vr45
+    # [lvn ==]     loadI 6 => %vr33
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 5 => %vr34
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 20 => %vr35
     subI %vr90, 20 => %vr96
     store %vr45 => %vr96
-    # [lvn]     loadI 11 => %vr53
-    # [lvn]     loadI 7 => %vr37
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 6 => %vr38
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 24 => %vr39
+    # [lvn ==]     loadI 11 => %vr53
+    # [lvn ==]     loadI 7 => %vr37
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 6 => %vr38
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 24 => %vr39
     subI %vr90, 24 => %vr97
     store %vr53 => %vr97
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 8 => %vr41
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 7 => %vr42
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 28 => %vr43
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn ==]     loadI 8 => %vr41
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 7 => %vr42
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 28 => %vr43
     subI %vr90, 28 => %vr98
     store %vr15 => %vr98
-    # [lvn]     loadI 3 => %vr22
-    # [lvn]     loadI 9 => %vr45
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 8 => %vr46
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 32 => %vr47
+    # [lvn ==]     loadI 3 => %vr22
+    # [lvn ==]     loadI 9 => %vr45
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 8 => %vr46
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 32 => %vr47
     subI %vr90, 32 => %vr99
     store %vr22 => %vr99
-    # [lvn]     loadI 2 => %vr18
-    # [lvn]     loadI 10 => %vr49
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 9 => %vr50
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 36 => %vr51
+    # [lvn ==]     loadI 2 => %vr18
+    # [lvn ==]     loadI 10 => %vr49
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 9 => %vr50
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 36 => %vr51
     subI %vr90, 36 => %vr100
     store %vr18 => %vr100
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 11 => %vr53
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 10 => %vr54
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 40 => %vr55
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     loadI 11 => %vr53
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 10 => %vr54
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 40 => %vr55
     subI %vr90, 40 => %vr101
     store %vr10 => %vr101
-    # [lvn]     loadI 9 => %vr45
-    # [lvn]     loadI 12 => %vr57
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 11 => %vr58
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 44 => %vr59
+    # [lvn ==]     loadI 9 => %vr45
+    # [lvn ==]     loadI 12 => %vr57
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 11 => %vr58
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 44 => %vr59
     subI %vr90, 44 => %vr102
     store %vr45 => %vr102
-    # [lvn]     loadI 8 => %vr41
-    # [lvn]     loadI 13 => %vr61
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 12 => %vr62
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 48 => %vr63
+    # [lvn ==]     loadI 8 => %vr41
+    # [lvn ==]     loadI 13 => %vr61
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 12 => %vr62
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 48 => %vr63
     subI %vr90, 48 => %vr103
     store %vr41 => %vr103
-    # [lvn]     loadI 7 => %vr37
-    # [lvn]     loadI 14 => %vr65
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 13 => %vr66
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 52 => %vr67
+    # [lvn ==]     loadI 7 => %vr37
+    # [lvn ==]     loadI 14 => %vr65
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 13 => %vr66
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 52 => %vr67
     subI %vr90, 52 => %vr104
     store %vr37 => %vr104
-    # [lvn]     loadI 6 => %vr33
-    # [lvn]     loadI 15 => %vr69
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 14 => %vr70
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 56 => %vr71
+    # [lvn ==]     loadI 6 => %vr33
+    # [lvn ==]     loadI 15 => %vr69
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 14 => %vr70
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 56 => %vr71
     subI %vr90, 56 => %vr105
     store %vr33 => %vr105
-    # [lvn]     loadI 0 => %vr9
-    # [lvn]     loadI 16 => %vr73
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
-    # [lvn]     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     loadI 15 => %vr74
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     loadI 60 => %vr75
+    # [lvn ==]     loadI 0 => %vr9
+    # [lvn ==]     loadI 16 => %vr73
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -80 => %vr89
+    # [lvn ==]     addI %vr11, -80 => %vr90
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 15 => %vr74
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 60 => %vr75
     subI %vr90, 60 => %vr106
     store %vr9 => %vr106
     loadI 20 => %vr107
     i2i %vr107 => %vr8
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
     i2i %vr10 => %vr4
-    # [lvn]     loadI 1 => %vr10
-    addI %vr4, 1 => %vr108
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
-    # [lvn]     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    subI %vr108, 1 => %vr109
-    # [lvn]     loadI 4 => %vr15
-    multI %vr109, 4 => %vr110
-    sub %vr13, %vr110 => %vr111
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 2 => %vr108
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -4 => %vr12
+    # [lvn ==]     addI %vr11, -4 => %vr13
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 1 => %vr109
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn unused]     loadI 4 => %vr110
+    i2i %vr21 => %vr111
     load %vr111 => %vr112
-    # [lvn]     loadI 0 => %vr9
+    # [lvn ==]     loadI 0 => %vr9
     # [lvn]     comp %vr112, %vr9 => %vr113
     # [lvn]     testeq %vr113 => %vr114
     cbr_EQ %vr112, %vr9 -> .L0
 .L1: nop
-    # [lvn]     loadI 1 => %vr10
+    # [lvn unused]     loadI 1 => %vr10
     subI %vr4, 1 => %vr115
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
     i2i %vr8 => %vr116
     add %vr116, %vr4 => %vr117
     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
+    # [lvn unused]     loadI -144 => %vr118
     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
     subI %vr117, 1 => %vr120
-    # [lvn]     loadI 4 => %vr15
+    # [lvn unused]     loadI 4 => %vr15
     multI %vr120, 4 => %vr121
     sub %vr119, %vr121 => %vr122
     store %vr115 => %vr122
-    # [lvn]     loadI 1 => %vr10
-    # [ssa]     addI %vr4, 1 => %vr108
+    # [lvn ==]     loadI 1 => %vr10
+    addI %vr4, 1 => %vr108
     i2i %vr108 => %vr4
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     addI %vr4, 1 => %vr108
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     addI %vr4, 1 => %vr108
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn unused]     loadI -4 => %vr12
     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
     subI %vr108, 1 => %vr109
-    # [lvn]     loadI 4 => %vr15
+    # [lvn ==]     loadI 4 => %vr15
     multI %vr109, 4 => %vr110
     sub %vr13, %vr110 => %vr111
     load %vr111 => %vr112
@@ -447,49 +447,50 @@
     # [lvn]     testne %vr113 => %vr114
     cbr_NE %vr112, %vr9 -> .L1
 .L0: nop
+    # [meaningless phi] # phi(%vr4_1)
     # [ssa]     loadI 1 => %vr10
     i2i %vr10 => %vr5
-    # [lvn]     loadI 1 => %vr10
-    addI %vr5, 1 => %vr123
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 2 => %vr123
     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
+    # [lvn unused]     loadI -80 => %vr89
     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    subI %vr123, 1 => %vr124
-    # [lvn]     loadI 4 => %vr15
-    multI %vr124, 4 => %vr125
-    sub %vr90, %vr125 => %vr126
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn unused]     loadI 1 => %vr124
+    # [lvn unused]     loadI 4 => %vr15
+    # [lvn unused]     loadI 4 => %vr125
+    subI %vr90, 4 => %vr126
     load %vr126 => %vr127
     # [ssa]     loadI 0 => %vr9
     # [lvn]     comp %vr127, %vr9 => %vr128
     # [lvn]     testeq %vr128 => %vr129
     cbr_EQ %vr127, %vr9 -> .L2
 .L3: nop
-    # [lvn]     loadI 1 => %vr10
+    # [lvn unused]     loadI 1 => %vr10
     subI %vr5, 1 => %vr130
     mult %vr5, %vr8 => %vr131
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
     addI %vr131, 1 => %vr132
     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
+    # [lvn unused]     loadI -144 => %vr118
     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
     subI %vr132, 1 => %vr133
-    # [lvn]     loadI 4 => %vr15
+    # [lvn unused]     loadI 4 => %vr15
     multI %vr133, 4 => %vr134
     sub %vr119, %vr134 => %vr135
     store %vr130 => %vr135
-    # [lvn]     loadI 1 => %vr10
-    # [ssa]     addI %vr5, 1 => %vr123
+    # [lvn ==]     loadI 1 => %vr10
+    addI %vr5, 1 => %vr123
     i2i %vr123 => %vr5
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     addI %vr5, 1 => %vr123
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     addI %vr5, 1 => %vr123
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn unused]     loadI -80 => %vr89
     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
     subI %vr123, 1 => %vr124
-    # [lvn]     loadI 4 => %vr15
+    # [lvn ==]     loadI 4 => %vr15
     multI %vr124, 4 => %vr125
     sub %vr90, %vr125 => %vr126
     load %vr126 => %vr127
@@ -498,220 +499,242 @@
     # [lvn]     testne %vr128 => %vr129
     cbr_NE %vr127, %vr9 -> .L3
 .L2: nop
+    # [meaningless phi] # phi(%vr5_1)
     # [ssa]     loadI 2 => %vr18
     i2i %vr18 => %vr6
     # [lvn]     comp %vr6, %vr5 => %vr136
     # [lvn]     testgt %vr136 => %vr137
     cbr_GT %vr6, %vr5 -> .L4
 .L5: nop
+    # [meaningless phi] # phi(%vr167_2)
+    # [meaningless phi] # phi(%vr152_2)
+    # [meaningless phi] # phi(%vr6_2)
+    # [meaningless phi] # phi(%vr175_2)
+    # [meaningless phi] # phi(%vr7_2)
     # [ssa]     loadI 2 => %vr18
     i2i %vr18 => %vr7
     # [lvn]     comp %vr7, %vr4 => %vr138
     # [lvn]     testgt %vr138 => %vr139
     cbr_GT %vr7, %vr4 -> .L6
 .L7: nop
-    # [lvn]     loadI 1 => %vr10
+    # [meaningless phi] # phi(%vr175_4)
+    # [meaningless phi] # phi(%vr7_5)
+    # [meaningless phi] # phi(%vr167_4)
+    # [meaningless phi] # phi(%vr152_4)
+    # [lvn unused]     loadI 1 => %vr10
     subI %vr6, 1 => %vr140
     mult %vr140, %vr8 => %vr141
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
     subI %vr7, 1 => %vr142
     add %vr141, %vr142 => %vr143
     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
+    # [lvn unused]     loadI -144 => %vr118
     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
     subI %vr143, 1 => %vr144
-    # [lvn]     loadI 4 => %vr15
+    # [lvn unused]     loadI 4 => %vr15
     multI %vr144, 4 => %vr145
     sub %vr119, %vr145 => %vr146
     load %vr146 => %vr147
     mult %vr6, %vr8 => %vr148
     add %vr148, %vr7 => %vr149
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
-    # [lvn]     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -144 => %vr118
+    # [lvn ==]     addI %vr11, -144 => %vr119
+    # [lvn ==]     loadI 1 => %vr10
     subI %vr149, 1 => %vr150
-    # [lvn]     loadI 4 => %vr15
+    # [lvn ==]     loadI 4 => %vr15
     multI %vr150, 4 => %vr151
     sub %vr119, %vr151 => %vr152
     store %vr147 => %vr152
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -80 => %vr89
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn unused]     loadI -80 => %vr89
     addI %vr11, -80 => %vr90
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     subI %vr6, 1 => %vr140
-    # [lvn]     loadI 4 => %vr15
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     subI %vr6, 1 => %vr140
+    # [lvn ==]     loadI 4 => %vr15
     multI %vr140, 4 => %vr153
     sub %vr90, %vr153 => %vr154
     load %vr154 => %vr155
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -4 => %vr12
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn unused]     loadI -4 => %vr12
     addI %vr11, -4 => %vr13
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     subI %vr7, 1 => %vr142
-    # [lvn]     loadI 4 => %vr15
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     subI %vr7, 1 => %vr142
+    # [lvn ==]     loadI 4 => %vr15
     multI %vr142, 4 => %vr156
     sub %vr13, %vr156 => %vr157
     load %vr157 => %vr158
     # [lvn]     comp %vr155, %vr158 => %vr159
     # [lvn]     testne %vr159 => %vr160
     cbr_EQ %vr155, %vr158 -> .L8
-    # [lvn]     mult %vr6, %vr8 => %vr148
-    # [lvn]     add %vr148, %vr7 => %vr149
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
-    # [lvn]     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     subI %vr149, 1 => %vr150
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     multI %vr150, 4 => %vr151
-    # [lvn]     sub %vr119, %vr151 => %vr152
+    # [lvn ==]     mult %vr6, %vr8 => %vr148
+    # [lvn ==]     add %vr148, %vr7 => %vr149
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -144 => %vr118
+    # [lvn ==]     addI %vr11, -144 => %vr119
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     subI %vr149, 1 => %vr150
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn ==]     multI %vr150, 4 => %vr151
+    # [lvn ==]     sub %vr119, %vr151 => %vr152
     load %vr152 => %vr161
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
     addI %vr161, 1 => %vr162
-    # [lvn]     mult %vr6, %vr8 => %vr148
-    # [lvn]     add %vr148, %vr7 => %vr149
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
-    # [lvn]     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     subI %vr149, 1 => %vr150
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     multI %vr150, 4 => %vr151
-    # [lvn]     sub %vr119, %vr151 => %vr152
+    # [lvn ==]     mult %vr6, %vr8 => %vr148
+    # [lvn ==]     add %vr148, %vr7 => %vr149
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -144 => %vr118
+    # [lvn ==]     addI %vr11, -144 => %vr119
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     subI %vr149, 1 => %vr150
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn ==]     multI %vr150, 4 => %vr151
+    # [lvn ==]     sub %vr119, %vr151 => %vr152
     store %vr162 => %vr152
 .L8: nop
-    # [lvn]     loadI 1 => %vr10
+# phi(%vr152_8)
+    # [lvn unused]     loadI 1 => %vr10
     # [ssa]     subI %vr6, 1 => %vr140
     mult %vr140, %vr8 => %vr141
     add %vr141, %vr7 => %vr163
     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
+    # [lvn unused]     loadI -144 => %vr118
     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
     subI %vr163, 1 => %vr164
-    # [lvn]     loadI 4 => %vr15
+    # [lvn unused]     loadI 4 => %vr15
     multI %vr164, 4 => %vr165
     sub %vr119, %vr165 => %vr166
     load %vr166 => %vr167
     # [ssa]     mult %vr6, %vr8 => %vr148
     add %vr148, %vr7 => %vr149
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
-    # [lvn]     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -144 => %vr118
+    # [lvn ==]     addI %vr11, -144 => %vr119
+    # [lvn ==]     loadI 1 => %vr10
     subI %vr149, 1 => %vr150
-    # [lvn]     loadI 4 => %vr15
+    # [lvn ==]     loadI 4 => %vr15
     multI %vr150, 4 => %vr151
     sub %vr119, %vr151 => %vr152
     load %vr152 => %vr161
     # [lvn]     comp %vr167, %vr161 => %vr168
     # [lvn]     testlt %vr168 => %vr169
     cbr_GE %vr167, %vr161 -> .L9
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     subI %vr6, 1 => %vr140
-    # [lvn]     mult %vr140, %vr8 => %vr141
-    # [lvn]     add %vr141, %vr7 => %vr163
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
-    # [lvn]     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     subI %vr163, 1 => %vr164
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     multI %vr164, 4 => %vr165
-    # [lvn]     sub %vr119, %vr165 => %vr166
-    # [lvn]     load %vr166 => %vr167
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     subI %vr6, 1 => %vr140
+    # [lvn ==]     mult %vr140, %vr8 => %vr141
+    # [lvn ==]     add %vr141, %vr7 => %vr163
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -144 => %vr118
+    # [lvn ==]     addI %vr11, -144 => %vr119
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     subI %vr163, 1 => %vr164
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn ==]     multI %vr164, 4 => %vr165
+    # [lvn ==]     sub %vr119, %vr165 => %vr166
+    # [lvn ==]     load %vr166 => %vr167
+    # [lvn ==]     loadI 1 => %vr10
     addI %vr167, 1 => %vr170
-    # [lvn]     mult %vr6, %vr8 => %vr148
-    # [lvn]     add %vr148, %vr7 => %vr149
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
-    # [lvn]     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     subI %vr149, 1 => %vr150
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     multI %vr150, 4 => %vr151
-    # [lvn]     sub %vr119, %vr151 => %vr152
+    # [lvn ==]     mult %vr6, %vr8 => %vr148
+    # [lvn ==]     add %vr148, %vr7 => %vr149
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -144 => %vr118
+    # [lvn ==]     addI %vr11, -144 => %vr119
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     subI %vr149, 1 => %vr150
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn ==]     multI %vr150, 4 => %vr151
+    # [lvn ==]     sub %vr119, %vr151 => %vr152
     store %vr170 => %vr152
 .L9: nop
+# phi(%vr152_11)
     # [ssa]     mult %vr6, %vr8 => %vr148
-    # [lvn]     loadI 1 => %vr10
+    # [lvn unused]     loadI 1 => %vr10
     # [ssa]     subI %vr7, 1 => %vr142
     add %vr148, %vr142 => %vr171
     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
+    # [lvn unused]     loadI -144 => %vr118
     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     loadI 1 => %vr10
     subI %vr171, 1 => %vr172
-    # [lvn]     loadI 4 => %vr15
+    # [lvn unused]     loadI 4 => %vr15
     multI %vr172, 4 => %vr173
     sub %vr119, %vr173 => %vr174
     load %vr174 => %vr175
-    # [lvn]     mult %vr6, %vr8 => %vr148
+    # [lvn ==]     mult %vr6, %vr8 => %vr148
     add %vr148, %vr7 => %vr149
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
-    # [lvn]     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -144 => %vr118
+    # [lvn ==]     addI %vr11, -144 => %vr119
+    # [lvn ==]     loadI 1 => %vr10
     subI %vr149, 1 => %vr150
-    # [lvn]     loadI 4 => %vr15
+    # [lvn ==]     loadI 4 => %vr15
     multI %vr150, 4 => %vr151
     sub %vr119, %vr151 => %vr152
     load %vr152 => %vr161
     # [lvn]     comp %vr175, %vr161 => %vr176
     # [lvn]     testlt %vr176 => %vr177
     cbr_GE %vr175, %vr161 -> .L10
-    # [lvn]     mult %vr6, %vr8 => %vr148
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     subI %vr7, 1 => %vr142
-    # [lvn]     add %vr148, %vr142 => %vr171
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
-    # [lvn]     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     subI %vr171, 1 => %vr172
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     multI %vr172, 4 => %vr173
-    # [lvn]     sub %vr119, %vr173 => %vr174
-    # [lvn]     load %vr174 => %vr175
-    # [lvn]     loadI 1 => %vr10
+    # [lvn ==]     mult %vr6, %vr8 => %vr148
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     subI %vr7, 1 => %vr142
+    # [lvn ==]     add %vr148, %vr142 => %vr171
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -144 => %vr118
+    # [lvn ==]     addI %vr11, -144 => %vr119
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     subI %vr171, 1 => %vr172
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn ==]     multI %vr172, 4 => %vr173
+    # [lvn ==]     sub %vr119, %vr173 => %vr174
+    # [lvn ==]     load %vr174 => %vr175
+    # [lvn ==]     loadI 1 => %vr10
     addI %vr175, 1 => %vr178
-    # [lvn]     mult %vr6, %vr8 => %vr148
-    # [lvn]     add %vr148, %vr7 => %vr149
-    # [lvn]     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
-    # [lvn]     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
-    # [lvn]     subI %vr149, 1 => %vr150
-    # [lvn]     loadI 4 => %vr15
-    # [lvn]     multI %vr150, 4 => %vr151
-    # [lvn]     sub %vr119, %vr151 => %vr152
+    # [lvn ==]     mult %vr6, %vr8 => %vr148
+    # [lvn ==]     add %vr148, %vr7 => %vr149
+    # [lvn ==]     i2i %vr0 => %vr11
+    # [lvn ==]     loadI -144 => %vr118
+    # [lvn ==]     addI %vr11, -144 => %vr119
+    # [lvn ==]     loadI 1 => %vr10
+    # [lvn ==]     subI %vr149, 1 => %vr150
+    # [lvn ==]     loadI 4 => %vr15
+    # [lvn ==]     multI %vr150, 4 => %vr151
+    # [lvn ==]     sub %vr119, %vr151 => %vr152
     store %vr178 => %vr152
 .L10: nop
-    # [lvn]     loadI 1 => %vr10
+# phi(%vr152_14)
+    # [lvn unused]     loadI 1 => %vr10
     addI %vr7, 1 => %vr179
     i2i %vr179 => %vr7
     # [lvn]     comp %vr7, %vr4 => %vr138
     # [lvn]     testle %vr138 => %vr139
     cbr_LE %vr7, %vr4 -> .L7
 .L6: nop
-    # [lvn]     loadI 1 => %vr10
+    # [meaningless phi] # phi(%vr167_3)
+    # [meaningless phi] # phi(%vr175_3)
+    # [meaningless phi] # phi(%vr152_3)
+    # [meaningless phi] # phi(%vr7_4)
+    # [lvn unused]     loadI 1 => %vr10
     addI %vr6, 1 => %vr180
     i2i %vr180 => %vr6
     # [lvn]     comp %vr6, %vr5 => %vr136
     # [lvn]     testle %vr136 => %vr137
     cbr_LE %vr6, %vr5 -> .L5
 .L4: nop
+    # [meaningless phi] # phi(%vr175_1)
+    # [meaningless phi] # phi(%vr167_1)
+    # [meaningless phi] # phi(%vr6_1)
+    # [meaningless phi] # phi(%vr7_1)
+    # [meaningless phi] # phi(%vr152_1)
     mult %vr5, %vr8 => %vr131
     add %vr131, %vr4 => %vr181
     i2i %vr0 => %vr11
-    # [lvn]     loadI -144 => %vr118
+    # [lvn unused]     loadI -144 => %vr118
     addI %vr11, -144 => %vr119
-    # [lvn]     loadI 1 => %vr10
+    # [lvn unused]     loadI 1 => %vr10
     subI %vr181, 1 => %vr182
-    # [lvn]     loadI 4 => %vr15
+    # [lvn unused]     loadI 4 => %vr15
     multI %vr182, 4 => %vr183
     sub %vr119, %vr183 => %vr184
     load %vr184 => %vr185
