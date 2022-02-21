@@ -130,9 +130,11 @@ impl Interpreter {
         let instrs = self.functions.get(func)?;
 
         // Skip these instructions
-        match instrs[self.inst_idx].1 {
-            Instruction::Label(..) | Instruction::Frame { .. } => self.inst_idx += 1,
-            _ => {}
+        while let Instruction::Label(..) | Instruction::Frame { .. } = instrs[self.inst_idx].1 {
+            self.inst_idx += 1;
+            if self.inst_idx == (instrs.len() - 1) {
+                return Some(false);
+            }
         }
 
         match &instrs[self.inst_idx].1 {
@@ -397,7 +399,7 @@ impl Interpreter {
 
                 assert_eq!(params.len(), args.len());
                 for (param, arg) in params.iter().zip(args) {
-                    registers.insert(*param, self.registers().get(arg).unwrap().clone());
+                    registers.insert(*param, self.registers().get(arg)?.clone());
                 }
 
                 self.call_stack.push(CallStackEntry {
@@ -608,9 +610,6 @@ impl Interpreter {
             }
             Instruction::FLoadAddImm { src: _, add: _, dst: _ } => todo!(),
             Instruction::FLoadAdd { src: _, add: _, dst: _ } => todo!(),
-            Instruction::FStore { src: _, dst: _ } => todo!(),
-            Instruction::FStoreAddImm { src: _, add: _, dst: _ } => todo!(),
-            Instruction::FStoreAdd { src: _, add: _, dst: _ } => todo!(),
             Instruction::FRead(r) => {
                 let mut buf = String::new();
                 let mut handle = std::io::stdin_locked();
