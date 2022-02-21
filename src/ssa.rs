@@ -1,16 +1,22 @@
 use std::{
-    cell::{Cell, RefCell},
-    collections::{
-        btree_map::Entry, hash_map::RandomState, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque,
-    },
-    iter::successors,
-    ops::{Deref, Range},
-    slice::SliceIndex,
-    vec,
+    cell::Cell,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
 };
 
-use crate::iloc::{Block, Function, IlocProgram, Instruction, Operand, Reg, Val};
+use crate::iloc::{Block, Function, IlocProgram, Instruction, Operand};
 
+mod dce;
+mod dnre;
+mod fold;
+mod licm;
+
+use dce::dead_code;
+use dnre::{dom_val_num, RenameMeta};
+use fold::{const_fold, ConstMap, ValueKind, WorkStuff};
+#[allow(unused)]
+use licm::find_loops;
+
+#[allow(unused)]
 fn print_blocks(blocks: &[Block]) {
     for blk in &*blocks {
         // if !matches!(blk.label.as_str(), ".L0:" | ".L1:" | ".L3:" | ".L7:") {
@@ -124,8 +130,10 @@ fn traverse(val: &str, align: usize, cfg: &ControlFlowGraph, paths: &mut Vec<Vec
 
 #[derive(Debug)]
 pub struct DominatorTree {
-    fdom_map: HashMap<String, HashSet<String>>,
+    dom_frontier_map: HashMap<String, HashSet<String>>,
+    ctrl_dep_map: HashMap<String, BTreeSet<String>>,
     dom_succs_map: HashMap<String, BTreeSet<String>>,
+    #[allow(unused)]
     dom_preds_map: HashMap<String, BTreeSet<String>>,
     cfg_succs_map: HashMap<String, BTreeSet<String>>,
     cfg_preds_map: HashMap<String, BTreeSet<String>>,
@@ -244,7 +252,8 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
     }
 
     // Keith Cooper/Linda Torczon EaC pg. 499 SSA dominance frontier algorithm
-    let mut fdom_map: HashMap<String, HashSet<String>> = HashMap::with_capacity(blocks_label.len());
+    let mut dom_frontier_map: HashMap<String, HashSet<String>> =
+        HashMap::with_capacity(blocks_label.len());
     for label in &blocks_label {
         // Node must be a join point (have multiple preds)
         if let Some(preds) =
@@ -258,10 +267,10 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
                     // node since no node with multiple predecessors can be in the `idom_map`.
                     //
                     // Second, for a join point j, each predecessor k of j must have j ∈ df(k),
-                    // since k cannot dominate j if j has ore than one predecessor. Finally, if j ∈
+                    // since k cannot dominate j if j has more than one predecessor. Finally, if j ∈
                     // df(k) for some predecessor k, then j must also be in df(l) for each l ∈
                     // Dom(k), unless l ∈ Dom( j)
-                    fdom_map.entry(run.to_string()).or_default().insert(label.to_string());
+                    dom_frontier_map.entry(run.to_string()).or_default().insert(label.to_string());
                     if let Some(idom) = idom_map.get(run) {
                         run = idom;
                     }
@@ -269,8 +278,24 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
             }
         }
     }
+    let mut ctrl_dep_map = HashMap::with_capacity(blocks_label.len());
+    for (to, set) in &dom_frontier_map {
+        for from in set {
+            ctrl_dep_map
+                .entry(from.to_string())
+                .or_insert_with(BTreeSet::new)
+                .insert(to.to_string());
+        }
+    }
 
-    DominatorTree { fdom_map, dom_succs_map, dom_preds_map, cfg_preds_map, cfg_succs_map }
+    DominatorTree {
+        dom_frontier_map,
+        ctrl_dep_map,
+        dom_succs_map,
+        dom_preds_map,
+        cfg_preds_map,
+        cfg_succs_map,
+    }
 }
 
 pub fn insert_phi_functions(
@@ -336,584 +361,13 @@ pub fn insert_phi_functions(
     phis
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct RenameMeta {
-    counter: usize,
-    stack: VecDeque<usize>,
-}
-
-fn new_name(reg: &Reg, dst: &mut Option<usize>, meta: &mut HashMap<Operand, RenameMeta>) {
-    let m = meta.get_mut(&Operand::Register(*reg)).unwrap();
-    let i = m.counter;
-    m.counter += 1;
-    m.stack.push_back(i);
-    *dst = Some(i);
-}
-fn rewrite_name(reg: &mut Reg, meta: &RenameMeta) {
-    // `unwrap_or_default` is ok here since we want a zero if the stack
-    // is empty
-    let phi_id = meta.stack.back().copied().unwrap();
-    reg.as_phi(phi_id);
-}
-fn phi_range(insts: &[Instruction]) -> Range<usize> {
-    0..insts.iter().take_while(|i| i.is_phi()).count()
-}
-
-pub type ScopedExprTree = VecDeque<HashMap<(Operand, Option<Operand>, String), Reg>>;
-
-pub fn dom_val_num(
-    blks: &mut [Block],
-    blk_idx: usize,
-    meta: &mut HashMap<Operand, RenameMeta>,
-    dtree: &DominatorTree,
-    expr_tree: &mut ScopedExprTree,
-) {
-    let rng = phi_range(&blks[blk_idx].instructions);
-    // The phi instructions must be filled in before their expressions are saved
-    for phi in &mut blks[blk_idx].instructions[rng.clone()] {
-        if let Instruction::Phi(r, _, dst) = phi {
-            new_name(r, dst, meta);
-        }
-    }
-
-    expr_tree.push_back(HashMap::new());
-
-    // Remove redundant/meaningless phi instructions
-    for phi in &mut blks[blk_idx].instructions[rng.clone()] {
-        if let Instruction::Phi(r, set, dst) = phi {
-            let phi_reg = Reg::Phi(r.as_usize(), dst.unwrap());
-            let expr = (Operand::Register(phi_reg), None, "phi".to_string());
-            if expr_tree.iter().find_map(|map| map.get(&expr)).is_some() {
-                *phi = Instruction::Skip(format!("[redundant phi] {}", phi));
-            } else {
-                expr_tree.back_mut().unwrap().insert(expr, phi_reg);
-                if set.len() == 1 {
-                    *phi = Instruction::Skip(format!("[meaningless phi] {}", phi));
-                }
-            }
-        } else {
-            unreachable!("must be φ(x, y)")
-        }
-    }
-
-    for op in &mut blks[blk_idx].instructions[rng.end..] {
-        let (mut a, mut b) = op.operands_mut();
-        if let Some((a, meta)) = a.as_mut().and_then(|reg| {
-            let cpy = **reg;
-            Some((reg, meta.get(&Operand::Register(cpy))?))
-        }) {
-            rewrite_name(a, meta);
-        }
-        if let Some((b, meta)) = b.as_mut().and_then(|reg| {
-            let cpy = **reg;
-            Some((reg, meta.get(&Operand::Register(cpy))?))
-        }) {
-            rewrite_name(b, meta);
-        }
-
-        // This needs to run before we bail out for calls/stores, stuff like that...
-        if let Some(dst) = op.target_reg_mut() {
-            if let Some(meta) = meta.get_mut(&Operand::Register(*dst)) {
-                // This is `new_name` minus the set addition
-                let i = meta.counter;
-                meta.counter += 1;
-                meta.stack.push_back(i);
-                dst.as_phi(i);
-            }
-        }
-
-        if let (Some(a), b) = op.operands() {
-            let expr = (a.clone(), b.clone(), op.inst_name().to_string());
-            // TODO: if expr can be simplified to expr' then replace assign with `x <- expr'`
-
-            if expr_tree.iter().find_map(|map| map.get(&expr)).is_some() {
-                if !op.is_tmp_expr() || op.is_call_instruction() {
-                    continue;
-                }
-
-                *op = Instruction::Skip(format!("[ssa] {op}"));
-            } else if let Some(dst) = op.target_reg_mut() {
-                expr_tree.back_mut().unwrap().insert(expr, *dst);
-                // We value number the assignments
-                let m = meta.entry(Operand::Register(*dst)).or_default();
-                let i = m.counter;
-                m.counter += 1;
-                m.stack.push_back(i);
-                dst.as_phi(i);
-            }
-        }
-    }
-
-    let empty = BTreeSet::new();
-    let blk_label = blks[blk_idx].label.replace(':', "");
-
-    for blk in dtree.cfg_succs_map.get(&blk_label).unwrap_or(&empty) {
-        // TODO: make block -> index map
-        let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
-        let rng = phi_range(&blks[idx].instructions);
-
-        for phi in &mut blks[idx].instructions[rng] {
-            if let Instruction::Phi(r, set, ..) = phi {
-                let m = meta.get_mut(&Operand::Register(*r)).unwrap();
-                if m.stack.is_empty() {
-                    let i = m.counter;
-                    m.counter += 1;
-                    m.stack.push_back(i);
-                }
-                let fill = m.stack.back().unwrap();
-                set.insert(*fill);
-            }
-        }
-    }
-
-    // This is what drives the rename algorithm
-    for blk in dtree.dom_succs_map.get(&blk_label).unwrap_or(&empty) {
-        // TODO: make block -> index map
-        let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
-        dom_val_num(blks, idx, meta, dtree, expr_tree);
-    }
-
-    for op in &blks[blk_idx].instructions {
-        if let Some(dst) = op.target_reg().map(Reg::as_register) {
-            if let Some(meta) = meta.get_mut(&Operand::Register(dst)) {
-                meta.stack.pop_back();
-            }
-        }
-    }
-    expr_tree.pop_back();
-}
-
-fn eval_jump(
-    expr: &Instruction,
-    const_map: &HashMap<Reg, ((usize, usize), ValueKind)>,
-) -> Option<Instruction> {
-    let (l, r) = expr.operands();
-    match (
-        l.as_ref().and_then(|reg| reg.opt_reg()).and_then(|l| const_map.get(&l).map(|(_, c)| c)),
-        r.as_ref().and_then(|reg| reg.opt_reg()).and_then(|r| const_map.get(&r).map(|(_, c)| c)),
-    ) {
-        (Some(ValueKind::Known(a)), Some(ValueKind::Known(b))) => match expr {
-            Instruction::CbrEQ { loc, .. } => {
-                let should_jump = a.cmp_eq(b)?.is_one();
-                Some(if should_jump {
-                    Instruction::ImmJump(loc.clone())
-                } else {
-                    Instruction::Skip(format!("{}", expr))
-                })
-            }
-            Instruction::CbrNE { loc, .. } => {
-                let should_jump = a.cmp_ne(b)?.is_one();
-                Some(if should_jump {
-                    Instruction::ImmJump(loc.clone())
-                } else {
-                    Instruction::Skip(format!("{}", expr))
-                })
-            }
-            Instruction::CbrGT { loc, .. } => {
-                let should_jump = a.cmp_gt(b)?.is_one();
-                Some(if should_jump {
-                    Instruction::ImmJump(loc.clone())
-                } else {
-                    Instruction::Skip(format!("{}", expr))
-                })
-            }
-            Instruction::CbrGE { loc, .. } => {
-                let should_jump = a.cmp_ge(b)?.is_one();
-                Some(if should_jump {
-                    Instruction::ImmJump(loc.clone())
-                } else {
-                    Instruction::Skip(format!("{}", expr))
-                })
-            }
-            Instruction::CbrLT { loc, .. } => {
-                let should_jump = a.cmp_lt(b)?.is_one();
-                Some(if should_jump {
-                    Instruction::ImmJump(loc.clone())
-                } else {
-                    Instruction::Skip(format!("{}", expr))
-                })
-            }
-            Instruction::CbrLE { loc, .. } => {
-                let should_jump = a.cmp_le(b)?.is_one();
-                Some(if should_jump {
-                    Instruction::ImmJump(loc.clone())
-                } else {
-                    Instruction::Skip(format!("{}", expr))
-                })
-            }
-            _ => None,
-        },
-        (Some(ValueKind::Known(val)), None) | (None, Some(ValueKind::Known(val))) => match expr {
-            Instruction::CbrT { loc, .. } => {
-                let should_jump = val.is_one();
-                Some(if should_jump {
-                    Instruction::ImmJump(loc.clone())
-                } else {
-                    Instruction::Skip(format!("{}", expr))
-                })
-            }
-            Instruction::CbrF { loc, .. } => {
-                let should_jump = val.is_zero();
-                Some(if should_jump {
-                    Instruction::ImmJump(loc.clone())
-                } else {
-                    Instruction::Skip(format!("{}", expr))
-                })
-            }
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-fn eval_instruction(
-    expr: &Instruction,
-    const_map: &HashMap<Reg, ((usize, usize), ValueKind)>,
-) -> Option<(ValueKind, Instruction)> {
-    let (l, r) = expr.operands();
-    let dst = expr.target_reg();
-    match (
-        l.as_ref().and_then(|reg| reg.opt_reg()).and_then(|l| const_map.get(&l).map(|(_, c)| c)),
-        r.as_ref().and_then(|reg| reg.opt_reg()).and_then(|r| const_map.get(&r).map(|(_, c)| c)),
-        dst,
-    ) {
-        // EXPRESSION REGISTERS
-        // Some operation +,-,*,/,>>,etc
-        (Some(n_val), Some(m_val), Some(dst)) => {
-            // Can we fold this
-            match (n_val, m_val) {
-                (ValueKind::Known(l), ValueKind::Known(r)) => expr.fold(l, r).map(|folded| {
-                    (ValueKind::Known(folded.operands().0.unwrap().clone_to_value()), folded)
-                }),
-                (ValueKind::Known(c), ValueKind::Maybe) => {
-                    if let Some(id) = expr.identity_with_const_prop_left(c) {
-                        // modify instruction with a move
-                        Some((ValueKind::Maybe, expr.as_new_move_instruction(*id, *dst)))
-                    } else if matches!(expr, Instruction::Mult { .. } | Instruction::FMult { .. })
-                        && c.is_zero()
-                    {
-                        Some((
-                            ValueKind::Known(Val::Integer(0)),
-                            Instruction::ImmLoad { src: Val::Integer(0), dst: *dst },
-                        ))
-                    } else {
-                        Some((ValueKind::Maybe, expr.as_immediate_instruction_left(c)?))
-                    }
-                }
-                (ValueKind::Maybe, ValueKind::Known(c)) => {
-                    if let Some(id) = expr.identity_with_const_prop_right(c) {
-                        // modify instruction with a move
-                        Some((ValueKind::Maybe, expr.as_new_move_instruction(*id, *dst)))
-                    } else if matches!(expr, Instruction::Mult { .. } | Instruction::FMult { .. })
-                        && c.is_zero()
-                    {
-                        Some((
-                            ValueKind::Known(Val::Integer(0)),
-                            Instruction::ImmLoad { src: Val::Integer(0), dst: *dst },
-                        ))
-                    } else {
-                        Some((ValueKind::Maybe, expr.as_immediate_instruction_right(c)?))
-                    }
-                }
-                _ => {
-                    // Is this instruction identity
-                    // This catches things like:
-                    // `addI %vr3, 0 => %vr8`
-                    expr.identity_register()
-                        .map(|id| (ValueKind::Maybe, expr.as_new_move_instruction(id, *dst)))
-                }
-            }
-        }
-        // This is basically a move/copy
-        (Some(val), None, Some(_)) => {
-            // TODO: this may do nothing..
-            match val {
-                ValueKind::Known(a) => {
-                    Some((ValueKind::Known(a.clone()), expr.fold_two_address(a)?))
-                }
-                _ => {
-                    println!("{:?} {:?}", expr, val);
-                    None
-                }
-            }
-        }
-        (None, Some(val), Some(_)) => {
-            // TODO: this may do nothing..
-            match val {
-                ValueKind::Known(a) => {
-                    Some((ValueKind::Known(a.clone()), expr.fold_two_address(a)?))
-                }
-                _ => {
-                    println!("{:?} {:?}", expr, val);
-                    None
-                }
-            }
-        }
-        // Jumps, rets, push, and I/O instructions
-        (Some(_src), None, None) => None,
-        (None, None, Some(_)) => None,
-        // No operands or target
-        (None, None, None) => None,
-        // All other combinations are invalid
-        wtf => unreachable!("{:?} {:?}", expr, wtf),
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ValueKind {
-    /// T = maybe knowable (phi, or unknown)
-    Maybe,
-    /// C = constant
-    Known(Val),
-    /// ⊥ = unknowable, because a const register has been reassigned.
-    Unknowable,
-}
-#[derive(Debug, Default)]
-pub struct ConstMap {
-    /// Register to a set of block index, instruction index.
-    use_to_inst: HashMap<Reg, HashSet<(usize, usize)>>,
-    defined: HashMap<Reg, ((usize, usize), ValueKind)>,
-}
-
-impl ConstMap {
-    pub fn add_def(&mut self, reg: Reg, val: ValueKind, blk_inst: (usize, usize)) {
-        match &val {
-            ValueKind::Maybe => {
-                // TODO: is T ∧ T = ⊥
-                self.defined.insert(reg, (blk_inst, val));
-            }
-            curr @ ValueKind::Known(..) => {
-                match self.defined.entry(reg).or_insert_with(|| (blk_inst, val.clone())) {
-                    // T ∧ x = x  ∀x
-                    (_, old @ ValueKind::Maybe) => {
-                        *old = val;
-                    }
-                    // ci ∧ cj = ⊥ if ci != cj
-                    (_, old @ ValueKind::Known(..)) if &*old != curr => {
-                        *old = ValueKind::Unknowable
-                    }
-                    // ci ∧ cj = ci if ci = cj
-                    _ => {}
-                }
-            }
-            // ⊥ ∧ x = ⊥  ∀x
-            ValueKind::Unknowable => {
-                self.defined.insert(reg, (blk_inst, val));
-            }
-        }
-    }
-
-    pub fn add_use(&mut self, reg: Reg, blk_idx: usize, inst_idx: usize) {
-        self.use_to_inst.entry(reg).or_default().insert((blk_idx, inst_idx));
-    }
-}
-
-pub struct WorkStuff {
-    register: Reg,
-    block_inst: (usize, usize),
-}
-
-impl WorkStuff {
-    pub fn new(register: Reg, block: usize, instr: usize) -> Self {
-        Self { register, block_inst: (block, instr) }
-    }
-}
-
-fn const_fold(worklist: &mut VecDeque<WorkStuff>, const_vals: &mut ConstMap, func: &mut Function) {
-    while let Some(WorkStuff { register: n_reg, block_inst: (n_blk, n_inst), .. }) =
-        worklist.pop_front()
-    {
-        // TODO: not great cloning this whole use_to_inst map...
-        for (blk, inst) in const_vals.use_to_inst.get(&n_reg).cloned().unwrap_or_default() {
-            let Some(m) = func.blocks[blk].instructions[inst].target_reg().copied() else {
-                let Some(folded) = eval_jump(&func.blocks[blk].instructions[inst], &const_vals.defined) else {
-                    continue;
-                };
-                if matches!(folded, Instruction::ImmJump(_)) {
-                    // for missed in &mut func.blocks[blk].instructions[(inst + 1)..] {
-                    //     *missed = Instruction::Skip(format!("[ssabf] {}", missed))
-                    // }
-                }
-                func.blocks[blk].instructions[inst] = folded;
-
-                continue;
-            };
-            let ((mb, mi), m_val) =
-                const_vals.defined.entry(m).or_insert(((blk, inst), ValueKind::Maybe)).clone();
-            if !matches!(m_val, ValueKind::Unknowable) {
-                let Some((new, folded)) =
-                    eval_instruction(&func.blocks[mb].instructions[mi], &const_vals.defined) else {
-                        continue;
-                    };
-
-                const_vals.add_def(m, new.clone(), (mb, mi));
-
-                func.blocks[n_blk].instructions[n_inst] = Instruction::Skip(format!(
-                    "[ssacf] {}",
-                    func.blocks[n_blk].instructions[n_inst]
-                ));
-
-                func.blocks[mb].instructions[mi] = folded;
-
-                if m_val != new {
-                    worklist.push_back(WorkStuff::new(m, blk, inst));
-                }
-            }
-        }
-    }
-}
-
-// pub fn eliminate_unreachable(
-//     func: &mut Function,
-//     cfg: &mut ControlFlowGraph,
-//     domtree: &DominatorTree,
-// ) {
-//     for blk in func.blocks {
-//         if domtree.dom_preds_map
-//     }
-// }
-
-fn reverse_postoder(succs: &HashMap<String, BTreeSet<String>>) -> impl Iterator<Item = &str> + '_ {
-    let mut stack = VecDeque::from_iter([".L_main"]);
-    let mut seen = HashSet::<_, RandomState>::from_iter([".L_main"]);
-    std::iter::from_fn(move || {
-        let val = stack.pop_front()?;
-        if let Some(set) = succs.get(val) {
-            for children in set {
-                if seen.contains(children.as_str()) {
-                    continue;
-                }
-                stack.push_back(children)
-            }
-        }
-        if seen.contains(val) {
-            // return stack.pop_front();
-        }
-        seen.insert(val);
-
-        Some(val)
-    })
-}
-
-#[derive(Debug)]
-pub enum LoopInfo {
-    Loop { header: String, parent: Option<String> },
-    PartOf(String),
-}
-impl LoopInfo {
-    pub fn new(header: &str) -> Self {
-        Self::Loop { header: header.to_string(), parent: None }
-    }
-    pub fn header(&self) -> &str {
-        match self {
-            LoopInfo::Loop { header, .. } | LoopInfo::PartOf(header) => header,
-        }
-    }
-    pub fn parent(&self) -> Option<&str> {
-        if let LoopInfo::Loop { parent, .. } = self {
-            parent.as_deref()
-        } else {
-            None
-        }
-    }
-}
-
-pub fn find_loops(func: &mut Function, domtree: &DominatorTree) {
-    println!("{:#?}", domtree);
-    let mut loops = BTreeMap::<_, String>::new();
-    let mut loop_ord = vec![];
-    // We traverse the CFG in reverse postorder
-    for blk in reverse_postoder(&domtree.cfg_succs_map) {
-        // We check each predecessor of the control flow graph
-        for pred in domtree.cfg_preds_map.get(blk).unwrap_or(&BTreeSet::default()) {
-            // If the block dominates one of it's preds it is a back edge to a loop
-            if domtree.fdom_map.get(pred).map_or(false, |set| set.contains(blk)) {
-                if loops.insert(blk.to_string(), blk.to_string()).is_none() {
-                    loop_ord.push(blk);
-                }
-                // We only need to identify one back edge to know we are in a loop
-                break;
-            }
-        }
-    }
-
-    let empty = BTreeSet::default();
-    let mut loop_map =
-        loops.iter().map(|(k, v)| (k.clone(), LoopInfo::new(v))).collect::<BTreeMap<_, _>>();
-    let mut stack = vec![];
-    for lp in loop_ord.into_iter().rev() {
-        for pred in domtree.cfg_preds_map.get(lp).unwrap_or(&empty) {
-            // Add the back edges to the stack/worklist
-            if domtree.fdom_map.get(pred).map_or(false, |set| set.contains(lp)) {
-                stack.push(pred);
-            }
-        }
-
-        while let Some(node) = stack.pop() {
-            // println!("{:#?}", loop_map);
-            let mut continue_dfs = None;
-            if let Entry::Vacant(unseen) = loop_map.entry(node.clone()) {
-                unseen.insert(LoopInfo::PartOf(lp.to_string()));
-                continue_dfs = Some(node.to_string());
-            } else if let Some(node_loop) = loop_map.get(node) {
-                let mut node_loop = node_loop.header().to_string();
-                let mut nlp_opt = loop_map.get(&node_loop).and_then(|l| l.parent());
-
-                println!("{:?} {} {}", nlp_opt, node_loop, lp);
-
-                while let Some(nlp) = nlp_opt {
-                    // println!("{} {}", nlp, lp);
-                    if nlp == lp {
-                        // We have walked back to the start of the loop
-                        break;
-                    } else {
-                        node_loop = nlp.to_string();
-                        nlp_opt = loop_map.get(&node_loop).and_then(|n| n.parent());
-                    }
-                }
-
-                // We either have `nlp_opt` as `None` and `node_loop` is a new inner loop
-                // or `nlp_opt` is `Some` and `node_loop` is a known inner loop
-                match nlp_opt {
-                    Some(..) => continue_dfs = None,
-                    None => {
-                        if node_loop != lp {
-                            let key = node_loop.to_string();
-                            println!("Parent {} {}", key, lp);
-                            println!("{:?}", loop_map);
-                            match loop_map.entry(key) {
-                                Entry::Occupied(mut o) => match o.get_mut() {
-                                    LoopInfo::Loop { parent, .. } => *parent = Some(lp.to_string()),
-                                    it => panic!("{} {:?}", node_loop, it),
-                                },
-                                it => panic!("{} {:?}", node_loop, it),
-                            }
-                            continue_dfs = Some(node_loop)
-                        } else {
-                            continue_dfs = None;
-                        }
-                    }
-                }
-            }
-
-            if let Some(cont) = continue_dfs {
-                for blk in domtree.cfg_preds_map.get(&cont).unwrap_or(&empty) {
-                    stack.push(blk);
-                }
-            }
-        }
-    }
-
-    println!("{:#?}", loop_map);
-}
-
 pub fn ssa_optimization(iloc: &mut IlocProgram) {
     for func in &mut iloc.functions {
-        let cfg = build_cfg(func);
+        let mut cfg = build_cfg(func);
 
         let dtree = dominator_tree(&cfg, &mut func.blocks);
 
-        let phis = insert_phi_functions(&mut func.blocks, &dtree.fdom_map);
+        let phis = insert_phi_functions(&mut func.blocks, &dtree.dom_frontier_map);
 
         let mut meta = HashMap::new();
         for (_blk_label, register_set) in phis {
@@ -957,7 +411,9 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
 
         const_fold(&mut worklist, &mut const_vals, func);
 
-        find_loops(func, &dtree);
+        dead_code(func, &mut cfg, &dtree);
+
+        // find_loops(func, &dtree);
     }
 }
 
@@ -1065,84 +521,84 @@ fn emit_cfg_viz(cfg: &ControlFlowGraph, file: &str) {
 //
 //
 
-fn rename_values(
-    blks: &mut [Block],
-    blk_idx: usize,
-    meta: &mut HashMap<Operand, RenameMeta>,
-    cfg_succs: &HashMap<String, BTreeSet<String>>,
-    dom_succs: &HashMap<String, BTreeSet<String>>,
-) {
-    let rng = phi_range(&blks[blk_idx].instructions);
+// fn rename_values(
+//     blks: &mut [Block],
+//     blk_idx: usize,
+//     meta: &mut HashMap<Operand, RenameMeta>,
+//     cfg_succs: &HashMap<String, BTreeSet<String>>,
+//     dom_succs: &HashMap<String, BTreeSet<String>>,
+// ) {
+//     let rng = phi_range(&blks[blk_idx].instructions);
 
-    for phi in &mut blks[blk_idx].instructions[rng.clone()] {
-        if let Instruction::Phi(r, _, dst) = phi {
-            new_name(r, dst, meta);
-        }
-    }
+//     for phi in &mut blks[blk_idx].instructions[rng.clone()] {
+//         if let Instruction::Phi(r, _, dst) = phi {
+//             new_name(r, dst, meta);
+//         }
+//     }
 
-    for op in &mut blks[blk_idx].instructions[rng.end..] {
-        let (a, b) = op.operands_mut();
-        if let Some((a, meta)) = a.and_then(|reg| {
-            let cpy = *reg;
-            Some((reg, meta.get(&Operand::Register(cpy))?))
-        }) {
-            rewrite_name(a, meta);
-        }
-        if let Some((b, meta)) = b.and_then(|reg| {
-            let cpy = *reg;
-            Some((reg, meta.get(&Operand::Register(cpy))?))
-        }) {
-            rewrite_name(b, meta);
-        }
+//     for op in &mut blks[blk_idx].instructions[rng.end..] {
+//         let (a, b) = op.operands_mut();
+//         if let Some((a, meta)) = a.and_then(|reg| {
+//             let cpy = *reg;
+//             Some((reg, meta.get(&Operand::Register(cpy))?))
+//         }) {
+//             rewrite_name(a, meta);
+//         }
+//         if let Some((b, meta)) = b.and_then(|reg| {
+//             let cpy = *reg;
+//             Some((reg, meta.get(&Operand::Register(cpy))?))
+//         }) {
+//             rewrite_name(b, meta);
+//         }
 
-        let dst = op.target_reg_mut();
-        if let Some((dst, meta)) = dst.and_then(|d| {
-            let cpy = *d;
-            Some((d, meta.get_mut(&Operand::Register(cpy))?))
-        }) {
-            // This is `new_name` minus the set addition
-            let i = meta.counter;
-            meta.counter += 1;
-            meta.stack.push_back(i);
+//         let dst = op.target_reg_mut();
+//         if let Some((dst, meta)) = dst.and_then(|d| {
+//             let cpy = *d;
+//             Some((d, meta.get_mut(&Operand::Register(cpy))?))
+//         }) {
+//             // This is `new_name` minus the set addition
+//             let i = meta.counter;
+//             meta.counter += 1;
+//             meta.stack.push_back(i);
 
-            dst.as_phi(i);
-        }
-    }
+//             dst.as_phi(i);
+//         }
+//     }
 
-    let empty = BTreeSet::new();
-    let blk_label = blks[blk_idx].label.replace(':', "");
+//     let empty = BTreeSet::new();
+//     let blk_label = blks[blk_idx].label.replace(':', "");
 
-    for blk in cfg_succs.get(&blk_label).unwrap_or(&empty) {
-        // println!("cfg succ {} {}", blk, blks[blk_idx].label);
+//     for blk in cfg_succs.get(&blk_label).unwrap_or(&empty) {
+//         // println!("cfg succ {} {}", blk, blks[blk_idx].label);
 
-        // TODO: make block -> index map
-        let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
-        let rng = phi_range(&blks[idx].instructions);
-        for phi in &mut blks[idx].instructions[rng] {
-            if let Instruction::Phi(r, set, ..) = phi {
-                let fill = meta
-                    .get(&Operand::Register(*r))
-                    .unwrap()
-                    .stack
-                    .back()
-                    .unwrap_or_else(|| panic!("{:?} {:?}", meta, r));
-                set.insert(*fill);
-            }
-        }
-    }
+//         // TODO: make block -> index map
+//         let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
+//         let rng = phi_range(&blks[idx].instructions);
+//         for phi in &mut blks[idx].instructions[rng] {
+//             if let Instruction::Phi(r, set, ..) = phi {
+//                 let fill = meta
+//                     .get(&Operand::Register(*r))
+//                     .unwrap()
+//                     .stack
+//                     .back()
+//                     .unwrap_or_else(|| panic!("{:?} {:?}", meta, r));
+//                 set.insert(*fill);
+//             }
+//         }
+//     }
 
-    // This is what drives the rename algorithm
-    for blk in dom_succs.get(&blk_label).unwrap_or(&empty) {
-        // TODO: make block -> index map
-        let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
-        rename_values(blks, idx, meta, cfg_succs, dom_succs);
-    }
+//     // This is what drives the rename algorithm
+//     for blk in dom_succs.get(&blk_label).unwrap_or(&empty) {
+//         // TODO: make block -> index map
+//         let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
+//         rename_values(blks, idx, meta, cfg_succs, dom_succs);
+//     }
 
-    for op in &blks[blk_idx].instructions {
-        if let Some(dst) = op.target_reg().map(Reg::as_register) {
-            if let Some(meta) = meta.get_mut(&Operand::Register(dst)) {
-                meta.stack.pop_back();
-            }
-        }
-    }
-}
+//     for op in &blks[blk_idx].instructions {
+//         if let Some(dst) = op.target_reg().map(Reg::as_register) {
+//             if let Some(meta) = meta.get_mut(&Operand::Register(dst)) {
+//                 meta.stack.pop_back();
+//             }
+//         }
+//     }
+// }

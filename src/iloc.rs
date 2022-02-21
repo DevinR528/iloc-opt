@@ -2188,6 +2188,12 @@ pub struct Block {
     pub instructions: Vec<Instruction>,
 }
 
+impl Block {
+    pub fn instructions(&self) -> impl Iterator<Item = &Instruction> + '_ {
+        self.instructions.iter().filter(|i| !matches!(i, Instruction::Skip(..)))
+    }
+}
+
 #[derive(Debug)]
 pub struct Function {
     pub label: String,
