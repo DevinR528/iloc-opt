@@ -250,6 +250,7 @@ impl Reg {
         }
     }
 
+    /// Convert Phi registers to normal virtual registers.
     pub fn as_register(&self) -> Reg {
         if let Reg::Phi(reg, ..) = self {
             Reg::Var(*reg)
@@ -284,7 +285,7 @@ impl fmt::Display for Loc {
 }
 
 #[rustfmt::skip]
-#[allow(clippy::upper_case_acronyms, unused)]
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Clone, Debug)]
 pub enum Instruction {
     // Integer arithmetic operations
@@ -362,10 +363,10 @@ pub enum Instruction {
     /// `call name %r, %r
     Call { name: String, args: Vec<Reg> },
     /// Call instruction, includes arguments and return register.
-    /// `call name %r, %r
+    /// `call name %r, %r => %r
     ImmCall { name: String, args: Vec<Reg>, ret: Reg },
     /// Call instruction, includes arguments and return register.
-    /// `call name %r, %r
+    /// `call name %r, %r => %r
     ImmRCall { reg: Reg, args: Vec<Reg>, ret: Reg },
     /// `ret`
     Ret,
@@ -406,12 +407,6 @@ pub enum Instruction {
     FLoadAddImm { src: Reg, add: Val, dst: Reg },
     /// `floadAO`
     FLoadAdd { src: Reg, add: Reg, dst: Reg },
-    /// `fstore`
-    FStore { src: Reg, dst: Reg },
-    /// `fstoreAI`
-    FStoreAddImm { src: Reg, add: Val, dst: Reg },
-    /// `fstoreAO`
-    FStoreAdd { src: Reg, add: Reg, dst: Reg },
 
     // I/O operations
     /// `fread %r` where r is a float target.
@@ -432,18 +427,6 @@ pub enum Instruction {
     PushR(Reg),
     /// `pop`
     Pop,
-    /// Stack add `stadd`
-    StAdd,
-    /// `stsub`
-    StSub,
-    /// `stmul`
-    StMul,
-    /// `stdiv`
-    StDiv,
-    /// `stlshift`
-    StLShift,
-    /// `strshift`
-    StRShift,
     // Pseudo operations
     Data,
     Text,
@@ -527,9 +510,6 @@ impl Hash for Instruction {
             Instruction::FLoad { src, dst } => (src, dst, variant).hash(state),
             Instruction::FLoadAddImm { src, add, dst } => (src, add, dst, variant).hash(state),
             Instruction::FLoadAdd { src, add, dst } => (src, add, dst, variant).hash(state),
-            Instruction::FStore { src, dst } => (src, dst, variant).hash(state),
-            Instruction::FStoreAddImm { src, add, dst } => (src, add, dst, variant).hash(state),
-            Instruction::FStoreAdd { src, add, dst } => (src, add, dst, variant).hash(state),
             Instruction::FRead(s) => (s, variant).hash(state),
             Instruction::IRead(s) => (s, variant).hash(state),
             Instruction::FWrite(s) => (s, variant).hash(state),
@@ -771,17 +751,6 @@ impl PartialEq for Instruction {
                 Self::FLoadAdd { src: l_src, add: l_add, dst: l_dst },
                 Self::FLoadAdd { src: r_src, add: r_add, dst: r_dst },
             ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
-            (Self::FStore { src: l_src, dst: l_dst }, Self::FStore { src: r_src, dst: r_dst }) => {
-                l_src == r_src && l_dst == r_dst
-            }
-            (
-                Self::FStoreAddImm { src: l_src, add: l_add, dst: l_dst },
-                Self::FStoreAddImm { src: r_src, add: r_add, dst: r_dst },
-            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
-            (
-                Self::FStoreAdd { src: l_src, add: l_add, dst: l_dst },
-                Self::FStoreAdd { src: r_src, add: r_add, dst: r_dst },
-            ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
             (Self::FRead(l0), Self::FRead(r0)) => l0 == r0,
             (Self::IRead(l0), Self::IRead(r0)) => l0 == r0,
             (Self::FWrite(l0), Self::FWrite(r0)) => l0 == r0,
@@ -1004,15 +973,6 @@ impl fmt::Display for Instruction {
             Instruction::FLoadAdd { src, add, dst } => {
                 writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
             }
-            Instruction::FStore { src, dst } => {
-                writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
-            }
-            Instruction::FStoreAddImm { src, add, dst } => {
-                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
-            }
-            Instruction::FStoreAdd { src, add, dst } => {
-                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
-            }
             Instruction::FRead(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
             Instruction::IRead(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
             Instruction::FWrite(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
@@ -1101,6 +1061,9 @@ impl Instruction {
     pub fn target_reg(&self) -> Option<&Reg> {
         match self {
             Instruction::I2I { dst, .. } => Some(dst),
+            Instruction::F2I { dst, .. } => Some(dst),
+            Instruction::I2F { dst, .. } => Some(dst),
+            Instruction::F2F { dst, .. } => Some(dst),
             Instruction::Add { dst, .. } => Some(dst),
             Instruction::Sub { dst, .. } => Some(dst),
             Instruction::Mult { dst, .. } => Some(dst),
@@ -1115,13 +1078,6 @@ impl Instruction {
             Instruction::ImmMult { dst, .. } => Some(dst),
             Instruction::ImmLShift { dst, .. } => Some(dst),
             Instruction::ImmRShift { dst, .. } => Some(dst),
-            Instruction::ImmLoad { dst, .. } => Some(dst),
-            Instruction::Load { dst, .. } => Some(dst),
-            Instruction::LoadAddImm { dst, .. } => Some(dst),
-            Instruction::LoadAdd { dst, .. } => Some(dst),
-            Instruction::Store { dst, .. } => Some(dst),
-            Instruction::StoreAddImm { dst, .. } => Some(dst),
-            Instruction::StoreAdd { dst, .. } => Some(dst),
             Instruction::CmpLT { dst, .. } => Some(dst),
             Instruction::CmpLE { dst, .. } => Some(dst),
             Instruction::CmpGT { dst, .. } => Some(dst),
@@ -1135,22 +1091,34 @@ impl Instruction {
             Instruction::TestGE { dst, .. } => Some(dst),
             Instruction::TestLT { dst, .. } => Some(dst),
             Instruction::TestLE { dst, .. } => Some(dst),
-            Instruction::F2I { dst, .. } => Some(dst),
-            Instruction::I2F { dst, .. } => Some(dst),
-            Instruction::F2F { dst, .. } => Some(dst),
+            // Float stuff
             Instruction::FAdd { dst, .. } => Some(dst),
             Instruction::FSub { dst, .. } => Some(dst),
             Instruction::FMult { dst, .. } => Some(dst),
             Instruction::FDiv { dst, .. } => Some(dst),
             Instruction::FComp { dst, .. } => Some(dst),
+            // Loads
+            Instruction::ImmLoad { dst, .. } => Some(dst),
+            Instruction::Load { dst, .. } => Some(dst),
+            Instruction::LoadAddImm { dst, .. } => Some(dst),
+            Instruction::LoadAdd { dst, .. } => Some(dst),
             Instruction::FLoad { dst, .. } => Some(dst),
             Instruction::FLoadAddImm { dst, .. } => Some(dst),
             Instruction::FLoadAdd { dst, .. } => Some(dst),
-            Instruction::FStore { dst, .. } => Some(dst),
-            Instruction::FStoreAddImm { dst, .. } => Some(dst),
-            Instruction::FStoreAdd { dst, .. } => Some(dst),
+            // Stores
+            Instruction::Store { dst, .. } => Some(dst),
+            Instruction::StoreAddImm { dst, .. } => Some(dst),
+            Instruction::StoreAdd { dst, .. } => Some(dst),
+            Instruction::IWrite(dst) => Some(dst),
+            Instruction::SWrite(dst) => Some(dst),
+            Instruction::FWrite(dst) => Some(dst),
+            Instruction::IRead(dst) => Some(dst),
+            Instruction::FRead(dst) => Some(dst),
             // The phi instruction needs to return the original register
             Instruction::Phi(dst, ..) => Some(dst),
+            // Call with return `call arg, arg => ret`
+            Instruction::ImmCall { ret, .. } => Some(ret),
+            Instruction::ImmRCall { ret, .. } => Some(ret),
             _ => None,
         }
     }
@@ -1202,9 +1170,11 @@ impl Instruction {
             Instruction::FLoad { dst, .. } => Some(dst),
             Instruction::FLoadAddImm { dst, .. } => Some(dst),
             Instruction::FLoadAdd { dst, .. } => Some(dst),
-            Instruction::FStore { dst, .. } => Some(dst),
-            Instruction::FStoreAddImm { dst, .. } => Some(dst),
-            Instruction::FStoreAdd { dst, .. } => Some(dst),
+            Instruction::IWrite(dst) => Some(dst),
+            Instruction::SWrite(dst) => Some(dst),
+            Instruction::FWrite(dst) => Some(dst),
+            Instruction::IRead(dst) => Some(dst),
+            Instruction::FRead(dst) => Some(dst),
             _ => None,
         }
     }
@@ -1268,7 +1238,10 @@ impl Instruction {
             Instruction::StoreAdd { src, add, .. } => {
                 (Some(Operand::Register(*src)), Some(Operand::Register(*add)))
             }
-            Instruction::IWrite(r) | Instruction::FWrite(r) => (Some(Operand::Register(*r)), None),
+            Instruction::IWrite(r) | Instruction::FWrite(r) | Instruction::SWrite(r) => {
+                (Some(Operand::Register(*r)), None)
+            }
+            Instruction::IRead(r) | Instruction::FRead(r) => (Some(Operand::Register(*r)), None),
             Instruction::CmpLT { a, b, .. } => {
                 (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
             }
@@ -1341,13 +1314,6 @@ impl Instruction {
             Instruction::FLoadAdd { src, add, .. } => {
                 (Some(Operand::Register(*src)), Some(Operand::Register(*add)))
             }
-            Instruction::FStore { src, .. } => (Some(Operand::Register(*src)), None),
-            Instruction::FStoreAddImm { src, add, .. } => {
-                (Some(Operand::Register(*src)), Some(Operand::Value(add.clone())))
-            }
-            Instruction::FStoreAdd { src, add, .. } => {
-                (Some(Operand::Register(*src)), Some(Operand::Register(*add)))
-            }
             _ => (None, None),
         }
     }
@@ -1409,9 +1375,6 @@ impl Instruction {
             Instruction::FLoad { src, .. } => (Some(src), None),
             Instruction::FLoadAddImm { src, add: _, .. } => (Some(src), None),
             Instruction::FLoadAdd { src, add, .. } => (Some(src), Some(add)),
-            Instruction::FStore { src, .. } => (Some(src), None),
-            Instruction::FStoreAddImm { src, add: _, .. } => (Some(src), None),
-            Instruction::FStoreAdd { src, add, .. } => (Some(src), Some(add)),
             _ => (None, None),
         }
     }
@@ -1479,9 +1442,6 @@ impl Instruction {
             Instruction::FLoad { .. } => "fload",
             Instruction::FLoadAddImm { .. } => "floadAI",
             Instruction::FLoadAdd { .. } => "floadAO",
-            Instruction::FStore { .. } => "fstore",
-            Instruction::FStoreAddImm { .. } => "fstoreAI",
-            Instruction::FStoreAdd { .. } => "fstoreAO",
             Instruction::FRead(_) => "fread",
             Instruction::IRead(_) => "iread",
             Instruction::FWrite(_) => "fwrite",
@@ -1490,12 +1450,6 @@ impl Instruction {
             Instruction::Push(_) => "push",
             Instruction::PushR(_) => "pushr",
             Instruction::Pop => "pop",
-            Instruction::StAdd => "stadd",
-            Instruction::StSub => "stsub",
-            Instruction::StMul => "stmul",
-            Instruction::StDiv => "stdiv",
-            Instruction::StLShift => "stlshift",
-            Instruction::StRShift => "strshift",
             Instruction::Data => "data",
             Instruction::Text => "text",
             Instruction::Frame { .. } => "frame",
@@ -1578,13 +1532,9 @@ impl Instruction {
             | Instruction::FLoad { .. }
             | Instruction::FLoadAddImm { .. }
             | Instruction::FLoadAdd { .. } => Instruction::F2F { src, dst },
-            Self::Store { .. }
-            | Self::StoreAddImm { .. }
-            | Self::FStore { .. }
-            | Self::FStoreAddImm { .. }
-            | Self::FStoreAdd { .. }
-            | Self::IRead(_)
-            | Self::FRead(_) => unreachable!("cannot simplify store instruction"),
+            Self::Store { .. } | Self::StoreAddImm { .. } | Self::IRead(_) | Self::FRead(_) => {
+                unreachable!("cannot simplify store instruction")
+            }
             _ => unreachable!(
                 "stack, text/data section stuff, calls, jumps, and comp/test stuff {:?}",
                 self
@@ -1851,13 +1801,7 @@ impl Instruction {
     pub fn is_store(&self) -> bool {
         matches!(
             self,
-            Self::Store { .. }
-                | Self::StoreAddImm { .. }
-                | Self::FStore { .. }
-                | Self::FStoreAddImm { .. }
-                | Self::FStoreAdd { .. }
-                | Self::IRead(_)
-                | Self::FRead(_)
+            Self::Store { .. } | Self::StoreAddImm { .. } | Self::IRead(_) | Self::FRead(_)
         )
     }
 
@@ -1948,7 +1892,7 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 src_b: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
-            ["and", a, b, "=>", dst] => instructions.push(Instruction::Add {
+            ["and", a, b, "=>", dst] => instructions.push(Instruction::And {
                 src_a: Reg::from_str(a)?,
                 src_b: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
@@ -2190,12 +2134,12 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             ["push", c] => instructions.push(Instruction::Push(Val::from_str(c)?)),
             ["pushr", reg] => instructions.push(Instruction::PushR(Reg::from_str(reg)?)),
             ["pop"] => instructions.push(Instruction::Pop),
-            ["stadd"] => instructions.push(Instruction::StAdd),
-            ["stsub"] => instructions.push(Instruction::StSub),
-            ["stmul"] => instructions.push(Instruction::StMul),
-            ["stdiv"] => instructions.push(Instruction::StDiv),
-            ["stlshift"] => instructions.push(Instruction::StLShift),
-            ["strshift"] => instructions.push(Instruction::StRShift),
+            // ["stadd"] => instructions.push(Instruction::StAdd),
+            // ["stsub"] => instructions.push(Instruction::StSub),
+            // ["stmul"] => instructions.push(Instruction::StMul),
+            // ["stdiv"] => instructions.push(Instruction::StDiv),
+            // ["stlshift"] => instructions.push(Instruction::StLShift),
+            // ["strshift"] => instructions.push(Instruction::StRShift),
 
             // Pseudo operations
             [".data"] => instructions.push(Instruction::Data),
