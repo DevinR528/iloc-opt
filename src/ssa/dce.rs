@@ -12,14 +12,14 @@ impl Instruction {
             Instruction::ImmRet(..)
                 | Instruction::Ret
                 | Instruction::IRead(..)
+                | Instruction::FRead(..)
                 | Instruction::IWrite(..)
                 | Instruction::SWrite(..)
-                | Instruction::FRead(..)
                 | Instruction::FWrite(..)
                 | Instruction::I2I { .. }
-                | Instruction::I2F { .. }
-                | Instruction::F2I { .. }
-                | Instruction::F2F { .. }
+                // | Instruction::I2F { .. }
+                // | Instruction::F2I { .. }
+                // | Instruction::F2F { .. }
                 | Instruction::Store { .. }
                 | Instruction::StoreAdd { .. }
                 | Instruction::StoreAddImm { .. }
@@ -27,15 +27,7 @@ impl Instruction {
                 | Instruction::ImmJump(..)
                 | Instruction::Call { .. }
                 | Instruction::ImmCall { .. }
-                // | Instruction::CbrT { .. }
-                // | Instruction::CbrF { .. }
-                // | Instruction::CbrEQ { .. }
-                // | Instruction::CbrNE { .. }
-                // | Instruction::CbrGT { .. }
-                // | Instruction::CbrGE { .. }
-                // | Instruction::CbrLT { .. }
-                // | Instruction::CbrLE { .. }
-                | Instruction::ImmLoad { src: Val::Location(..), .. } // | Instruction::Load { .. }
+                | Instruction::ImmLoad { src: Val::Location(..), .. }
         )
     }
 }
@@ -62,7 +54,6 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
     for (b_label, blk) in &copied_blocks {
         for inst in blk {
             if inst.is_critical() {
-                println!("critical {:?}", inst);
                 critical_map.insert(inst);
                 stack.push_back((inst, b_label));
             }
@@ -115,12 +106,10 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
             _ => (),
         }
 
-        for blk in domtree.ctrl_dep_map.get(b_label).unwrap_or(&empty) {
-            println!("{} {}", blk, b_label);
+        // Control dependence
+        for blk in domtree.post_dom_frontier.get(b_label).unwrap_or(&empty) {
             let Some(block) = func.blocks.iter().find(|b| b.label.starts_with(blk)) else { continue; };
-            let Some(last_inst) = block.instructions.iter().find(|i|
-                matches!(i, Instruction::ImmJump(..) | Instruction::Jump(..)) || i.is_cnd_jump()
-            ) else { continue; };
+            let Some(last_inst) = block.instructions.iter().find(|i| i.is_cnd_jump()) else { continue; };
 
             if critical_map.insert(last_inst) {
                 stack.push_back((last_inst, blk));
@@ -136,8 +125,17 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
         {
             if !critical_map.contains(&inst) {
                 if inst.is_cnd_jump() {
-                    println!("rewrite branch {:#?} {:?} {}", domtree, inst, blk.label);
-                    jumps.push((b, i, Instruction::ImmJump(Loc("".into()))));
+                    // post dominance
+                    let Some(label) = domtree.post_dom
+                        .get(&blk.label.replace(':', ""))
+                        .and_then(|set| if set.len() == 1 { set.iter().next() } else { None }) else { continue; };
+
+                    println!(
+                        "rewrite branch jumpI -> {} {:#?} {:#?}",
+                        label, domtree.post_dom, domtree.post_dom_frontier
+                    );
+
+                    jumps.push((b, i, Instruction::ImmJump(Loc(label.to_string()))));
                 } else if !matches!(inst, Instruction::ImmJump(..)) {
                     println!("remove {:?}", inst);
                     remove.push((b, i));
@@ -149,5 +147,8 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
     for (b, i) in remove {
         func.blocks[b].instructions[i] =
             Instruction::Skip(format!("[ssadce] {}", func.blocks[b].instructions[i]));
+    }
+    for (b, i, inst) in jumps {
+        func.blocks[b].instructions[i] = inst;
     }
 }

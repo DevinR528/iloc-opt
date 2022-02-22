@@ -155,7 +155,8 @@ fn traverse(val: &str, align: usize, cfg: &ControlFlowGraph, paths: &mut Vec<Vec
 #[derive(Debug)]
 pub struct DominatorTree {
     dom_frontier_map: HashMap<String, HashSet<String>>,
-    ctrl_dep_map: HashMap<String, BTreeSet<String>>,
+    post_dom_frontier: HashMap<String, BTreeSet<String>>,
+    post_dom: HashMap<String, BTreeSet<String>>,
     dom_succs_map: HashMap<String, BTreeSet<String>>,
     #[allow(unused)]
     dom_preds_map: HashMap<String, BTreeSet<String>>,
@@ -303,20 +304,46 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
         }
     }
 
-    println!("{:#?}", idom_map);
+    let empty = BTreeSet::new();
+    let mut seen = BTreeSet::new();
+    // This is control dependence
+    let mut post_dom_frontier = HashMap::<_, BTreeSet<_>>::with_capacity(blocks_label.len());
+    // this is just postdominators tree
+    let mut post_dom = HashMap::<_, BTreeSet<_>>::with_capacity(blocks_label.len());
+    for &node in reverse_postoder(&cfg_succs_map).collect::<Vec<_>>().iter().rev() {
+        let preds = cfg_preds_map.get(node).unwrap_or(&empty);
+        if preds.len() > 1 {
+            let mut labels = VecDeque::from_iter(preds);
+            let last_child = (*labels.back().unwrap()).clone();
+            let mut done = false;
+            while let Some(n) = labels.pop_front() {
+                done |= last_child == *n;
+                post_dom.entry(node.to_string()).or_default().insert(n.to_string());
+                seen.insert(n);
+                if dom_succs_map.get(n).is_some() {
+                    post_dom_frontier.entry(node.to_string()).or_default().insert(n.to_string());
+                }
+                if dom_succs_map.get(n).is_some() && done {
+                    break;
+                }
 
-    let mut ctrl_dep_map = HashMap::<_, BTreeSet<_>>::with_capacity(blocks_label.len());
-    for node in reverse_postoder(&cfg_succs_map).collect::<Vec<_>>().iter().rev() {
-        for pred in cfg_preds_map.get(*node).unwrap_or(&BTreeSet::new()) {
-            // if dom_succs_map.get(pred).map_or(false, |set| set.contains(*node)) {
-            ctrl_dep_map.entry(node.to_string()).or_default().insert(pred.to_string());
-            // }
+                labels.extend(cfg_preds_map.get(n).unwrap_or(&empty))
+            }
+        } else {
+            for p in preds {
+                if seen.contains(p) {
+                    continue;
+                }
+                post_dom.entry(node.to_string()).or_default().insert(p.to_string());
+                post_dom_frontier.entry(node.to_string()).or_default().insert(p.to_string());
+            }
         }
     }
 
     DominatorTree {
         dom_frontier_map,
-        ctrl_dep_map,
+        post_dom_frontier,
+        post_dom,
         dom_succs_map,
         dom_preds_map,
         cfg_preds_map,
@@ -455,7 +482,7 @@ fn ssa_cfg() {
 
     let cfg = build_cfg(&blocks.functions[0]);
     println!("{:?}", cfg);
-    emit_cfg_viz(&cfg, "check.dot");
+    emit_cfg_viz(&cfg, "graphs/check.dot");
 }
 
 #[test]
@@ -471,7 +498,7 @@ fn ssa_cfg_while() {
     let cfg = build_cfg(&blocks.functions[0]);
     // println!("{:?}", cfg);
 
-    emit_cfg_viz(&cfg, "while_array.dot");
+    emit_cfg_viz(&cfg, "graphs/while_array.dot");
 
     dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }
@@ -501,9 +528,8 @@ fn ssa_cfg_trap() {
     let cfg = build_cfg(&blocks.functions[0]);
     let dom = dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 
-    println!("{:?}", cfg);
     println!("{:#?}", dom);
-    // emit_cfg_viz(&cfg, "turd.dot");
+    // emit_cfg_viz(&cfg, "graphs/turd.dot");
 
     // dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }
