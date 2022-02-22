@@ -1112,8 +1112,8 @@ impl Instruction {
             // Instruction::IWrite(dst) => Some(dst),
             // Instruction::SWrite(dst) => Some(dst),
             // Instruction::FWrite(dst) => Some(dst),
-            Instruction::IRead(dst) => Some(dst),
-            Instruction::FRead(dst) => Some(dst),
+            // Instruction::IRead(dst) => Some(dst),
+            // Instruction::FRead(dst) => Some(dst),
             // The phi instruction needs to return the original register
             Instruction::Phi(dst, ..) => Some(dst),
             // Call with return `call arg, arg => ret`
@@ -1173,8 +1173,8 @@ impl Instruction {
             // Instruction::IWrite(dst) => Some(dst),
             // Instruction::SWrite(dst) => Some(dst),
             // Instruction::FWrite(dst) => Some(dst),
-            Instruction::IRead(dst) => Some(dst),
-            Instruction::FRead(dst) => Some(dst),
+            // Instruction::IRead(dst) => Some(dst),
+            // Instruction::FRead(dst) => Some(dst),
             _ => None,
         }
     }
@@ -1347,6 +1347,7 @@ impl Instruction {
             Instruction::IWrite(r) | Instruction::SWrite(r) | Instruction::FWrite(r) => {
                 (Some(r), None)
             }
+            Instruction::IRead(r) | Instruction::FRead(r) => (Some(r), None),
             Instruction::CmpLT { a, b, .. } => (Some(a), Some(b)),
             Instruction::CmpLE { a, b, .. } => (Some(a), Some(b)),
             Instruction::CmpGT { a, b, .. } => (Some(a), Some(b)),
