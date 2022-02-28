@@ -355,10 +355,12 @@ pub fn insert_phi_functions(
     blocks: &mut Vec<Block>,
     dom_front: &HashMap<String, HashSet<String>>,
 ) -> HashMap<String, HashSet<Operand>> {
+    // All the registers that are used across blocks
     let mut globals = vec![];
     let mut blocks_map = HashMap::new();
 
     for blk in &*blocks {
+        // This represents any redefinitions that are local to the current block
         let mut varkil = HashSet::new();
         for op in &blk.instructions {
             let (a, b) = op.operands();
@@ -385,17 +387,18 @@ pub fn insert_phi_functions(
 
     let empty = HashSet::new();
     let mut phis: HashMap<_, HashSet<_>> = HashMap::new();
-    for x in &globals {
-        let mut worklist = blocks_map.get(x).unwrap_or(&empty).iter().collect::<VecDeque<_>>();
+    for global_reg in &globals {
+        let mut worklist =
+            blocks_map.get(global_reg).unwrap_or(&empty).iter().collect::<VecDeque<_>>();
         // For every block that this variable is live in
         while let Some(blk) = worklist.pop_front() {
             // The dominance frontier (join point) is the block that needs
             // the 𝛟 added to it
             for d in dom_front.get(blk).unwrap_or(&empty) {
                 // If we have done this before skip it
-                if !phis.get(d).map_or(false, |set| set.contains(x)) {
+                if !phis.get(d).map_or(false, |set| set.contains(global_reg)) {
                     // insert phi func
-                    phis.entry(d.to_string()).or_default().insert(x.clone());
+                    phis.entry(d.to_string()).or_default().insert(global_reg.clone());
                     // This needs to be propagated back up the graph
                     worklist.push_back(d);
                 }

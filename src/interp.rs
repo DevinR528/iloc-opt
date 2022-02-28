@@ -91,7 +91,7 @@ impl Interpreter {
                     // the memory address of the beginning of the program
                     // itself, since our stack is separate it's just the end
                     // index of the stack since it grows towards index 0 from index (length)
-                    registers.insert(Reg::Var(0), Val::Integer(STACK_SIZE as isize));
+                    registers.insert(Reg::Var(0), Val::Integer((STACK_SIZE - 1) as isize));
                 }
 
                 fn_decl_map.insert(Loc(func.label.clone()), (func.stack_size, func.params));
@@ -463,7 +463,7 @@ impl Interpreter {
                 let a = self.registers().get(cond)?;
                 let should_jump = a.is_one();
                 if should_jump {
-                    let jmp_idx = self.label_map.get(loc)?;
+                    let jmp_idx = self.label_map.get(loc).unwrap();
                     self.inst_idx = *jmp_idx;
                     return Some(true);
                 }
@@ -543,7 +543,7 @@ impl Interpreter {
                 let int_from_float = if let Val::Float(f) = self.registers().get(src).cloned()? {
                     unsafe { f.to_int_unchecked::<isize>() }
                 } else {
-                    todo!("float error")
+                    todo!("float error {:?}", self.registers().get(src).cloned())
                 };
                 self.call_stack
                     .last_mut()
@@ -633,10 +633,7 @@ impl Interpreter {
             Instruction::FWrite(r) => println!("{:?}", self.registers().get(r)?.to_float()?),
             Instruction::IWrite(r) => println!("{:?}", self.registers().get(r)?.to_int()?),
             Instruction::SWrite(r) => {
-                println!(
-                    "{:?}",
-                    stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize]
-                )
+                println!("{}", stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize])
             }
             _ => todo!("{:?}", instrs[self.inst_idx]),
         }
