@@ -1,4 +1,4 @@
-#![feature(stdio_locked, let_else)]
+#![feature(stdio_locked, let_else, map_first_last)]
 
 use std::{
     env, fs,

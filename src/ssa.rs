@@ -1,6 +1,7 @@
 use std::{
     cell::Cell,
     collections::{hash_map::RandomState, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+    fmt,
 };
 
 use crate::iloc::{Block, Function, IlocProgram, Instruction, Operand};
@@ -39,15 +40,12 @@ pub fn reverse_postoder(
     std::iter::from_fn(move || {
         let val = stack.pop_front()?;
         if let Some(set) = succs.get(val) {
-            for children in set {
-                if seen.contains(children.as_str()) {
+            for child in set {
+                if seen.contains(child.as_str()) {
                     continue;
                 }
-                stack.push_back(children)
+                stack.push_back(child)
             }
-        }
-        if seen.contains(val) {
-            // return stack.pop_front();
         }
         seen.insert(val);
 
@@ -305,11 +303,48 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
     }
 
     let empty = BTreeSet::new();
+
+    #[derive(Debug)]
+    enum SiblingKind<'a> {
+        Only(&'a String),
+        Multi(&'a String),
+        Ignore(&'a String),
+    }
+    impl fmt::Display for SiblingKind<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            match self {
+                Self::Only(s) | Self::Multi(s) | Self::Ignore(s) => s.fmt(f),
+            }
+        }
+    }
+    impl SiblingKind<'_> {
+        pub fn as_str(&self) -> &str {
+            match self {
+                Self::Only(s) | Self::Multi(s) | Self::Ignore(s) => s,
+            }
+        }
+    }
+    // This is just postdominators tree
+    let mut post_dom = HashMap::<_, BTreeSet<_>>::with_capacity(blocks_label.len());
+    for node in reverse_postoder(&cfg_succs_map) {
+        // Skip until we find a single common child...
+        let s = node.to_string();
+        let mut labels = VecDeque::from([SiblingKind::Ignore(&s)]);
+        while let Some(n) = labels.pop_front() {
+            if let Some(succs) = cfg_succs_map.get(n.as_str()) {
+                let kind = if succs.len() == 1 { SiblingKind::Only } else { SiblingKind::Multi };
+                labels.extend(succs.iter().map(kind));
+            }
+            if let SiblingKind::Only(n) = n {
+                post_dom.entry(node.to_string()).or_default().insert(n.to_string());
+            }
+        }
+    }
+
     let mut seen = BTreeSet::new();
+
     // This is control dependence
     let mut post_dom_frontier = HashMap::<_, BTreeSet<_>>::with_capacity(blocks_label.len());
-    // this is just postdominators tree
-    let mut post_dom = HashMap::<_, BTreeSet<_>>::with_capacity(blocks_label.len());
     for &node in reverse_postoder(&cfg_succs_map).collect::<Vec<_>>().iter().rev() {
         let preds = cfg_preds_map.get(node).unwrap_or(&empty);
         if preds.len() > 1 {
@@ -318,10 +353,10 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
             let mut done = false;
             while let Some(n) = labels.pop_front() {
                 done |= last_child == *n;
-                post_dom.entry(node.to_string()).or_default().insert(n.to_string());
+
                 seen.insert(n);
                 if dom_succs_map.get(n).is_some() {
-                    post_dom_frontier.entry(node.to_string()).or_default().insert(n.to_string());
+                    post_dom_frontier.entry(n.to_string()).or_default().insert(node.to_string());
                 }
                 if dom_succs_map.get(n).is_some() && done {
                     break;
@@ -334,7 +369,6 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
                 if seen.contains(p) {
                     continue;
                 }
-                post_dom.entry(node.to_string()).or_default().insert(p.to_string());
                 post_dom_frontier.entry(node.to_string()).or_default().insert(p.to_string());
             }
         }
@@ -494,14 +528,14 @@ fn ssa_cfg_while() {
 
     use crate::iloc::{make_blks, parse_text};
 
-    let input = fs::read_to_string("input/while_array.il").unwrap();
+    let input = fs::read_to_string("input/fib.il").unwrap();
     let iloc = parse_text(&input).unwrap();
     let mut blocks = make_blks(iloc, true);
 
     let cfg = build_cfg(&blocks.functions[0]);
     // println!("{:?}", cfg);
 
-    emit_cfg_viz(&cfg, "graphs/while_array.dot");
+    emit_cfg_viz(&cfg, "graphs/fib.dot");
 
     dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }

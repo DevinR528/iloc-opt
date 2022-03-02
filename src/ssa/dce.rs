@@ -130,9 +130,9 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
                         .get(&blk.label.replace(':', ""))
                         .and_then(|set| if set.len() == 1 { set.iter().next() } else { None }) else { continue; };
 
-                    println!(
-                        "rewrite branch jumpI -> {} {:#?} {:#?}",
-                        label, domtree.post_dom, domtree.post_dom_frontier
+                    panic!(
+                        "rewrite branch {} jumpI -> {} {:#?} {:#?}",
+                        blk.label, label, domtree.post_dom, domtree.post_dom_frontier
                     );
 
                     jumps.push((b, i, Instruction::ImmJump(Loc(label.to_string()))));
@@ -143,6 +143,8 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
             }
         }
     }
+
+    panic!("post_dom: {:#?}\npost_dom_front: {:#?}", domtree.post_dom, domtree.post_dom_frontier);
 
     for (b, i) in remove {
         func.blocks[b].instructions[i] =

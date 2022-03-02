@@ -802,7 +802,7 @@ impl fmt::Display for Instruction {
             | Instruction::Not { src, dst }
             | Instruction::Load { src, dst }
             | Instruction::Store { src, dst } => {
-                write!(f, "    {} {} => {}", self.inst_name(), src, dst)
+                writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
             }
             Instruction::Add { src_a, src_b, dst }
             | Instruction::Sub { src_a, src_b, dst }
@@ -813,25 +813,25 @@ impl fmt::Display for Instruction {
             | Instruction::Mod { src_a, src_b, dst }
             | Instruction::And { src_a, src_b, dst }
             | Instruction::Or { src_a, src_b, dst } => {
-                write!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
             Instruction::ImmAdd { src, konst, dst }
             | Instruction::ImmSub { src, konst, dst }
             | Instruction::ImmMult { src, konst, dst }
             | Instruction::ImmLShift { src, konst, dst }
             | Instruction::ImmRShift { src, konst, dst } => {
-                write!(f, "    {} {}, {} => {}", self.inst_name(), src, konst, dst)
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, konst, dst)
             }
 
             Instruction::ImmLoad { src, dst } => {
-                write!(f, "    {} {} => {}", self.inst_name(), src, dst)
+                writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
             }
             Instruction::LoadAddImm { src, add, dst }
             | Instruction::StoreAddImm { src, add, dst } => {
-                write!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
             }
             Instruction::LoadAdd { src, add, dst } | Instruction::StoreAdd { src, add, dst } => {
-                write!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
             }
 
             Instruction::CmpLT { a, b, dst }
@@ -841,7 +841,7 @@ impl fmt::Display for Instruction {
             | Instruction::CmpEQ { a, b, dst }
             | Instruction::CmpNE { a, b, dst }
             | Instruction::Comp { a, b, dst } => {
-                write!(f, "    {} {}, {} => {}", self.inst_name(), a, b, dst)
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), a, b, dst)
             }
 
             Instruction::TestEQ { test, dst }
@@ -850,11 +850,11 @@ impl fmt::Display for Instruction {
             | Instruction::TestGE { test, dst }
             | Instruction::TestLT { test, dst }
             | Instruction::TestLE { test, dst } => {
-                write!(f, "    {} {} => {}", self.inst_name(), test, dst)
+                writeln!(f, "    {} {} => {}", self.inst_name(), test, dst)
             }
-            Instruction::ImmJump(label) => write!(f, "    {} -> {}", self.inst_name(), label),
-            Instruction::Jump(reg) => write!(f, "    {} -> {}", self.inst_name(), reg),
-            Instruction::Call { name, args } => write!(
+            Instruction::ImmJump(label) => writeln!(f, "    {} -> {}", self.inst_name(), label),
+            Instruction::Jump(reg) => writeln!(f, "    {} -> {}", self.inst_name(), reg),
+            Instruction::Call { name, args } => writeln!(
                 f,
                 "    {} {}{} {}",
                 self.inst_name(),
@@ -862,7 +862,7 @@ impl fmt::Display for Instruction {
                 if args.is_empty() { "" } else { "," },
                 args.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(", ")
             ),
-            Instruction::ImmCall { name, args, ret } => write!(
+            Instruction::ImmCall { name, args, ret } => writeln!(
                 f,
                 "    {} {}, {} => {}",
                 self.inst_name(),
@@ -870,7 +870,7 @@ impl fmt::Display for Instruction {
                 args.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(", "),
                 ret
             ),
-            Instruction::ImmRCall { reg, args, ret } => write!(
+            Instruction::ImmRCall { reg, args, ret } => writeln!(
                 f,
                 "    {} {}, {} => {}",
                 self.inst_name(),
@@ -878,9 +878,9 @@ impl fmt::Display for Instruction {
                 args.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(", "),
                 ret
             ),
-            Instruction::ImmRet(reg) => write!(f, "    {} {}", self.inst_name(), reg),
+            Instruction::ImmRet(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
             Instruction::CbrT { cond, loc } | Instruction::CbrF { cond, loc } => {
-                write!(f, "    {} {} -> {}", self.inst_name(), cond, loc)
+                writeln!(f, "    {} {} -> {}", self.inst_name(), cond, loc)
             }
             Instruction::CbrLT { a, b, loc }
             | Instruction::CbrLE { a, b, loc }
@@ -888,7 +888,7 @@ impl fmt::Display for Instruction {
             | Instruction::CbrGE { a, b, loc }
             | Instruction::CbrEQ { a, b, loc }
             | Instruction::CbrNE { a, b, loc } => {
-                write!(f, "    {} {}, {} -> {}", self.inst_name(), a, b, loc)
+                writeln!(f, "    {} {}, {} -> {}", self.inst_name(), a, b, loc)
             }
 
             Instruction::FAdd { src_a, src_b, dst }
@@ -896,25 +896,25 @@ impl fmt::Display for Instruction {
             | Instruction::FMult { src_a, src_b, dst }
             | Instruction::FDiv { src_a, src_b, dst }
             | Instruction::FComp { src_a, src_b, dst } => {
-                write!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
             }
 
             Instruction::FLoadAddImm { src, add, dst } => {
-                write!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
             }
             Instruction::FLoadAdd { src, add, dst } => {
-                write!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
             }
             Instruction::FRead(reg)
             | Instruction::IRead(reg)
             | Instruction::FWrite(reg)
             | Instruction::IWrite(reg)
             | Instruction::SWrite(reg)
-            | Instruction::PushR(reg) => write!(f, "    {} {}", self.inst_name(), reg),
+            | Instruction::PushR(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
 
-            Instruction::Push(val) => write!(f, "    {} {}", self.inst_name(), val),
+            Instruction::Push(val) => writeln!(f, "    {} {}", self.inst_name(), val),
             Instruction::Frame { name, size, params } => {
-                write!(
+                writeln!(
                     f,
                     ".{} {}, {}{} {}",
                     self.inst_name(),
@@ -925,13 +925,13 @@ impl fmt::Display for Instruction {
                 )
             }
             Instruction::Global { name, size, align } => {
-                write!(f, "    .{} {}, {}, {}", self.inst_name(), name, size, align)
+                writeln!(f, "    .{} {}, {}, {}", self.inst_name(), name, size, align)
             }
             Instruction::String { name, content } => {
-                write!(f, "    .{} {}, {}", self.inst_name(), name, content)
+                writeln!(f, "    .{} {}, {}", self.inst_name(), name, content)
             }
             Instruction::Float { name, content } => {
-                write!(f, "    .{} {}, {}", self.inst_name(), name, content)
+                writeln!(f, "    .{} {}, {}", self.inst_name(), name, content)
             }
             Instruction::Label(label) => {
                 if label == ".L_main:"
@@ -940,10 +940,10 @@ impl fmt::Display for Instruction {
                 {
                     Ok(())
                 } else {
-                    write!(f, "{} nop", label)
+                    writeln!(f, "{} nop", label)
                 }
             }
-            Instruction::Text | Instruction::Data => write!(f, "    .{}", self.inst_name()),
+            Instruction::Text | Instruction::Data => writeln!(f, "    .{}", self.inst_name()),
             Instruction::Skip(s) => writeln!(f, "    # {}", s.trim()),
             Instruction::Phi(reg, _s, sub) => writeln!(f, "# phi({}_{})", reg, sub.unwrap_or(0)),
             _ => writeln!(f, "    {}", self.inst_name()),
