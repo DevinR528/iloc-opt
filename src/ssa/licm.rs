@@ -31,12 +31,13 @@ impl LoopInfo {
     }
 }
 
-pub fn find_loops(_func: &mut Function, domtree: &DominatorTree) {
-    println!("{:#?}", domtree);
+pub fn find_loops(func: &mut Function, domtree: &DominatorTree) {
+    // println!("{:#?}", domtree);
+    let start = format!(".L_{}", func.label);
     let mut loops = BTreeMap::<_, String>::new();
     let mut loop_ord = vec![];
     // We traverse the CFG in reverse postorder
-    for blk in reverse_postoder(&domtree.cfg_succs_map) {
+    for blk in reverse_postoder(&domtree.cfg_succs_map, &start) {
         // We check each predecessor of the control flow graph
         for pred in domtree.cfg_preds_map.get(blk).unwrap_or(&BTreeSet::default()) {
             // If the block dominates one of it's preds it is a back edge to a loop

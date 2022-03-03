@@ -16,7 +16,7 @@ impl Instruction {
                 | Instruction::IWrite(..)
                 | Instruction::SWrite(..)
                 | Instruction::FWrite(..)
-                | Instruction::I2I { .. }
+                // | Instruction::I2I { .. }
                 // | Instruction::I2F { .. }
                 // | Instruction::F2I { .. }
                 // | Instruction::F2F { .. }
@@ -27,29 +27,21 @@ impl Instruction {
                 | Instruction::ImmJump(..)
                 | Instruction::Call { .. }
                 | Instruction::ImmCall { .. }
+                | Instruction::Frame { .. }
                 | Instruction::ImmLoad { src: Val::Location(..), .. }
         )
     }
 }
 
 pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &DominatorTree) {
-    // println!(
-    //     "preds: {:#?}\nctrl: {:#?}\ndom front: {:#?}",
-    //     domtree.dom_preds_map, domtree.ctrl_dep_map, domtree.dom_frontier_map
-    // );
     let mut stack = VecDeque::new();
     let mut critical_map = HashSet::new();
     let mut def_map = HashMap::new();
 
     let mut copied_blocks = vec![];
     for blk in &func.blocks {
-        copied_blocks.push((
-            blk.label.replace(':', ""),
-            blk.instructions()
-                // .map(|i| i.remove_phi_reg())
-                .cloned()
-                .collect::<Vec<_>>(),
-        ));
+        copied_blocks
+            .push((blk.label.replace(':', ""), blk.instructions().cloned().collect::<Vec<_>>()));
     }
     for (b_label, blk) in &copied_blocks {
         for inst in blk {
@@ -80,20 +72,16 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
         }
 
         match inst {
-            Instruction::ImmCall { args, .. } => {
+            Instruction::Call { args, .. }
+            | Instruction::ImmCall { args, .. }
+            | Instruction::Frame { params: args, .. } => {
                 for (inst, blk) in args.iter().filter_map(|r| def_map.get(r)) {
                     if critical_map.insert(inst) {
                         stack.push_back((inst, blk));
                     }
                 }
             }
-            Instruction::Call { args, .. } => {
-                for (inst, blk) in args.iter().filter_map(|r| def_map.get(r)) {
-                    if critical_map.insert(inst) {
-                        stack.push_back((inst, blk));
-                    }
-                }
-            }
+            Instruction::CbrGT { a, .. } => println!("{:?}", def_map.get(a)),
             Instruction::Store { dst, .. }
             | Instruction::StoreAddImm { dst, .. }
             | Instruction::StoreAdd { dst, .. } => {
@@ -109,7 +97,8 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
         // Control dependence
         for blk in domtree.post_dom_frontier.get(b_label).unwrap_or(&empty) {
             let Some(block) = func.blocks.iter().find(|b| b.label.starts_with(blk)) else { continue; };
-            let Some(last_inst) = block.instructions.iter().find(|i| i.is_cnd_jump()) else { continue; };
+            let Some(last_inst) = block.instructions.iter()
+                .find(|i| i.is_cnd_jump() || matches!(i, Instruction::ImmJump(..))) else { continue; };
 
             if critical_map.insert(last_inst) {
                 stack.push_back((last_inst, blk));
@@ -132,7 +121,7 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
 
                     println!(
                         "rewrite branch {} jumpI -> {} {:#?} {:#?}",
-                        blk.label, label, domtree.post_dom, domtree.post_dom_frontier
+                        inst, label, domtree.post_dom, domtree.post_dom_frontier
                     );
 
                     jumps.push((b, i, Instruction::ImmJump(Loc(label.to_string()))));
@@ -144,8 +133,10 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
         }
     }
 
-    // panic!("post_dom: {:#?}\npost_dom_front: {:#?}", domtree.post_dom,
-    // domtree.post_dom_frontier);
+    // println!(
+    //     "post_dom: {:#?}\npost_dom_front: {:#?}\n{:#?}",
+    //     domtree.post_dom, domtree.post_dom_frontier, domtree.dom_frontier_map
+    // );
 
     for (b, i) in remove {
         func.blocks[b].instructions[i] =

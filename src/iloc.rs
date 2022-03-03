@@ -239,6 +239,8 @@ impl fmt::Display for Reg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Reg::Var(num) | Reg::Phi(num, ..) => write!(f, "%vr{}", num),
+            // Reg::Var(num) => write!(f, "%vr{}", num),
+            // Reg::Phi(num, subs) => write!(f, "%vr{}_{}", num, subs),
         }
     }
 }
@@ -264,6 +266,12 @@ impl Reg {
             *curr
         } else {
             unreachable!("not just Reg::Var in hurr")
+        }
+    }
+
+    pub fn remove_phi(&mut self) {
+        if let Reg::Phi(reg, ..) = self {
+            *self = Reg::Var(*reg)
         }
     }
 }
@@ -934,14 +942,14 @@ impl fmt::Display for Instruction {
                 writeln!(f, "    .{} {}, {}", self.inst_name(), name, content)
             }
             Instruction::Label(label) => {
-                if label == ".L_main:"
-                // Remove the labels that are added as a result of basic block construction
-                    || label.chars().take(3).all(|c| c == '.' || c.is_numeric() || c == '_')
-                {
-                    Ok(())
-                } else {
-                    writeln!(f, "{} nop", label)
-                }
+                // if label == ".L_main:"
+                // // Remove the labels that are added as a result of basic block construction
+                //     || label.chars().take(3).all(|c| c == '.' || c.is_numeric() || c == '_')
+                // {
+                //     Ok(())
+                // } else {
+                writeln!(f, "{} nop", label)
+                // }
             }
             Instruction::Text | Instruction::Data => writeln!(f, "    .{}", self.inst_name()),
             Instruction::Skip(s) => writeln!(f, "    # {}", s.trim()),
@@ -983,6 +991,154 @@ impl Operand {
 }
 
 impl Instruction {
+    pub fn remove_phis(&mut self) {
+        match self {
+            Instruction::FLoad { src, dst }
+            | Instruction::F2I { src, dst }
+            | Instruction::I2F { src, dst }
+            | Instruction::F2F { src, dst }
+            | Instruction::I2I { src, dst }
+            | Instruction::Not { src, dst }
+            | Instruction::Load { src, dst }
+            | Instruction::Store { src, dst } => {
+                src.remove_phi();
+                dst.remove_phi();
+            }
+            Instruction::Add { src_a, src_b, dst }
+            | Instruction::Sub { src_a, src_b, dst }
+            | Instruction::Mult { src_a, src_b, dst }
+            | Instruction::Div { src_a, src_b, dst }
+            | Instruction::LShift { src_a, src_b, dst }
+            | Instruction::RShift { src_a, src_b, dst }
+            | Instruction::Mod { src_a, src_b, dst }
+            | Instruction::And { src_a, src_b, dst }
+            | Instruction::Or { src_a, src_b, dst } => {
+                src_a.remove_phi();
+                src_b.remove_phi();
+                dst.remove_phi();
+            }
+            Instruction::ImmAdd { src, dst, .. }
+            | Instruction::ImmSub { src, dst, .. }
+            | Instruction::ImmMult { src, dst, .. }
+            | Instruction::ImmLShift { src, dst, .. }
+            | Instruction::ImmRShift { src, dst, .. } => {
+                src.remove_phi();
+                dst.remove_phi();
+            }
+
+            Instruction::ImmLoad { dst, .. } => {
+                dst.remove_phi();
+            }
+            Instruction::LoadAddImm { src, dst, .. }
+            | Instruction::StoreAddImm { src, dst, .. } => {
+                src.remove_phi();
+                dst.remove_phi();
+            }
+            Instruction::LoadAdd { src, add, dst } | Instruction::StoreAdd { src, add, dst } => {
+                src.remove_phi();
+                add.remove_phi();
+                dst.remove_phi();
+            }
+
+            Instruction::CmpLT { a, b, dst }
+            | Instruction::CmpLE { a, b, dst }
+            | Instruction::CmpGT { a, b, dst }
+            | Instruction::CmpGE { a, b, dst }
+            | Instruction::CmpEQ { a, b, dst }
+            | Instruction::CmpNE { a, b, dst }
+            | Instruction::Comp { a, b, dst } => {
+                a.remove_phi();
+                b.remove_phi();
+                dst.remove_phi();
+            }
+
+            Instruction::TestEQ { test, dst }
+            | Instruction::TestNE { test, dst }
+            | Instruction::TestGT { test, dst }
+            | Instruction::TestGE { test, dst }
+            | Instruction::TestLT { test, dst }
+            | Instruction::TestLE { test, dst } => {
+                test.remove_phi();
+                dst.remove_phi();
+            }
+            Instruction::ImmJump(..) => {}
+            Instruction::Jump(reg) => reg.remove_phi(),
+            Instruction::Call { args, .. } => {
+                for arg in args {
+                    arg.remove_phi();
+                }
+            }
+            Instruction::ImmCall { args, ret, .. } => {
+                ret.remove_phi();
+                for arg in args {
+                    arg.remove_phi();
+                }
+            }
+            Instruction::ImmRCall { reg, args, ret } => {
+                reg.remove_phi();
+                ret.remove_phi();
+                for arg in args {
+                    arg.remove_phi();
+                }
+            }
+            Instruction::ImmRet(reg) => reg.remove_phi(),
+            Instruction::CbrT { cond, .. } | Instruction::CbrF { cond, .. } => {
+                cond.remove_phi();
+            }
+            Instruction::CbrLT { a, b, .. }
+            | Instruction::CbrLE { a, b, .. }
+            | Instruction::CbrGT { a, b, .. }
+            | Instruction::CbrGE { a, b, .. }
+            | Instruction::CbrEQ { a, b, .. }
+            | Instruction::CbrNE { a, b, .. } => {
+                a.remove_phi();
+                b.remove_phi();
+            }
+
+            Instruction::FAdd { src_a, src_b, dst }
+            | Instruction::FSub { src_a, src_b, dst }
+            | Instruction::FMult { src_a, src_b, dst }
+            | Instruction::FDiv { src_a, src_b, dst }
+            | Instruction::FComp { src_a, src_b, dst } => {
+                src_a.remove_phi();
+                src_b.remove_phi();
+                dst.remove_phi();
+            }
+
+            Instruction::FLoadAddImm { src, dst, .. } => {
+                src.remove_phi();
+                dst.remove_phi();
+            }
+            Instruction::FLoadAdd { src, add, dst } => {
+                src.remove_phi();
+                add.remove_phi();
+                dst.remove_phi();
+            }
+            Instruction::FRead(reg)
+            | Instruction::IRead(reg)
+            | Instruction::FWrite(reg)
+            | Instruction::IWrite(reg)
+            | Instruction::SWrite(reg)
+            | Instruction::PushR(reg) => reg.remove_phi(),
+
+            Instruction::Push(..) => {}
+            Instruction::Frame { params, .. } => {
+                for arg in params {
+                    arg.remove_phi();
+                }
+            }
+            Instruction::Global { .. } => {}
+            Instruction::String { .. } => {}
+            Instruction::Float { .. } => {}
+            Instruction::Label(..) => {}
+            Instruction::Text | Instruction::Data => {}
+            Instruction::Skip(..) => {}
+            Instruction::Phi(..) => {
+                *self = Instruction::Skip(format!("{}", self));
+            }
+            _ => {}
+        }
+    }
     // TODO: make another enum so this isn't so crappy
     // Have
     // enum Instruction {

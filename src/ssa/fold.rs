@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::iloc::{Function, Instruction, Reg, Val};
 
-fn eval_jump(
+fn eval_cond_branch(
     expr: &Instruction,
     const_map: &HashMap<Reg, ((usize, usize), ValueKind)>,
 ) -> Option<Instruction> {
@@ -251,7 +251,7 @@ pub fn const_fold(
             // If this instruction has a destination
             let Some(m) = func.blocks[blk].instructions[inst].target_reg().copied() else {
                 // Else it's a possible jump/branch and the destination is a label
-                let Some(folded) = eval_jump(&func.blocks[blk].instructions[inst], &const_vals.defined) else {
+                let Some(folded) = eval_cond_branch(&func.blocks[blk].instructions[inst], &const_vals.defined) else {
                     continue;
                 };
                 if matches!(folded, Instruction::ImmJump(_)) {
