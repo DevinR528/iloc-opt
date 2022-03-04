@@ -2,11 +2,14 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::{
     iloc::{Function, Instruction, Loc, Val},
-    ssa::{ControlFlowGraph, DominatorTree},
+    ssa::{ControlFlowGraph, DominatorTree, OrdLabel},
 };
 
 impl Instruction {
     fn is_critical(&self) -> bool {
+        if let Instruction::Phi(..) = self {
+            println!("{:?}", self)
+        }
         matches!(
             self,
             Instruction::ImmRet(..)
@@ -41,7 +44,7 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
     let mut copied_blocks = vec![];
     for blk in &func.blocks {
         copied_blocks
-            .push((blk.label.replace(':', ""), blk.instructions().cloned().collect::<Vec<_>>()));
+            .push((OrdLabel::new(&blk.label), blk.instructions().cloned().collect::<Vec<_>>()));
     }
     for (b_label, blk) in &copied_blocks {
         for inst in blk {
@@ -96,7 +99,7 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
 
         // Control dependence
         for blk in domtree.post_dom_frontier.get(b_label).unwrap_or(&empty) {
-            let Some(block) = func.blocks.iter().find(|b| b.label.starts_with(blk)) else { continue; };
+            let Some(block) = func.blocks.iter().find(|b| b.label.starts_with(blk.as_str())) else { continue; };
             let Some(last_inst) = block.instructions.iter()
                 .find(|i| i.is_cnd_jump() || matches!(i, Instruction::ImmJump(..))) else { continue; };
 
@@ -116,11 +119,11 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
                 if inst.is_cnd_jump() {
                     // post dominance
                     let Some(label) = domtree.post_dom
-                        .get(&blk.label.replace(':', ""))
+                        .get(blk.label.replace(':', "").as_str())
                         .and_then(|set| if set.len() == 1 { set.iter().next() } else { None }) else { continue; };
 
                     println!(
-                        "rewrite branch {} jumpI -> {} {:#?} {:#?}",
+                        "rewrite branch {} jumpI -> {:?} {:#?} {:#?}",
                         inst, label, domtree.post_dom, domtree.post_dom_frontier
                     );
 

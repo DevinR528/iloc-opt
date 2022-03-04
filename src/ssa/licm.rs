@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     iloc::Function,
-    ssa::{reverse_postoder, DominatorTree},
+    ssa::{reverse_postoder, DominatorTree, OrdLabel},
 };
 
 #[derive(Debug)]
@@ -33,7 +33,7 @@ impl LoopInfo {
 
 pub fn find_loops(func: &mut Function, domtree: &DominatorTree) {
     // println!("{:#?}", domtree);
-    let start = format!(".L_{}", func.label);
+    let start = OrdLabel::new_start(&func.label);
     let mut loops = BTreeMap::<_, String>::new();
     let mut loop_ord = vec![];
     // We traverse the CFG in reverse postorder
@@ -43,7 +43,7 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) {
             // If the block dominates one of it's preds it is a back edge to a loop
             if domtree.dom_frontier_map.get(pred).map_or(false, |set| set.contains(blk)) {
                 if loops.insert(blk.to_string(), blk.to_string()).is_none() {
-                    loop_ord.push(blk);
+                    loop_ord.push(blk.as_str());
                 }
                 // We only need to identify one back edge to know we are in a loop
                 break;
@@ -59,14 +59,14 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) {
         for pred in domtree.cfg_preds_map.get(lp).unwrap_or(&empty) {
             // Add the back edges to the stack/worklist
             if domtree.dom_frontier_map.get(pred).map_or(false, |set| set.contains(lp)) {
-                stack.push(pred);
+                stack.push(pred.as_str());
             }
         }
 
         while let Some(node) = stack.pop() {
             // println!("{:#?}", loop_map);
             let mut continue_dfs = None;
-            if let Entry::Vacant(unseen) = loop_map.entry(node.clone()) {
+            if let Entry::Vacant(unseen) = loop_map.entry(node.to_string()) {
                 unseen.insert(LoopInfo::PartOf(lp.to_string()));
                 continue_dfs = Some(node.to_string());
             } else if let Some(node_loop) = loop_map.get(node) {
@@ -111,8 +111,8 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) {
             }
 
             if let Some(cont) = continue_dfs {
-                for blk in domtree.cfg_preds_map.get(&cont).unwrap_or(&empty) {
-                    stack.push(blk);
+                for blk in domtree.cfg_preds_map.get(cont.as_str()).unwrap_or(&empty) {
+                    stack.push(blk.as_str());
                 }
             }
         }

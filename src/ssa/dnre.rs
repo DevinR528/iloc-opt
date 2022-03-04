@@ -116,12 +116,18 @@ pub fn dom_val_num(
             let expr = (a.clone(), b.clone(), op.inst_name().to_string());
             // TODO: if expr can be simplified to expr' then replace assign with `x <- expr'`
 
-            if expr_tree.iter().find_map(|map| map.get(&expr)).is_some() {
+            if let Some(prev_reg) = expr_tree.iter().find_map(|map| map.get(&expr)) {
                 if !op.is_tmp_expr() || op.is_call_instruction() {
                     continue;
                 }
 
-                *op = Instruction::Skip(format!("[ssa] {op}"));
+                if let Some(dst) = op.target_reg() {
+                    if dst == prev_reg {
+                        *op = Instruction::Skip(format!("[ssa] {op}"));
+                    } else {
+                        op.as_new_move_instruction(*prev_reg, *dst);
+                    }
+                }
             } else if let Some(dst) = op.target_reg_mut() {
                 expr_tree.back_mut().unwrap().insert(expr, *dst);
                 // We value number the assignments
@@ -137,9 +143,9 @@ pub fn dom_val_num(
     let empty = BTreeSet::new();
     let blk_label = blks[blk_idx].label.replace(':', "");
 
-    for blk in dtree.cfg_succs_map.get(&blk_label).unwrap_or(&empty) {
+    for blk in dtree.cfg_succs_map.get(blk_label.as_str()).unwrap_or(&empty) {
         // TODO: make block -> index map
-        let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
+        let idx = blks.iter().position(|b| b.label.replace(':', "") == blk.as_str()).unwrap();
         let rng = phi_range(&blks[idx].instructions);
 
         for phi in &mut blks[idx].instructions[rng] {
@@ -157,9 +163,9 @@ pub fn dom_val_num(
     }
 
     // This is what drives the rename algorithm
-    for blk in dtree.dom_succs_map.get(&blk_label).unwrap_or(&empty) {
+    for blk in dtree.dom_succs_map.get(blk_label.as_str()).unwrap_or(&empty) {
         // TODO: make block -> index map
-        let idx = blks.iter().position(|b| b.label.replace(':', "") == **blk).unwrap();
+        let idx = blks.iter().position(|b| b.label.replace(':', "") == blk.as_str()).unwrap();
         dom_val_num(blks, idx, meta, dtree, expr_tree);
     }
 
