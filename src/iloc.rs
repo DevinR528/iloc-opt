@@ -249,6 +249,8 @@ impl Reg {
     pub fn as_phi(&mut self, phi_id: usize) {
         if let Reg::Var(curr) = self {
             *self = Reg::Phi(*curr, phi_id);
+        } else if let Reg::Phi(_, old) = self {
+            *old = phi_id;
         }
     }
 
@@ -942,14 +944,7 @@ impl fmt::Display for Instruction {
                 writeln!(f, "    .{} {}, {}", self.inst_name(), name, content)
             }
             Instruction::Label(label) => {
-                // if label == ".L_main:"
-                // // Remove the labels that are added as a result of basic block construction
-                //     || label.chars().take(3).all(|c| c == '.' || c.is_numeric() || c == '_')
-                // {
-                //     Ok(())
-                // } else {
                 writeln!(f, "{} nop", label)
-                // }
             }
             Instruction::Text | Instruction::Data => writeln!(f, "    .{}", self.inst_name()),
             Instruction::Skip(s) => writeln!(f, "    # {}", s.trim()),
@@ -2247,7 +2242,7 @@ impl Function {
     pub fn flatten_block_iter(&self) -> impl Iterator<Item = &Instruction> + '_ {
         struct Iter<'a> {
             iter: &'a [Block],
-            inst: Option<&'a Instruction>,
+            frame: Option<&'a Instruction>,
             blk_idx: usize,
             inst_idx: usize,
         }
@@ -2255,28 +2250,30 @@ impl Function {
             type Item = &'a Instruction;
             fn next(&mut self) -> Option<Self::Item> {
                 // We are at a block or a function frame label
-                if self.inst.is_some() {
-                    self.inst.take()
-                } else if let Some(blk) = self.iter.get(self.blk_idx) {
-                    if let Some(inst) = blk.instructions.get(self.inst_idx) {
-                        self.inst_idx += 1;
-                        Some(inst)
-                    } else {
-                        self.blk_idx += 1;
-                        self.inst_idx = 0;
+                if self.frame.is_some() {
+                    self.frame.take()
+                } else {
+                    let blk = self.iter.get(self.blk_idx)?;
+                    match blk.instructions.get(self.inst_idx) {
+                        Some(inst) => {
+                            self.inst_idx += 1;
+                            Some(inst)
+                        }
+                        None => {
+                            self.blk_idx += 1;
+                            self.inst_idx = 0;
 
-                        if let Some(label) = self.iter.get(self.blk_idx).map(|b| &b.inst) {
-                            Some(label)
-                        } else {
-                            self.iter.get(self.blk_idx)?.instructions.get(self.inst_idx)
+                            if let Some(label) = self.iter.get(self.blk_idx).map(|b| &b.inst) {
+                                Some(label)
+                            } else {
+                                self.iter.get(self.blk_idx)?.instructions.get(self.inst_idx)
+                            }
                         }
                     }
-                } else {
-                    None
                 }
             }
         }
-        Iter { iter: &self.blocks, inst: Some(&self.inst), blk_idx: 0, inst_idx: 0 }
+        Iter { iter: &self.blocks, frame: Some(&self.inst), blk_idx: 0, inst_idx: 0 }
     }
 }
 
@@ -2307,7 +2304,12 @@ pub fn make_blks(iloc: Vec<Instruction>, basic_blocks: bool) -> IlocProgram {
     let mut blk_idx = 0;
     for (idx, inst) in rest.iter().enumerate() {
         if let Instruction::Frame { name, size, params } = inst {
-            let label = format!(".L_{}:", name);
+            let label = format!(".F_{}:", name);
+            let blk_label = if matches!(&rest[idx + 1], Instruction::Label(l) if *l == label) {
+                vec![]
+            } else {
+                vec![Instruction::Label(label.clone())]
+            };
             functions.push(Function {
                 label: name.to_string(),
                 stack_size: *size,
@@ -2315,8 +2317,8 @@ pub fn make_blks(iloc: Vec<Instruction>, basic_blocks: bool) -> IlocProgram {
                 inst: inst.clone(),
                 blocks: vec![Block {
                     label: label.clone(),
-                    inst: Instruction::Label(label.clone()),
-                    instructions: vec![],
+                    inst: Instruction::Skip("Never get used".to_string()),
+                    instructions: blk_label,
                 }],
             });
 
@@ -2328,7 +2330,7 @@ pub fn make_blks(iloc: Vec<Instruction>, basic_blocks: bool) -> IlocProgram {
         } else if let Instruction::Label(label) = inst {
             functions[fn_idx].blocks.push(Block {
                 label: label.to_string(),
-                inst: inst.clone(),
+                inst: Instruction::Label(label.clone()),
                 instructions: vec![],
             });
 

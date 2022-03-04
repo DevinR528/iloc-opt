@@ -130,7 +130,9 @@ impl Interpreter {
         let instrs = self.functions.get(func)?;
 
         // Skip these instructions
-        while let Instruction::Label(..) | Instruction::Frame { .. } = instrs[self.inst_idx].1 {
+        while let Instruction::Skip(..) | Instruction::Label(..) | Instruction::Frame { .. } =
+            instrs[self.inst_idx].1
+        {
             self.inst_idx += 1;
             if self.inst_idx == (instrs.len() - 1) {
                 return Some(false);
