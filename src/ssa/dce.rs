@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::{
     iloc::{Function, Instruction, Loc, Val},
-    ssa::{ControlFlowGraph, DominatorTree, OrdLabel},
+    ssa::{postorder, ControlFlowGraph, DominatorTree, OrdLabel},
 };
 
 impl Instruction {
@@ -33,7 +33,7 @@ impl Instruction {
     }
 }
 
-pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &DominatorTree) {
+pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &DominatorTree) {
     let mut stack = VecDeque::new();
     let mut critical_map = HashSet::new();
     let mut def_map = HashMap::new();
@@ -170,5 +170,120 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
     }
     for (b, i, inst) in jumps {
         func.blocks[b].instructions[i] = inst;
+    }
+
+    cleanup(func, cfg, domtree)
+}
+
+fn cleanup(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &DominatorTree) {
+    let mut cfg_map = domtree.cfg_succs_map.clone();
+    let mut to_jump = vec![];
+    let mut stupid_dumb_while_changed = true;
+    while stupid_dumb_while_changed {
+        stupid_dumb_while_changed = false;
+        for blk in postorder(&cfg_map, &OrdLabel::new_start(&func.label)) {
+            let Some((idx, block)) = func.blocks.iter()
+                .enumerate()
+                .find(|(_, b)| b.label.starts_with(blk.as_str()))
+                .map(|(i, b)| (i, b.clone()))
+             else {
+                unreachable!("unknown block")
+            };
+            let fall_through = func.blocks.get(idx + 1).map(|b| b.label.to_string());
+            let fall_through = fall_through.as_deref();
+
+            let cond_branch = block.ends_with_cond_branch();
+            if let Some(loc) = cond_branch {
+                if Some(loc) == fall_through {
+                    println!("immJump {loc} == {:?}", fall_through);
+
+                    stupid_dumb_while_changed = true;
+                    to_jump.push((idx, Instruction::ImmJump(Loc(loc.to_string()))));
+                }
+            }
+            if let Some(loc) = block
+                .ends_with_jump()
+                .or_else(|| cond_branch.is_none().then(|| fall_through).flatten())
+            {
+                let Some(jump_to) = func.blocks.iter().find(|b| b.label.starts_with(loc)).cloned() else {
+                    unreachable!("unknown block");
+                };
+
+                if block.instructions.iter().all(|i| matches!(i, Instruction::Skip(..))) {
+                    stupid_dumb_while_changed = true;
+                    println!("transfer {blk} to {loc}");
+                    replace_transfer(func, blk.as_str(), loc, idx);
+                }
+                if domtree.cfg_preds_map.get(loc).map_or(false, |set| set.len() == 1) {
+                    stupid_dumb_while_changed = true;
+                    panic!("combine {blk} to {loc}");
+                }
+                if jump_to.instructions.iter().all(|i| matches!(i, Instruction::Skip(..))) {
+                    stupid_dumb_while_changed = true;
+                    panic!("overwrite {blk} to {loc}");
+                }
+            }
+        }
+        for (idx, inst) in to_jump.drain(0..) {
+            if let Some(cbr) = func.blocks[idx].instructions.last_mut() {
+                *cbr = inst;
+            }
+        }
+
+        if stupid_dumb_while_changed {
+            cfg_map = build_cfg(func);
+        }
+    }
+}
+
+pub fn build_cfg(func: &Function) -> HashMap<OrdLabel, BTreeSet<OrdLabel>> {
+    let mut cfg: HashMap<_, BTreeSet<_>> = HashMap::default();
+    'block: for (idx, block) in func.blocks.iter().enumerate() {
+        let b_label = block.label.replace(':', "");
+        // TODO: only iter the branch instructions with labels
+        for inst in &block.instructions {
+            // TODO: can we make note of this for optimization...(if there are trailing
+            // unreachable instructions)
+            if inst.is_return() {
+                continue 'block;
+            }
+
+            if let Some(label) = inst.uses_label() {
+                cfg.entry(OrdLabel::from_known(&b_label))
+                    .or_default()
+                    .insert(OrdLabel::from_known(label));
+                // Skip the implicit branch to the block below the current one
+                // since we found an unconditional jump.
+                //
+                // TODO: can we make note of this for optimization...(if there are trailing
+                // unreachable instructions)
+                if inst.unconditional_jmp() {
+                    continue 'block;
+                }
+            }
+        }
+
+        if let Some(next) = func.blocks.get(idx + 1) {
+            let next_label = next.label.replace(':', "");
+            cfg.entry(OrdLabel::from_known(&b_label))
+                .or_default()
+                .insert(OrdLabel::from_known(&next_label));
+        }
+    }
+    cfg
+}
+
+fn replace_transfer(func: &mut Function, to: &str, with: &str, idx: usize) {
+    for blk in &mut func.blocks {
+        if let Some(inst) = blk.instructions.last_mut() {
+            if let Some(label) = inst.label_mut() {
+                if label.as_str() == to {
+                    label.0 = with.to_string();
+                }
+            }
+        }
+    }
+    if func.blocks[idx].label.starts_with(to) {
+        func.blocks.remove(idx);
     }
 }

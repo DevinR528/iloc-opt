@@ -14,6 +14,7 @@ use crate::iloc::{Block, Function, IlocProgram, Instruction, Operand};
 mod dce;
 mod dnre;
 mod fold;
+mod lcm;
 mod licm;
 
 use dce::dead_code;
@@ -37,7 +38,9 @@ fn print_blocks(blocks: &[Block]) {
     }
 }
 
-pub fn reverse_postoder<'a>(
+/// This is parent -> children, where children is fall through then jump (ssa val numbering needs
+/// this)
+pub fn reverse_postorder<'a>(
     succs: &'a HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     start: &'a OrdLabel,
 ) -> impl Iterator<Item = &'a OrdLabel> + 'a {
@@ -57,6 +60,53 @@ pub fn reverse_postoder<'a>(
 
         Some(val)
     })
+}
+/// Preorder is parent, left, right traversal of the cfg graph.
+pub fn preorder<'a>(
+    succs: &'a HashMap<OrdLabel, BTreeSet<OrdLabel>>,
+    start: &'a OrdLabel,
+) -> impl Iterator<Item = &'a OrdLabel> + 'a {
+    let mut stack = VecDeque::from_iter([start]);
+    let mut seen = HashSet::<_, RandomState>::from_iter([start]);
+    std::iter::from_fn(move || {
+        let val = stack.pop_front()?;
+        if let Some(set) = succs.get(val) {
+            for child in set {
+                if seen.contains(child) {
+                    continue;
+                }
+                stack.push_back(child)
+            }
+        }
+        seen.insert(val);
+
+        Some(val)
+    })
+}
+/// Postorder is left child, right child, parent
+pub fn postorder<'a>(
+    succs: &'a HashMap<OrdLabel, BTreeSet<OrdLabel>>,
+    start: &'a OrdLabel,
+) -> Vec<&'a OrdLabel> {
+    let mut stack = VecDeque::from_iter([start]);
+    let mut seen = HashSet::<_, RandomState>::from_iter([start]);
+    let mut v = std::iter::from_fn(move || {
+        let val = stack.pop_front()?;
+        if let Some(set) = succs.get(val) {
+            for child in set.iter().rev() {
+                if seen.contains(child) {
+                    continue;
+                }
+                stack.push_back(child)
+            }
+        }
+        seen.insert(val);
+
+        Some(val)
+    })
+    .collect::<Vec<_>>();
+    v.reverse();
+    v
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -104,8 +154,7 @@ impl OrdLabel {
     }
     pub fn new_start(start: &str) -> Self {
         let l = Self(format!("{}.F_{}", "!".repeat(5), start));
-        LABEL_MAP.lock().unwrap().insert(format!(".F_{}", start), l.clone());
-        l
+        LABEL_MAP.lock().unwrap().entry(format!(".F_{}", start)).or_insert(l).clone()
     }
     fn as_str(&self) -> &str {
         self.0.trim_start_matches('!')
@@ -392,7 +441,7 @@ pub fn dominator_tree(
     let empty = BTreeSet::new();
     // This is just postdominators tree
     let mut post_dom = HashMap::<_, BTreeSet<_>>::with_capacity(blocks_label.len());
-    for node in reverse_postoder(&cfg_succs_map, start) {
+    for node in reverse_postorder(&cfg_succs_map, start) {
         let mut seen = HashSet::new();
         // Skip until we find a single common child...
         let mut labels = VecDeque::from([node]);
@@ -418,7 +467,7 @@ pub fn dominator_tree(
 
     // This is control dependence
     let mut post_dom_frontier = HashMap::<_, BTreeSet<OrdLabel>>::with_capacity(blocks_label.len());
-    for node in reverse_postoder(&cfg_succs_map, start) {
+    for node in reverse_postorder(&cfg_succs_map, start) {
         for c in cfg_succs_map.get(node).unwrap_or(&empty) {
             for m in post_dom_frontier.get(c).cloned().unwrap_or_default() {
                 if !post_dom.get(node).map_or(false, |set| set.contains(&m)) {
@@ -519,8 +568,6 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         let mut cfg = build_cfg(func);
 
         let dtree = dominator_tree(&cfg, &mut func.blocks, &OrdLabel::new_start(&func.label));
-
-        // println!("{} {:#?}", func.label, dtree);
 
         let phis = insert_phi_functions(&mut func.blocks, &dtree.dom_frontier_map);
 

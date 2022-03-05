@@ -281,6 +281,11 @@ impl Reg {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Loc(pub String);
 
+impl Loc {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
 impl FromStr for Loc {
     type Err = &'static str;
 
@@ -1522,6 +1527,21 @@ impl Instruction {
         }
     }
 
+    pub fn label_mut(&mut self) -> Option<&mut Loc> {
+        match self {
+            Instruction::ImmJump(loc)
+            | Instruction::CbrT { loc, .. }
+            | Instruction::CbrF { loc, .. }
+            | Instruction::CbrLT { loc, .. }
+            | Instruction::CbrLE { loc, .. }
+            | Instruction::CbrGT { loc, .. }
+            | Instruction::CbrGE { loc, .. }
+            | Instruction::CbrEQ { loc, .. }
+            | Instruction::CbrNE { loc, .. } => Some(loc),
+            _ => None,
+        }
+    }
+
     pub fn is_cnd_jump(&self) -> bool {
         matches!(
             self,
@@ -2235,6 +2255,16 @@ pub struct Block {
 impl Block {
     pub fn instructions(&self) -> impl Iterator<Item = &Instruction> + '_ {
         self.instructions.iter().filter(|i| !matches!(i, Instruction::Skip(..)))
+    }
+
+    pub fn ends_with_cond_branch(&self) -> Option<&str> {
+        self.instructions.last().and_then(|i| i.is_cnd_jump().then(|| i.uses_label()).flatten())
+    }
+    pub fn ends_with_jump(&self) -> Option<&str> {
+        match self.instructions.last() {
+            Some(Instruction::ImmJump(l)) => Some(l.as_str()),
+            _ => None,
+        }
     }
 }
 
