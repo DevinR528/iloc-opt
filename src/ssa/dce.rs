@@ -7,9 +7,6 @@ use crate::{
 
 impl Instruction {
     fn is_critical(&self) -> bool {
-        if let Instruction::Phi(..) = self {
-            println!("{:?}", self)
-        }
         matches!(
             self,
             Instruction::ImmRet(..)
@@ -48,14 +45,24 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
     }
     for (b_label, blk) in &copied_blocks {
         for inst in blk {
+            match inst {
+                Instruction::Phi(_, set, _) if set.len() > 1 => {
+                    critical_map.insert(inst);
+                    stack.push_back((inst, b_label));
+                }
+                _ => (),
+            }
             if inst.is_critical() {
                 critical_map.insert(inst);
                 stack.push_back((inst, b_label));
             }
+
             if let Some(reg) = inst.target_reg() {
-                def_map.insert(reg, (inst, b_label));
-            } else if let Instruction::ImmRet(reg) | Instruction::ImmCall { ret: reg, .. } = inst {
-                def_map.insert(reg, (inst, b_label));
+                def_map.insert(*reg, (inst, b_label));
+            } else if let Instruction::ImmRCall { ret: reg, .. }
+            | Instruction::ImmCall { ret: reg, .. } = inst
+            {
+                def_map.insert(*reg, (inst, b_label));
             }
         }
     }
@@ -84,7 +91,17 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
                     }
                 }
             }
-            Instruction::CbrGT { a, .. } => println!("{:?}", def_map.get(a)),
+            Instruction::Phi(r, set, _) => {
+                for (inst, blk) in set.iter().filter_map(|subs| {
+                    let mut phi = *r;
+                    phi.as_phi(*subs);
+                    def_map.get(&phi)
+                }) {
+                    if critical_map.insert(inst) {
+                        stack.push_back((inst, blk));
+                    }
+                }
+            }
             Instruction::Store { dst, .. }
             | Instruction::StoreAddImm { dst, .. }
             | Instruction::StoreAdd { dst, .. } => {
@@ -98,6 +115,8 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
         }
 
         // Control dependence
+        // If we get to this point what are the blocks that will for sure run (it's the split
+        // points)
         for blk in domtree.post_dom_frontier.get(b_label).unwrap_or(&empty) {
             let Some(block) = func.blocks.iter().find(|b| b.label.starts_with(blk.as_str())) else { continue; };
             let Some(last_inst) = block.instructions.iter()
@@ -118,17 +137,21 @@ pub fn dead_code(func: &mut Function, _cfg: &mut ControlFlowGraph, domtree: &Dom
             if !critical_map.contains(&inst) {
                 if inst.is_cnd_jump() {
                     // post dominance
-                    let Some(label) = domtree.post_dom
+                    // Which blocks will for sure run next (so we can jump to it)
+                    if let Some(label) = domtree
+                        .post_dom
                         .get(blk.label.replace(':', "").as_str())
-                        .and_then(|set| if set.len() == 1 { set.iter().next() } else { None }) else { continue; };
+                        .and_then(|set| if set.len() == 1 { set.iter().next() } else { None })
+                    {
+                        println!(
+                            "rewrite branch {} jumpI -> {:?} {:#?} {:#?}",
+                            inst, label, domtree.post_dom, domtree.post_dom_frontier
+                        );
 
-                    println!(
-                        "rewrite branch {} jumpI -> {:?} {:#?} {:#?}",
-                        inst, label, domtree.post_dom, domtree.post_dom_frontier
-                    );
-
-                    jumps.push((b, i, Instruction::ImmJump(Loc(label.to_string()))));
-                } else if !matches!(inst, Instruction::ImmJump(..)) {
+                        jumps.push((b, i, Instruction::ImmJump(Loc(label.to_string()))));
+                    }
+                }
+                if !matches!(inst, Instruction::ImmJump(..)) {
                     println!("remove {:?}", inst);
                     remove.push((b, i));
                 }

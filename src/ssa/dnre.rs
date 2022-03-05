@@ -8,16 +8,22 @@ use crate::{
     ssa::DominatorTree,
 };
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct RenameMeta {
     counter: usize,
     stack: VecDeque<usize>,
 }
+impl Default for RenameMeta {
+    fn default() -> Self {
+        Self { counter: 0, stack: VecDeque::from([0]) }
+    }
+}
 
 fn new_name(reg: &Reg, dst: &mut Option<usize>, meta: &mut HashMap<Operand, RenameMeta>) {
     let m = meta.get_mut(&Operand::Register(*reg)).unwrap();
-    let i = m.counter;
     m.counter += 1;
+    let i = m.counter;
+
     m.stack.push_back(i);
     *dst = Some(i);
 }
@@ -40,6 +46,7 @@ pub fn dom_val_num(
     dtree: &DominatorTree,
     expr_tree: &mut ScopedExprTree,
 ) {
+    let ssa = unsafe { crate::SSA };
     let rng = phi_range(&blks[blk_idx].instructions);
     // The phi instructions must be filled in before their expressions are saved
     for phi in &mut blks[blk_idx].instructions[rng.clone()] {
@@ -70,46 +77,51 @@ pub fn dom_val_num(
 
     for op in &mut blks[blk_idx].instructions[rng.end..] {
         let (mut a, mut b) = op.operands_mut();
-        if let Some((a, meta)) = a.as_mut().and_then(|reg| {
+        if let Some((a, meta)) = a.as_mut().map(|reg| {
             let cpy = **reg;
-            Some((reg, meta.get(&Operand::Register(cpy))?))
+            (reg, meta.entry(Operand::Register(cpy)).or_default())
         }) {
             rewrite_name(a, meta);
         }
-        if let Some((b, meta)) = b.as_mut().and_then(|reg| {
+        if let Some((b, meta)) = b.as_mut().map(|reg| {
             let cpy = **reg;
-            Some((reg, meta.get(&Operand::Register(cpy))?))
+            (reg, meta.entry(Operand::Register(cpy)).or_default())
         }) {
             rewrite_name(b, meta);
         }
 
         // Rename registers that don't fit neatly into th operands category
         match op {
-            Instruction::Call { args, .. } | Instruction::ImmCall { args, .. } => {
+            Instruction::Call { args, .. } => {
                 for arg in args {
-                    let Some(meta) = meta.get(&Operand::Register(*arg)) else { continue; };
-                    rewrite_name(arg, meta);
+                    let m = meta.entry(Operand::Register(*arg)).or_default();
+                    rewrite_name(arg, m);
+                }
+            }
+            Instruction::ImmCall { args, ret, .. } | Instruction::ImmRCall { args, ret, .. } => {
+                for arg in args.iter_mut().chain(Some(ret)) {
+                    let m = meta.entry(Operand::Register(*arg)).or_default();
+                    rewrite_name(arg, m);
                 }
             }
             Instruction::Store { dst, .. }
             | Instruction::StoreAdd { dst, .. }
             | Instruction::StoreAddImm { dst, .. } => {
-                if let Some(meta) = meta.get(&Operand::Register(*dst)) {
-                    rewrite_name(dst, meta);
-                }
+                let m = meta.entry(Operand::Register(*dst)).or_default();
+                rewrite_name(dst, m);
             }
             _ => {}
         }
 
         // This needs to run before we bail out for calls/stores, stuff like that...
         if let Some(dst) = op.target_reg_mut() {
-            if let Some(meta) = meta.get_mut(&Operand::Register(*dst)) {
-                // This is `new_name` minus the set addition
-                let i = meta.counter;
-                meta.counter += 1;
-                meta.stack.push_back(i);
-                dst.as_phi(i);
-            }
+            let m = meta.entry(Operand::Register(*dst)).or_default();
+            // This is `new_name` minus the set addition
+            m.counter += 1;
+            let i = m.counter;
+
+            m.stack.push_back(i);
+            dst.as_phi(i);
         }
 
         if let (Some(a), b) = op.operands() {
@@ -117,26 +129,27 @@ pub fn dom_val_num(
             // TODO: if expr can be simplified to expr' then replace assign with `x <- expr'`
 
             if let Some(prev_reg) = expr_tree.iter().find_map(|map| map.get(&expr)) {
-                if !op.is_tmp_expr() || op.is_call_instruction() {
+                if !op.is_tmp_expr() || op.is_call_instruction() || ssa {
                     continue;
                 }
 
                 if let Some(dst) = op.target_reg() {
-                    if dst == prev_reg {
-                        *op = Instruction::Skip(format!("[ssa] {op}"));
-                    } else {
-                        op.as_new_move_instruction(*prev_reg, *dst);
-                    }
+                    // if dst == prev_reg {
+                    *op = Instruction::Skip(format!("[ssa] {op}"));
+                    // } else {
+                    // op.as_new_move_instruction(*prev_reg, *dst);
+                    // }
                 }
-            } else if let Some(dst) = op.target_reg_mut() {
-                expr_tree.back_mut().unwrap().insert(expr, *dst);
-                // We value number the assignments
-                let m = meta.entry(Operand::Register(*dst)).or_default();
-                let i = m.counter;
-                m.counter += 1;
-                m.stack.push_back(i);
-                dst.as_phi(i);
             }
+            //  else if let Some(dst) = op.target_reg_mut() {
+            //     expr_tree.back_mut().unwrap().insert(expr, *dst);
+            //     // We value number the assignments
+            //     let m = meta.entry(Operand::Register(*dst)).or_default();
+            //     let i = m.counter;
+            //     m.counter += 1;
+            //     m.stack.push_back(i);
+            //     dst.as_phi(i);
+            // }
         }
     }
 
