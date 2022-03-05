@@ -17,7 +17,7 @@ mod fold;
 mod licm;
 
 use dce::dead_code;
-use dnre::{dom_val_num, RenameMeta};
+pub use dnre::{dom_val_num, RenameMeta};
 use fold::{const_fold, ConstMap, ValueKind, WorkStuff};
 #[allow(unused)]
 use licm::find_loops;
@@ -102,7 +102,7 @@ impl OrdLabel {
         let jik = LABEL_MAP.lock().unwrap().clone();
         LABEL_MAP.lock().unwrap().get(label).unwrap_or_else(|| panic!("{label} {:?}", jik)).clone()
     }
-    fn new_start(start: &str) -> Self {
+    pub fn new_start(start: &str) -> Self {
         let l = Self(format!("{}.F_{}", "!".repeat(5), start));
         LABEL_MAP.lock().unwrap().insert(format!(".F_{}", start), l.clone());
         l
@@ -171,19 +171,27 @@ impl ControlFlowGraph {
 pub fn build_cfg(func: &Function) -> ControlFlowGraph {
     let mut cfg = ControlFlowGraph::default();
 
-    'blocks: for (idx, block) in func.blocks.iter().enumerate() {
+    for (idx, block) in func.blocks.iter().enumerate() {
         let b_label = block.label.replace(':', "");
 
         let mut sort = 1;
+        let mut unreachable = false;
         // TODO: only iter the branch instructions with labels
-        for inst in &block.instructions {
+        'inst: for inst in &block.instructions {
             // TODO: can we make note of this for optimization...(if there are trailing
             // unreachable instructions)
             if inst.is_return() {
-                continue 'blocks;
+                unreachable = true;
+                continue 'inst;
             }
+
             if let Some(label) = inst.uses_label() {
-                cfg.add_edge(&b_label, label, sort);
+                if unreachable {
+                    let _save_the_label = OrdLabel::new_add(sort, label);
+                } else {
+                    cfg.add_edge(&b_label, label, sort);
+                }
+
                 sort += 1;
 
                 // Skip the implicit branch to the block below the current one
@@ -192,7 +200,7 @@ pub fn build_cfg(func: &Function) -> ControlFlowGraph {
                 // TODO: can we make note of this for optimization...(if there are trailing
                 // unreachable instructions)
                 if inst.unconditional_jmp() {
-                    continue 'blocks;
+                    unreachable = true;
                 }
             }
         }
@@ -234,7 +242,7 @@ fn traverse(val: &OrdLabel, cfg: &ControlFlowGraph, paths: &mut Vec<Vec<OrdLabel
 
 #[derive(Debug)]
 pub struct DominatorTree {
-    dom_frontier_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
+    pub dom_frontier_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_dom_frontier: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_dom: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     dom_succs_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
@@ -357,77 +365,52 @@ pub fn dominator_tree(
     }
 
     // Keith Cooper/Linda Torczon EaC pg. 499 SSA dominance frontier algorithm
+    //
+    // This is a mapping of node -> descendent in graph that is join point for this node
+    // (anytime the graph make the lower half of a diamond)
     let mut dom_frontier_map: HashMap<OrdLabel, BTreeSet<OrdLabel>> =
         HashMap::with_capacity(blocks_label.len());
     for label in &blocks_label {
         // Node must be a join point (have multiple preds)
-        if let Some(preds) =
-            cfg_preds_map.get(label).and_then(|p| if !p.is_empty() { Some(p) } else { None })
-        {
-            // For each previous node find a predecessor of `label` that also dominates `label
-            for p in preds {
-                let mut run = p;
-                while Some(run) != idom_map.get(label) {
-                    // TODO: I think this works because a dom frontier will only ever be a single
-                    // node since no node with multiple predecessors can be in the `idom_map`.
-                    //
-                    // Second, for a join point j, each predecessor k of j must have j ∈ df(k),
-                    // since k cannot dominate j if j has more than one predecessor. Finally, if j ∈
-                    // df(k) for some predecessor k, then j must also be in df(l) for each l ∈
-                    // Dom(k), unless l ∈ Dom( j)
-                    dom_frontier_map.entry(run.clone()).or_default().insert(label.clone());
-                    if let Some(idom) = idom_map.get(run) {
-                        run = idom;
-                    }
+
+        // For each previous node find a predecessor of `label` that also dominates `label
+        for p in cfg_preds_map.get(label).unwrap_or(&BTreeSet::new()) {
+            let mut run = p;
+            while Some(run) != idom_map.get(label) {
+                // Second, for a join point j, each predecessor k of j must have j ∈ df(k),
+                // since k cannot dominate j if j has more than one predecessor. Finally, if j ∈
+                // df(k) for some predecessor k, then j must also be in df(l) for each l ∈
+                // Dom(k), unless l ∈ Dom( j)
+                dom_frontier_map.entry(run.clone()).or_default().insert(label.clone());
+                if let Some(idom) = idom_map.get(run) {
+                    run = idom;
                 }
             }
         }
     }
 
     let empty = BTreeSet::new();
-
-    #[derive(Debug)]
-    enum SiblingKind<'a> {
-        Only(&'a OrdLabel),
-        Ignore(&'a OrdLabel),
-    }
-    impl fmt::Display for SiblingKind<'_> {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            match self {
-                Self::Only(s) | Self::Ignore(s) => s.0.fmt(f),
-            }
-        }
-    }
-    impl SiblingKind<'_> {
-        pub fn as_label(&self) -> &OrdLabel {
-            match self {
-                Self::Only(s) | Self::Ignore(s) => s,
-            }
-        }
-    }
     // This is just postdominators tree
     let mut post_dom = HashMap::<_, BTreeSet<_>>::with_capacity(blocks_label.len());
     for node in reverse_postoder(&cfg_succs_map, start) {
         let mut seen = HashSet::new();
-
         // Skip until we find a single common child...
-        let s = node;
-        let mut labels = VecDeque::from([SiblingKind::Ignore(&s)]);
+        let mut labels = VecDeque::from([node]);
         while let Some(n) = labels.pop_front() {
-            if let Some(succs) = cfg_succs_map.get(n.as_label()) {
-                // If the values has been seen
+            if let Some(succs) = cfg_succs_map.get(n) {
+                // If the value has been seen, this is reset ever outer loop
                 if !seen.insert(succs) {
                     continue;
                 }
                 let kids: Vec<_> = if succs.len() > 1 {
                     // Jump as far down the graph as possible
-                    succs.last().map(SiblingKind::Only).into_iter().collect()
+                    succs.last().into_iter().collect()
                 } else {
-                    succs.iter().map(SiblingKind::Only).collect()
+                    succs.iter().collect()
                 };
                 labels.extend(kids);
             }
-            if let SiblingKind::Only(n) = n {
+            if n != node {
                 post_dom.entry(node.clone()).or_default().insert(n.clone());
             }
         }

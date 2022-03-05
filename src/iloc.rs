@@ -238,9 +238,9 @@ impl FromStr for Reg {
 impl fmt::Display for Reg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Reg::Var(num) if unsafe { crate::SSA } => write!(f, "%vr{}", num),
+            Reg::Phi(num, subs) if unsafe { crate::SSA } => write!(f, "%vr{}_{}", num, subs),
             Reg::Var(num) | Reg::Phi(num, ..) => write!(f, "%vr{}", num),
-            // Reg::Var(num) => write!(f, "%vr{}", num),
-            // Reg::Phi(num, subs) => write!(f, "%vr{}_{}", num, subs),
         }
     }
 }
@@ -948,7 +948,13 @@ impl fmt::Display for Instruction {
             }
             Instruction::Text | Instruction::Data => writeln!(f, "    .{}", self.inst_name()),
             Instruction::Skip(s) => writeln!(f, "    # {}", s.trim()),
-            Instruction::Phi(reg, _s, sub) => writeln!(f, "# phi({}_{})", reg, sub.unwrap_or(0)),
+            Instruction::Phi(reg, s, sub) => writeln!(
+                f,
+                "# phi({}_{})({})",
+                reg,
+                sub.unwrap_or(0),
+                s.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")
+            ),
             _ => writeln!(f, "    {}", self.inst_name()),
         }
     }
@@ -1140,6 +1146,7 @@ impl Instruction {
     //     NoOperands(Inst),
     //     SingleOperand(Inst()),
     //     TwoOperand(Inst { src, dst }),
+    //     ...
     // }
     /// Optional target register for instructions with a destination.
     pub fn target_reg(&self) -> Option<&Reg> {
@@ -1189,8 +1196,7 @@ impl Instruction {
             | Instruction::LoadAdd { dst, .. }
             | Instruction::FLoad { dst, .. }
             | Instruction::FLoadAddImm { dst, .. }
-            | Instruction::FLoadAdd { dst, .. }
-            | Instruction::Phi(dst, ..) => Some(dst),
+            | Instruction::FLoadAdd { dst, .. } => Some(dst),
             // Call with return `call arg, arg => ret`
             Instruction::ImmCall { ret, .. } => Some(ret),
             Instruction::ImmRCall { ret, .. } => Some(ret),
@@ -1208,6 +1214,7 @@ impl Instruction {
             // Instruction::IRead(dst) => Some(dst),
             // Instruction::FRead(dst) => Some(dst),
             Instruction::I2I { dst, .. }
+            | Instruction::I2F { dst, .. }
             | Instruction::Add { dst, .. }
             | Instruction::Sub { dst, .. }
             | Instruction::Mult { dst, .. }
@@ -1240,7 +1247,6 @@ impl Instruction {
             | Instruction::TestLT { dst, .. }
             | Instruction::TestLE { dst, .. }
             | Instruction::F2I { dst, .. }
-            | Instruction::I2F { dst, .. }
             | Instruction::F2F { dst, .. }
             | Instruction::FAdd { dst, .. }
             | Instruction::FSub { dst, .. }
@@ -1343,6 +1349,8 @@ impl Instruction {
             Instruction::FLoadAdd { src, add, .. } => {
                 (Some(Operand::Register(*src)), Some(Operand::Register(*add)))
             }
+            Instruction::ImmRet(ret) => (Some(Operand::Register(*ret)), None),
+
             _ => (None, None),
         }
     }
@@ -1363,17 +1371,18 @@ impl Instruction {
             | Instruction::Mod { src_a, src_b, .. }
             | Instruction::And { src_a, src_b, .. }
             | Instruction::Or { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
-            Instruction::ImmAdd { src, konst: _, .. }
-            | Instruction::ImmSub { src, konst: _, .. }
-            | Instruction::ImmMult { src, konst: _, .. }
-            | Instruction::ImmLShift { src, konst: _, .. }
-            | Instruction::ImmRShift { src, konst: _, .. }
+            Instruction::ImmAdd { src, .. }
+            | Instruction::ImmSub { src, .. }
+            | Instruction::ImmMult { src, .. }
+            | Instruction::ImmLShift { src, .. }
+            | Instruction::ImmRShift { src, .. }
             | Instruction::Load { src, .. }
-            | Instruction::LoadAddImm { src, .. } => (Some(src), None),
-            Instruction::LoadAdd { src, add, .. } => (Some(src), Some(add)),
-            Instruction::Store { src, .. } => (Some(src), None),
-            Instruction::StoreAddImm { src, .. } => (Some(src), None),
-            Instruction::StoreAdd { src, add, .. } => (Some(src), Some(add)),
+            | Instruction::LoadAddImm { src, .. }
+            | Instruction::Store { src, .. }
+            | Instruction::StoreAddImm { src, .. } => (Some(src), None),
+            Instruction::LoadAdd { src, add, .. } | Instruction::StoreAdd { src, add, .. } => {
+                (Some(src), Some(add))
+            }
             Instruction::IWrite(r)
             | Instruction::SWrite(r)
             | Instruction::FWrite(r)
@@ -1408,6 +1417,7 @@ impl Instruction {
             Instruction::FLoad { src, .. } => (Some(src), None),
             Instruction::FLoadAddImm { src, add: _, .. } => (Some(src), None),
             Instruction::FLoadAdd { src, add, .. } => (Some(src), Some(add)),
+            Instruction::ImmRet(ret) => (Some(ret), None),
             _ => (None, None),
         }
     }
@@ -2245,15 +2255,21 @@ impl Function {
             frame: Option<&'a Instruction>,
             blk_idx: usize,
             inst_idx: usize,
+            frame_label: bool,
         }
         impl<'a> Iterator for Iter<'a> {
             type Item = &'a Instruction;
             fn next(&mut self) -> Option<Self::Item> {
                 // We are at a block or a function frame label
                 if self.frame.is_some() {
+                    self.frame_label = true;
                     self.frame.take()
                 } else {
                     let blk = self.iter.get(self.blk_idx)?;
+                    if self.frame_label {
+                        self.frame_label = false;
+                        return Some(&blk.inst);
+                    }
                     match blk.instructions.get(self.inst_idx) {
                         Some(inst) => {
                             self.inst_idx += 1;
@@ -2273,7 +2289,13 @@ impl Function {
                 }
             }
         }
-        Iter { iter: &self.blocks, frame: Some(&self.inst), blk_idx: 0, inst_idx: 0 }
+        Iter {
+            iter: &self.blocks,
+            frame: Some(&self.inst),
+            blk_idx: 0,
+            inst_idx: 0,
+            frame_label: false,
+        }
     }
 }
 
@@ -2305,21 +2327,21 @@ pub fn make_blks(iloc: Vec<Instruction>, basic_blocks: bool) -> IlocProgram {
     for (idx, inst) in rest.iter().enumerate() {
         if let Instruction::Frame { name, size, params } = inst {
             let label = format!(".F_{}:", name);
-            let blk_label = if matches!(&rest[idx + 1], Instruction::Label(l) if *l == label) {
+            let blocks = if matches!(&rest[idx + 1], Instruction::Label(l) if *l == label) {
                 vec![]
             } else {
-                vec![Instruction::Label(label.clone())]
+                vec![Block {
+                    label: label.clone(),
+                    inst: Instruction::Label(label.clone()),
+                    instructions: vec![],
+                }]
             };
             functions.push(Function {
                 label: name.to_string(),
                 stack_size: *size,
                 params: params.clone(),
                 inst: inst.clone(),
-                blocks: vec![Block {
-                    label: label.clone(),
-                    inst: Instruction::Skip("Never get used".to_string()),
-                    instructions: blk_label,
-                }],
+                blocks,
             });
 
             all_labels.insert(label.clone());
