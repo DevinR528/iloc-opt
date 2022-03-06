@@ -123,20 +123,14 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
         // If we get to this point what are the blocks that will for sure run (it's the split
         // points)
         for blk in domtree.post_dom_frontier.get(b_label).unwrap_or(&empty) {
-            println!("{:?}", blk.as_str());
-
             let Some(block) = func.blocks.iter()
                 .find(|b| {
                     b.label.starts_with(blk.as_str())
                 }) else { continue; };
 
-            println!("{}", block.label);
-
             // TODO: A fall through would be important also...
             let Some(last_inst) = block.instructions.iter()
                 .find(|i| i.is_cnd_jump() || matches!(i, Instruction::ImmJump(..))) else { continue; };
-
-            println!("{:?}", last_inst);
 
             if critical_map.insert(last_inst) {
                 println!("dtree: {} = {:?} from: {}", blk.as_str(), last_inst, b_label.as_str());

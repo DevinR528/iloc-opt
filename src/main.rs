@@ -23,7 +23,7 @@ use iloc::{make_blks, parse_text};
 use ssa::{build_cfg, dominator_tree, ssa_optimization};
 
 use crate::{
-    iloc::Instruction,
+    iloc::{make_basic_blocks, Instruction},
     ssa::{OrdLabel, RenameMeta},
 };
 
@@ -61,7 +61,7 @@ fn main() {
             let input = fs::read_to_string(&file).unwrap();
             let iloc = parse_text(&input).unwrap();
 
-            let mut blocks = make_blks(iloc, false);
+            let mut blocks = make_blks(iloc);
             for func in &mut blocks.functions {
                 for blk in &mut func.blocks {
                     if let Some(insts) = loc_val_num::number_basic_block(blk) {
@@ -70,7 +70,7 @@ fn main() {
                 }
             }
 
-            let mut blocks = make_blks(blocks.instruction_iter().cloned().collect(), true);
+            let mut blocks = make_basic_blocks(&blocks);
             ssa::ssa_optimization(&mut blocks);
 
             let mut buf = String::new();
@@ -94,7 +94,7 @@ fn main() {
             let input = fs::read_to_string(&file).unwrap();
             let iloc = parse_text(&input).unwrap();
 
-            let mut blocks = make_blks(iloc, true);
+            let mut blocks = make_basic_blocks(&make_blks(iloc));
             for func in &mut blocks.functions {
                 let cfg = build_cfg(func);
                 let dtree =
@@ -126,7 +126,7 @@ fn main() {
             fs::read_to_string(&file).unwrap()
         };
 
-        interp::run_interpreter(make_blks(parse_text(&buf).unwrap(), false), debug).unwrap();
+        interp::run_interpreter(make_blks(parse_text(&buf).unwrap()), debug).unwrap();
     }
 }
 

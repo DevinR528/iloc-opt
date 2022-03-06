@@ -2323,39 +2323,25 @@ impl IlocProgram {
     }
 }
 
-pub fn make_blks(iloc: Vec<Instruction>, basic_blocks: bool) -> IlocProgram {
+pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
     let fn_start =
         iloc.iter().position(|inst| matches!(inst, Instruction::Frame { .. })).unwrap_or_default();
     let (preamble, rest) = iloc.split_at(fn_start);
 
-    let mut skip = false;
     let mut functions = vec![];
     let mut fn_idx = 0;
     let mut blk_idx = 0;
-    for (idx, inst) in rest.iter().enumerate() {
-        if skip {
-            skip = false;
-            continue;
-        }
+    for inst in rest.iter() {
         if let Instruction::Frame { name, size, params } = inst {
             let label = format!(".F_{}:", name);
-            let blocks = if matches!(&rest[idx + 1], Instruction::Label(l) if *l == label) {
-                skip = true;
-                vec![Block {
-                    label: label.clone(),
-                    instructions: vec![inst.clone(), Instruction::Label(label)],
-                }]
-            } else {
-                vec![Block {
-                    label: label.clone(),
-                    instructions: vec![inst.clone(), Instruction::Label(label)],
-                }]
-            };
             functions.push(Function {
                 label: name.to_string(),
                 stack_size: *size,
                 params: params.clone(),
-                blocks,
+                blocks: vec![Block {
+                    label: label.clone(),
+                    instructions: vec![inst.clone(), Instruction::Label(label)],
+                }],
             });
 
             fn_idx = functions.len().saturating_sub(1);
@@ -2366,23 +2352,6 @@ pub fn make_blks(iloc: Vec<Instruction>, basic_blocks: bool) -> IlocProgram {
                 instructions: vec![Instruction::Label(label.to_string())],
             });
 
-            blk_idx = functions[fn_idx].blocks.len().saturating_sub(1);
-        } else if basic_blocks
-            && inst.is_cnd_jump()
-            && !matches!(rest[idx + 1], Instruction::Label(..) | Instruction::Frame { .. })
-        {
-            functions[fn_idx].blocks[blk_idx].instructions.push(inst.clone());
-
-            let label = format!(
-                ".{}_{}",
-                functions[fn_idx].blocks.len(),
-                functions[fn_idx].blocks[blk_idx].label.replace('.', "")
-            );
-
-            functions[fn_idx].blocks.push(Block {
-                label: label.to_string(),
-                instructions: vec![Instruction::Label(label.to_string())],
-            });
             blk_idx = functions[fn_idx].blocks.len().saturating_sub(1);
         } else {
             let x = &mut functions[fn_idx];
@@ -2403,15 +2372,12 @@ pub fn make_basic_blocks(iloc: &IlocProgram) -> IlocProgram {
                 // We always add the instruction even when it's a cbr/jmp with no block after
                 blocks.last_mut().unwrap().instructions.push(inst.clone());
 
-                if inst.is_cnd_jump()
-                    && !matches!(
-                        blk.instructions[idx + 1],
-                        Instruction::Label(..) | Instruction::Frame { .. }
-                    )
-                {
+                if inst.is_cnd_jump() && !matches!(blk.instructions.get(idx + 1), None) {
+                    let label = format!(".{}{}", blocks.len(), blk.label.replace('.', ""));
+
                     blocks.push(Block {
-                        label: format!("{}{}", blocks.len(), blk.label),
-                        instructions: vec![],
+                        label: label.clone(),
+                        instructions: vec![Instruction::Label(label.clone())],
                     });
                 }
             }

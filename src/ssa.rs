@@ -9,7 +9,7 @@ use std::{
     sync::Mutex,
 };
 
-use crate::iloc::{Block, Function, IlocProgram, Instruction, Operand};
+use crate::iloc::{make_basic_blocks, Block, Function, IlocProgram, Instruction, Operand};
 
 mod dce;
 mod dnre;
@@ -229,7 +229,7 @@ pub fn build_cfg(func: &Function) -> ControlFlowGraph {
             // unreachable instructions)
             if inst.is_return() {
                 cfg.end = if idx == 0 {
-                    Some(OrdLabel::new_start(&b_label))
+                    Some(OrdLabel::new_add(0, &b_label))
                 } else {
                     Some(OrdLabel::from_known(&b_label))
                 };
@@ -631,7 +631,7 @@ fn ssa_cfg() {
 
     let input = fs::read_to_string("input/arrayparam.il").unwrap();
     let iloc = parse_text(&input).unwrap();
-    let blocks = make_blks(iloc, true);
+    let blocks = make_basic_blocks(&make_blks(iloc));
 
     let cfg = build_cfg(&blocks.functions[1]);
     println!("{:?}", cfg);
@@ -646,7 +646,7 @@ fn ssa_cfg_while() {
 
     let input = fs::read_to_string("input/turd.il").unwrap();
     let iloc = parse_text(&input).unwrap();
-    let mut blocks = make_blks(iloc, true);
+    let mut blocks = make_basic_blocks(&make_blks(iloc));
 
     let cfg = build_cfg(&blocks.functions[0]);
     // println!("{:?}", cfg);
@@ -665,7 +665,7 @@ fn ssa_cfg_dumb() {
 
     let input = fs::read_to_string("input/dumb.il").unwrap();
     let iloc = parse_text(&input).unwrap();
-    let mut blocks = make_blks(iloc, true);
+    let mut blocks = make_basic_blocks(&make_blks(iloc));
     ssa_optimization(&mut blocks);
 }
 
@@ -677,7 +677,7 @@ fn ssa_cfg_trap() {
 
     let input = fs::read_to_string("input/turd.il").unwrap();
     let iloc = parse_text(&input).unwrap();
-    let mut blocks = make_blks(iloc, true);
+    let mut blocks = make_basic_blocks(&make_blks(iloc));
 
     let cfg = build_cfg(&blocks.functions[0]);
     let name = OrdLabel::new_start(&blocks.functions[0].label);
