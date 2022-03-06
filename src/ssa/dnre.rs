@@ -58,7 +58,7 @@ pub fn dom_val_num(
     expr_tree.push_back(HashMap::new());
 
     // Remove redundant/meaningless phi instructions
-    for phi in &mut blks[blk_idx].instructions[rng.clone()] {
+    for phi in &mut blks[blk_idx].instructions[rng] {
         if let Instruction::Phi(r, set, dst) = phi {
             let phi_reg = Reg::Phi(r.as_usize(), dst.unwrap());
             let expr = (Operand::Register(phi_reg), None, "phi".to_string());
@@ -75,7 +75,12 @@ pub fn dom_val_num(
         }
     }
 
-    for op in &mut blks[blk_idx].instructions[rng.end..] {
+    // We need to iter all instructions (the frame instruction was being skipped) so don't use the
+    // phi range end as a start
+    for op in &mut blks[blk_idx].instructions {
+        if let Instruction::Phi(..) = op {
+            continue;
+        }
         let (mut a, mut b) = op.operands_mut();
         if let Some((a, meta)) = a.as_mut().map(|reg| {
             let cpy = **reg;
@@ -92,14 +97,11 @@ pub fn dom_val_num(
 
         // Rename registers that don't fit neatly into th operands category
         match op {
-            Instruction::Call { args, .. } => {
+            Instruction::Call { args, .. }
+            | Instruction::Frame { params: args, .. }
+            | Instruction::ImmCall { args, .. }
+            | Instruction::ImmRCall { args, .. } => {
                 for arg in args {
-                    let m = meta.entry(Operand::Register(*arg)).or_default();
-                    rewrite_name(arg, m);
-                }
-            }
-            Instruction::ImmCall { args, ret, .. } | Instruction::ImmRCall { args, ret, .. } => {
-                for arg in args.iter_mut().chain(Some(ret)) {
                     let m = meta.entry(Operand::Register(*arg)).or_default();
                     rewrite_name(arg, m);
                 }

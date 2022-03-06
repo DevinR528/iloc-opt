@@ -83,30 +83,27 @@ pub fn preorder<'a>(
         Some(val)
     })
 }
-/// Postorder is left child, right child, parent
+/// Postorder is left child, right child, parent. This is the reverse graph
 pub fn postorder<'a>(
-    succs: &'a HashMap<OrdLabel, BTreeSet<OrdLabel>>,
-    start: &'a OrdLabel,
-) -> Vec<&'a OrdLabel> {
-    let mut stack = VecDeque::from_iter([start]);
-    let mut seen = HashSet::<_, RandomState>::from_iter([start]);
-    let mut v = std::iter::from_fn(move || {
+    pred: &'a HashMap<OrdLabel, BTreeSet<OrdLabel>>,
+    end: &'a OrdLabel,
+) -> impl Iterator<Item = &'a OrdLabel> + 'a {
+    let mut stack = VecDeque::from_iter([end]);
+    let mut seen = HashSet::<_, RandomState>::from_iter([end]);
+    std::iter::from_fn(move || {
         let val = stack.pop_front()?;
-        if let Some(set) = succs.get(val) {
-            for child in set.iter().rev() {
-                if seen.contains(child) {
+        if let Some(set) = pred.get(val) {
+            for parent in set.iter().rev() {
+                if seen.contains(parent) {
                     continue;
                 }
-                stack.push_back(child)
+                stack.push_back(parent)
             }
         }
         seen.insert(val);
 
         Some(val)
     })
-    .collect::<Vec<_>>();
-    v.reverse();
-    v
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -205,6 +202,7 @@ impl Borrow<str> for OrdLabel {
 #[derive(Clone, Debug, Default)]
 pub struct ControlFlowGraph {
     paths: HashMap<String, BTreeMap<OrdLabel, BlockNode>>,
+    end: Option<OrdLabel>,
 }
 
 impl ControlFlowGraph {
@@ -230,6 +228,11 @@ pub fn build_cfg(func: &Function) -> ControlFlowGraph {
             // TODO: can we make note of this for optimization...(if there are trailing
             // unreachable instructions)
             if inst.is_return() {
+                cfg.end = if idx == 0 {
+                    Some(OrdLabel::new_start(&b_label))
+                } else {
+                    Some(OrdLabel::from_known(&b_label))
+                };
                 unreachable = true;
                 continue 'inst;
             }
@@ -467,7 +470,8 @@ pub fn dominator_tree(
 
     // This is control dependence
     let mut post_dom_frontier = HashMap::<_, BTreeSet<OrdLabel>>::with_capacity(blocks_label.len());
-    for node in reverse_postorder(&cfg_succs_map, start) {
+    for node in postorder(&cfg_preds_map, cfg.end.as_ref().unwrap()) {
+        println!("{}", node.as_str());
         for c in cfg_succs_map.get(node).unwrap_or(&empty) {
             for m in post_dom_frontier.get(c).cloned().unwrap_or_default() {
                 if !post_dom.get(node).map_or(false, |set| set.contains(&m)) {
@@ -568,7 +572,7 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         let mut cfg = build_cfg(func);
 
         let dtree = dominator_tree(&cfg, &mut func.blocks, &OrdLabel::new_start(&func.label));
-
+        // println!("{:#?}", dtree);
         let phis = insert_phi_functions(&mut func.blocks, &dtree.dom_frontier_map);
 
         let mut meta = HashMap::new();
@@ -625,13 +629,13 @@ fn ssa_cfg() {
 
     use crate::iloc::{make_blks, parse_text};
 
-    let input = fs::read_to_string("input/check.il").unwrap();
+    let input = fs::read_to_string("input/arrayparam.il").unwrap();
     let iloc = parse_text(&input).unwrap();
     let blocks = make_blks(iloc, true);
 
-    let cfg = build_cfg(&blocks.functions[0]);
+    let cfg = build_cfg(&blocks.functions[1]);
     println!("{:?}", cfg);
-    emit_cfg_viz(&cfg, "graphs/check.dot");
+    emit_cfg_viz(&cfg, "graphs/arrayparam.dot");
 }
 
 #[test]

@@ -47,13 +47,14 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
         for inst in blk {
             match inst {
                 Instruction::Phi(_, set, _) if set.len() > 1 => {
-                    critical_map.insert(inst);
-                    stack.push_back((inst, b_label));
+                    if critical_map.insert(inst) {
+                        stack.push_back((inst, b_label));
+                    }
                 }
                 _ => (),
             }
-            if inst.is_critical() {
-                critical_map.insert(inst);
+            // If it's critical and we haven't seen it before
+            if inst.is_critical() && critical_map.insert(inst) {
                 stack.push_back((inst, b_label));
             }
 
@@ -63,6 +64,10 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
             | Instruction::ImmCall { ret: reg, .. } = inst
             {
                 def_map.insert(*reg, (inst, b_label));
+            } else if let Instruction::Frame { params: args, .. } = inst {
+                for reg in args {
+                    def_map.insert(*reg, (inst, b_label));
+                }
             }
         }
     }
@@ -118,11 +123,23 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
         // If we get to this point what are the blocks that will for sure run (it's the split
         // points)
         for blk in domtree.post_dom_frontier.get(b_label).unwrap_or(&empty) {
-            let Some(block) = func.blocks.iter().find(|b| b.label.starts_with(blk.as_str())) else { continue; };
+            println!("{:?}", blk.as_str());
+
+            let Some(block) = func.blocks.iter()
+                .find(|b| {
+                    b.label.starts_with(blk.as_str())
+                }) else { continue; };
+
+            println!("{}", block.label);
+
+            // TODO: A fall through would be important also...
             let Some(last_inst) = block.instructions.iter()
                 .find(|i| i.is_cnd_jump() || matches!(i, Instruction::ImmJump(..))) else { continue; };
 
+            println!("{:?}", last_inst);
+
             if critical_map.insert(last_inst) {
+                println!("dtree: {} = {:?} from: {}", blk.as_str(), last_inst, b_label.as_str());
                 stack.push_back((last_inst, blk));
             }
         }
@@ -151,7 +168,7 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
                         jumps.push((b, i, Instruction::ImmJump(Loc(label.to_string()))));
                     }
                 }
-                if !matches!(inst, Instruction::ImmJump(..)) {
+                if !matches!(inst, Instruction::ImmJump(..) | Instruction::Label(..)) {
                     println!("remove {:?}", inst);
                     remove.push((b, i));
                 }
@@ -176,18 +193,18 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
 }
 
 fn cleanup(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &DominatorTree) {
-    let mut cfg_map = domtree.cfg_succs_map.clone();
+    let mut cfg_map = domtree.cfg_preds_map.clone();
     let mut to_jump = vec![];
     let mut stupid_dumb_while_changed = true;
     while stupid_dumb_while_changed {
         stupid_dumb_while_changed = false;
-        for blk in postorder(&cfg_map, &OrdLabel::new_start(&func.label)) {
+        for blk in postorder(&cfg_map, cfg.end.as_ref().unwrap()) {
             let Some((idx, block)) = func.blocks.iter()
                 .enumerate()
                 .find(|(_, b)| b.label.starts_with(blk.as_str()))
                 .map(|(i, b)| (i, b.clone()))
              else {
-                unreachable!("unknown block")
+                unreachable!("unknown block {}", blk.as_str())
             };
             let fall_through = func.blocks.get(idx + 1).map(|b| b.label.to_string());
             let fall_through = fall_through.as_deref();

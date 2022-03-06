@@ -78,7 +78,6 @@ fn main() {
                 if matches!(inst, Instruction::Skip(..)) {
                     // continue;
                 }
-                // println!("{:?}", inst);
                 buf.push_str(&inst.to_string())
             }
 
@@ -91,7 +90,7 @@ fn main() {
 
             fs::read_to_string(&path).unwrap()
         } else if ssa {
-            println!("performing optimization on: {}", file);
+            println!("performing ssa numbering on: {}", file);
             let input = fs::read_to_string(&file).unwrap();
             let iloc = parse_text(&input).unwrap();
 
