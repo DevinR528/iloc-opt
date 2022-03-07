@@ -547,8 +547,12 @@ impl Hash for Instruction {
             Instruction::String { name, content } => (name, content, variant).hash(state),
             Instruction::Float { name, content } => (name, content.to_bits(), variant).hash(state),
             Instruction::Label(s) => (variant, s).hash(state),
-            // Unit variants
-            _ => variant.hash(state),
+            Instruction::Phi(r, set, subs) => (r, set, subs, variant).hash(state),
+            Instruction::Ret => variant.hash(state),
+            Instruction::Pop => variant.hash(state),
+            Instruction::Data => variant.hash(state),
+            Instruction::Text => variant.hash(state),
+            Instruction::Skip(_) => unreachable!("shouldn't hash skipped instructions"),
         };
     }
 }
