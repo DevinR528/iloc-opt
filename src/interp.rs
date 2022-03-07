@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    io::BufRead,
     str::FromStr,
 };
 
@@ -614,7 +613,7 @@ impl Interpreter {
             Instruction::FLoadAdd { src: _, add: _, dst: _ } => todo!(),
             Instruction::FRead(r) => {
                 let mut buf = String::new();
-                let mut handle = std::io::stdin_locked();
+                let handle = std::io::stdin();
                 handle.read_line(&mut buf).unwrap();
 
                 self.call_stack
@@ -625,7 +624,7 @@ impl Interpreter {
             }
             Instruction::IRead(r) => {
                 let mut buf = String::new();
-                let mut handle = std::io::stdin_locked();
+                let handle = std::io::stdin();
                 handle.read_line(&mut buf).unwrap();
 
                 let stack_idx = self.call_stack.last()?.registers.get(r)?;
@@ -668,7 +667,7 @@ fn debug_loop(
     }
 
     'dbg: loop {
-        let mut handle = std::io::stdin_locked();
+        let handle = std::io::stdin();
         handle.read_line(buf).unwrap();
         match buf.split_whitespace().collect::<Vec<_>>().as_slice() {
             ["step" | "s"] | [] => {

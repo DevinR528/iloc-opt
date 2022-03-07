@@ -1,4 +1,5 @@
-#![feature(stdio_locked, let_else, map_first_last, once_cell)]
+#![feature(let_else, map_first_last, once_cell)]
+#![allow(unused)]
 
 use std::{
     collections::{HashMap, VecDeque},
@@ -78,6 +79,7 @@ fn main() {
                 if matches!(inst, Instruction::Skip(..)) {
                     // continue;
                 }
+                // println!("{:?}", inst);
                 buf.push_str(&inst.to_string())
             }
 
