@@ -16,10 +16,6 @@ impl Instruction {
                 | Instruction::IWrite(..)
                 | Instruction::SWrite(..)
                 | Instruction::FWrite(..)
-                // | Instruction::I2I { .. }
-                // | Instruction::I2F { .. }
-                // | Instruction::F2I { .. }
-                // | Instruction::F2F { .. }
                 | Instruction::Store { .. }
                 | Instruction::StoreAdd { .. }
                 | Instruction::StoreAddImm { .. }
@@ -40,11 +36,10 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
 
     let mut copied_blocks = vec![];
     for blk in &func.blocks {
-        copied_blocks
-            .push((OrdLabel::new(&blk.label), blk.instructions().cloned().collect::<Vec<_>>()));
+        copied_blocks.push((OrdLabel::new(&blk.label), blk.instructions().collect::<Vec<_>>()));
     }
     for (b_label, blk) in &copied_blocks {
-        for inst in blk {
+        for &inst in blk {
             match inst {
                 Instruction::Phi(_, set, _) if set.len() > 1 => {
                     if critical_map.insert(inst) {
@@ -120,8 +115,8 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
         }
 
         // Control dependence
-        // If we get to this point what are the blocks that will for sure run (it's the split
-        // points)
+        // Which blocks does `b_label` control the execution of (where does this block
+        // jump/branch/fall-through to)
         for blk in domtree.post_dom_frontier.get(b_label).unwrap_or(&empty) {
             let Some(block) = func.blocks.iter()
                 .find(|b| {
@@ -133,7 +128,7 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
                 .find(|i| i.is_cnd_jump() || matches!(i, Instruction::ImmJump(..))) else { continue; };
 
             if critical_map.insert(last_inst) {
-                println!("dtree: {} = {:?} from: {}", blk.as_str(), last_inst, b_label.as_str());
+                // println!("dtree: {} = {:?} from: {}", blk.as_str(), last_inst, b_label.as_str());
                 stack.push_back((last_inst, blk));
             }
         }
@@ -161,8 +156,7 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
 
                         jumps.push((b, i, Instruction::ImmJump(Loc(label.to_string()))));
                     }
-                }
-                if !matches!(inst, Instruction::ImmJump(..) | Instruction::Label(..)) {
+                } else if !matches!(inst, Instruction::ImmJump(..) | Instruction::Label(..)) {
                     println!("remove {:?}", inst);
                     remove.push((b, i));
                 }
@@ -265,9 +259,6 @@ pub fn build_cfg(func: &Function) -> HashMap<OrdLabel, BTreeSet<OrdLabel>> {
                     .insert(OrdLabel::from_known(label));
                 // Skip the implicit branch to the block below the current one
                 // since we found an unconditional jump.
-                //
-                // TODO: can we make note of this for optimization...(if there are trailing
-                // unreachable instructions)
                 if inst.unconditional_jmp() {
                     continue 'block;
                 }
