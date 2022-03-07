@@ -127,19 +127,19 @@ impl BlockNode {
 static LABEL_MAP: std::lazy::SyncLazy<Mutex<HashMap<String, OrdLabel>>> =
     std::lazy::SyncLazy::new(|| Mutex::new(HashMap::new()));
 
-#[derive(Clone, Debug)]
-pub struct OrdLabel(String);
+#[derive(Clone)]
+pub struct OrdLabel(isize, String);
 impl OrdLabel {
     // Create a new `OrdLabel, removing the `:` and without the sorting filler in the front of the
     // label.
     fn new(label: &str) -> Self {
-        Self(label.replace(':', ""))
+        Self(111, label.replace(':', ""))
     }
-    fn new_add(sort: usize, label: &str) -> Self {
+    fn new_add(sort: isize, label: &str) -> Self {
         match LABEL_MAP.lock().unwrap().entry(label.to_string()) {
             Entry::Occupied(o) => o.get().clone(),
             Entry::Vacant(v) => {
-                let l = OrdLabel(format!("{}{}", "!".repeat(4 - sort), label));
+                let l = OrdLabel(sort, label.to_string());
                 v.insert(l.clone());
                 l
             }
@@ -150,16 +150,22 @@ impl OrdLabel {
         LABEL_MAP.lock().unwrap().get(label).unwrap_or_else(|| panic!("{label} {:?}", jik)).clone()
     }
     pub fn new_start(start: &str) -> Self {
-        let l = Self(format!("{}.F_{}", "!".repeat(5), start));
+        let l = Self(-1, format!(".F_{}", start));
         LABEL_MAP.lock().unwrap().entry(format!(".F_{}", start)).or_insert(l).clone()
     }
     fn as_str(&self) -> &str {
-        self.0.trim_start_matches('!')
+        self.1.trim_start_matches('!')
     }
 }
 impl fmt::Display for OrdLabel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.as_str().fmt(f)
+    }
+}
+impl fmt::Debug for OrdLabel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({} {})", self.0, self.1)
+        // self.as_str().fmt(f)
     }
 }
 impl PartialEq for OrdLabel {
@@ -170,17 +176,23 @@ impl PartialEq for OrdLabel {
 impl Eq for OrdLabel {}
 impl hash::Hash for OrdLabel {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.0.trim_start_matches('!').hash(state);
+        self.1.hash(state);
     }
 }
 impl PartialOrd for OrdLabel {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
+        match self.0.partial_cmp(&other.0) {
+            Some(core::cmp::Ordering::Equal) => self.1.partial_cmp(&other.1),
+            ord => ord,
+        }
     }
 }
 impl Ord for OrdLabel {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.cmp(&other.0)
+        match self.0.cmp(&other.0) {
+            core::cmp::Ordering::Equal => self.1.cmp(&other.1),
+            ord => ord,
+        }
     }
 }
 impl PartialEq<str> for OrdLabel {
@@ -207,7 +219,7 @@ pub struct ControlFlowGraph {
 
 impl ControlFlowGraph {
     /// Adds an edge to our control flow graph.
-    pub fn add_edge(&mut self, from: &str, to: &str, sort: usize) {
+    pub fn add_edge(&mut self, from: &str, to: &str, sort: isize) {
         self.paths
             .entry(from.to_string())
             .or_default()
@@ -218,7 +230,7 @@ impl ControlFlowGraph {
 pub fn build_cfg(func: &Function) -> ControlFlowGraph {
     let mut cfg = ControlFlowGraph::default();
 
-    for (idx, block) in func.blocks.iter().enumerate() {
+    'block: for (idx, block) in func.blocks.iter().enumerate() {
         let b_label = block.label.replace(':', "");
 
         let mut sort = 1;
@@ -252,7 +264,7 @@ pub fn build_cfg(func: &Function) -> ControlFlowGraph {
                 // TODO: can we make note of this for optimization...(if there are trailing
                 // unreachable instructions)
                 if inst.unconditional_jmp() {
-                    unreachable = true;
+                    continue 'block;
                 }
             }
         }
@@ -318,13 +330,13 @@ pub fn dominator_tree(
     let blocks_label =
         blocks.iter().map(|b| OrdLabel::from_known(&b.label.replace(':', ""))).collect::<Vec<_>>();
 
-    for label in &blocks_label {
+    for node in &blocks_label {
         let mut is_reachable = false;
         let mut set = blocks_label.iter().collect::<HashSet<_>>();
-        for path in paths.iter().filter(|p| p.contains(label)) {
+        for path in paths.iter().filter(|p| p.contains(node)) {
             is_reachable = true;
 
-            let path_set = path.iter().take_while(|l| *l != label).collect::<HashSet<_>>();
+            let path_set = path.iter().take_while(|l| *l != node).collect::<HashSet<_>>();
             set = set.intersection(&path_set).copied().collect();
             if set.is_empty() {
                 break;
@@ -332,8 +344,8 @@ pub fn dominator_tree(
         }
 
         if is_reachable {
-            set.insert(label);
-            dom_map.insert(label.clone(), set);
+            set.insert(node);
+            dom_map.insert(node.clone(), set);
         }
     }
 
@@ -343,24 +355,22 @@ pub fn dominator_tree(
     // Build dominance predecessor map (AKA find join points)
     let mut dom_preds_map = HashMap::with_capacity(blocks_label.len());
     let mut cfg_preds_map = HashMap::with_capacity(blocks_label.len());
-    for label in &blocks_label {
+    for node in &blocks_label {
         let mut pred = BTreeSet::new();
         let mut cfg_pred = BTreeSet::new();
         // For each index we find the label (this detects loops back to a node,
-        // which is important when computing frontiers) we save the that index to check
+        // which is important when computing frontiers) we save that the index to check
         // what the previous label is in that path
         for (label_idxs, path) in paths.iter().map(|p| {
             (
                 p.iter()
                     .enumerate()
-                    .filter_map(|(i, l)| if l == label { Some(i) } else { None })
+                    .filter_map(|(i, l)| if l == node { Some(i) } else { None })
                     .collect::<Vec<usize>>(),
                 p,
             )
         }) {
-            for idx in label_idxs {
-                let mut idx = idx;
-
+            for mut idx in label_idxs {
                 let mut cfg_first = true;
                 while let Some(i) = idx.checked_sub(1) {
                     let prev = &path[i];
@@ -368,8 +378,8 @@ pub fn dominator_tree(
                         cfg_pred.insert(prev.clone());
                         cfg_first = false;
                     }
-                    if prev != label {
-                        if dom_map.get(label).map_or(false, |dom_preds| dom_preds.contains(prev)) {
+                    if prev != node {
+                        if dom_map.get(node).map_or(false, |dom| dom.contains(prev)) {
                             pred.insert(prev.clone());
                             break;
                         } else {
@@ -383,10 +393,10 @@ pub fn dominator_tree(
         }
         // If the set is empty there are no predecessors
         if !pred.is_empty() {
-            dom_preds_map.insert(label.clone(), pred);
+            dom_preds_map.insert(node.clone(), pred);
         }
         if !cfg_pred.is_empty() {
-            cfg_preds_map.insert(label.clone(), cfg_pred);
+            cfg_preds_map.insert(node.clone(), cfg_pred);
         }
     }
     let mut dom_succs_map = HashMap::with_capacity(blocks_label.len());
@@ -403,16 +413,14 @@ pub fn dominator_tree(
     }
 
     let mut idom_map = HashMap::with_capacity(blocks_label.len());
-    for label in &blocks_label {
-        let mut labels = VecDeque::from([label]);
+    for node in &blocks_label {
+        let mut labels = VecDeque::from([node]);
         while let Some(dfset) = labels.pop_front().and_then(|l| dom_preds_map.get(l)) {
             if dfset.len() == 1 {
-                idom_map.insert(label, (*dfset.iter().next().unwrap()).clone());
+                idom_map.insert(node, (*dfset.iter().next().unwrap()).clone());
                 break;
             }
-            for df in dfset {
-                labels.push_back(df);
-            }
+            labels.extend(dfset);
         }
     }
 
@@ -422,18 +430,18 @@ pub fn dominator_tree(
     // (anytime the graph make the lower half of a diamond)
     let mut dom_frontier_map: HashMap<OrdLabel, BTreeSet<OrdLabel>> =
         HashMap::with_capacity(blocks_label.len());
-    for label in &blocks_label {
+    for node in &blocks_label {
         // Node must be a join point (have multiple preds)
 
         // For each previous node find a predecessor of `label` that also dominates `label
-        for p in cfg_preds_map.get(label).unwrap_or(&BTreeSet::new()) {
+        for p in cfg_preds_map.get(node).unwrap_or(&BTreeSet::new()) {
             let mut run = p;
-            while Some(run) != idom_map.get(label) {
+            while Some(run) != idom_map.get(node) {
                 // Second, for a join point j, each predecessor k of j must have j ∈ df(k),
                 // since k cannot dominate j if j has more than one predecessor. Finally, if j ∈
                 // df(k) for some predecessor k, then j must also be in df(l) for each l ∈
                 // Dom(k), unless l ∈ Dom( j)
-                dom_frontier_map.entry(run.clone()).or_default().insert(label.clone());
+                dom_frontier_map.entry(run.clone()).or_default().insert(node.clone());
                 if let Some(idom) = idom_map.get(run) {
                     run = idom;
                 }
@@ -441,52 +449,91 @@ pub fn dominator_tree(
         }
     }
 
-    let empty = BTreeSet::new();
     // This is just postdominators tree
     let mut post_dom = HashMap::<_, BTreeSet<_>>::with_capacity(blocks_label.len());
-    for node in reverse_postorder(&cfg_succs_map, start) {
-        let mut seen = HashSet::new();
-        // Skip until we find a single common child...
+    for node in postorder(&cfg_preds_map, cfg.end.as_ref().unwrap()) {
+        let mut is_reachable = false;
+        let mut set = blocks_label.iter().cloned().collect::<BTreeSet<_>>();
+        for path in paths.iter().filter(|p| p.contains(node)) {
+            is_reachable = true;
+            let path_set =
+                // Skip all before and the block itself, since we only want successors
+                path.iter().skip_while(|l| *l != node).skip(1).cloned().collect::<BTreeSet<_>>();
+            set = set.intersection(&path_set).cloned().collect();
+            if set.is_empty() {
+                break;
+            }
+        }
+        if is_reachable && !set.is_empty() {
+            // set.insert(label.clone());
+            post_dom.insert(node.clone(), set);
+        }
+    }
+    let empty = BTreeSet::new();
+    let mut post_dom_tree = HashMap::<_, BTreeSet<_>>::with_capacity(blocks_label.len());
+    for (f, pd) in &post_dom {
+        let mut succs: VecDeque<_> = cfg_succs_map.get(f).unwrap_or(&empty).iter().collect();
+        while let Some(n) = succs.pop_front() {
+            if pd.contains(n) {
+                post_dom_tree.entry(n.clone()).or_default().insert(f.clone());
+                break;
+            }
+            succs.extend(cfg_succs_map.get(n).into_iter().flatten())
+        }
+    }
+    let mut post_dom_tree_preds = HashMap::<_, BTreeSet<_>>::with_capacity(blocks_label.len());
+    for (f, pd) in &post_dom_tree {
+        for t in pd {
+            post_dom_tree_preds.entry(t.clone()).or_default().insert(f.clone());
+        }
+    }
+    let mut post_idom_map = HashMap::with_capacity(blocks_label.len());
+    for node in reverse_postorder(&post_dom_tree, cfg.end.as_ref().unwrap()) {
         let mut labels = VecDeque::from([node]);
-        while let Some(n) = labels.pop_front() {
-            if let Some(succs) = cfg_succs_map.get(n) {
-                // If the value has been seen, this is reset ever outer loop
-                if !seen.insert(succs) {
-                    continue;
-                }
-                let kids: Vec<_> = if succs.len() > 1 {
-                    // Jump as far down the graph as possible
-                    succs.last().into_iter().collect()
-                } else {
-                    succs.iter().collect()
-                };
-                labels.extend(kids);
+        while let Some(pdfset) = labels.pop_front().and_then(|l| post_dom_tree_preds.get(l)) {
+            if pdfset.len() == 1 {
+                post_idom_map.insert(node, (*pdfset.iter().next().unwrap()).clone());
+                break;
             }
-            if n != node {
-                post_dom.entry(node.clone()).or_default().insert(n.clone());
-            }
+            labels.extend(pdfset);
         }
     }
 
     // This is control dependence
     let mut post_dom_frontier = HashMap::<_, BTreeSet<OrdLabel>>::with_capacity(blocks_label.len());
-    for node in postorder(&cfg_preds_map, cfg.end.as_ref().unwrap()) {
-        println!("{}", node.as_str());
+    for node in postorder(&post_dom_tree, cfg.end.as_ref().unwrap()) {
+        // This is post dominator frontier
+        // This includes 1 -> 2 __and__ 1 -> 5 (the graph from his notes
+        // and similar to https://pages.cs.wisc.edu/~fischer/cs701.f08/lectures/Lecture19.4up.pdf slide 8)
+        //
+        // for p in cfg_succs_map.get(node).unwrap_or(&BTreeSet::new()) {
+        //     let mut run = p;
+        //     while Some(run) != post_idom_map.get(node) {
+        //         post_dom_frontier.entry(run.clone()).or_default().insert(node.clone());
+        //         if let Some(idom) = post_idom_map.get(run) {
+        //             run = idom;
+        //         }
+        //     }
+        // }
+
+        // Carr's isn't the same as post dominator frontier...
+        // It misses 1 -> 5 (see above)
+        //
         for c in cfg_succs_map.get(node).unwrap_or(&empty) {
             for m in post_dom_frontier.get(c).cloned().unwrap_or_default() {
-                if !post_dom.get(node).map_or(false, |set| set.contains(&m)) {
+                if !post_dom_tree.get(node).map_or(false, |set| set.contains(&m)) {
                     post_dom_frontier.entry(node.clone()).or_default().insert(m.clone());
                 }
             }
         }
         for m in cfg_preds_map.get(node).unwrap_or(&empty) {
-            if !post_dom.get(node).map_or(false, |set| set.contains(m)) {
+            if !post_dom_tree.get(node).map_or(false, |set| set.contains(m)) {
                 post_dom_frontier.entry(node.clone()).or_default().insert(m.clone());
             }
         }
     }
 
-    // println!("{:?} {:#?}", start, cfg_succs_map);
+    // panic!("{:#?} {:#?}", post_dom_tree, post_dom_frontier);
 
     DominatorTree {
         dom_frontier_map,
@@ -556,12 +603,12 @@ pub fn insert_phi_functions(
     }
 
     for (label, set) in &phis {
-        let instructions =
-            blocks.iter_mut().find(|b| b.label.replace(':', "") == label.as_str()).unwrap();
+        let blk = blocks.iter_mut().find(|b| b.label.replace(':', "") == label.as_str()).unwrap();
+        // If the block starts with a frame and label skip it other wise just skip a label
+        let index = if let Instruction::Frame { .. } = &blk.instructions[0] { 2 } else { 1 };
         for reg in set {
-            instructions
-                .instructions
-                .insert(0, Instruction::Phi(reg.copy_to_register(), BTreeSet::default(), None));
+            blk.instructions
+                .insert(index, Instruction::Phi(reg.copy_to_register(), BTreeSet::default(), None));
         }
     }
     phis
@@ -572,7 +619,9 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         let mut cfg = build_cfg(func);
 
         let dtree = dominator_tree(&cfg, &mut func.blocks, &OrdLabel::new_start(&func.label));
+
         // println!("{:#?}", dtree);
+
         let phis = insert_phi_functions(&mut func.blocks, &dtree.dom_frontier_map);
 
         let mut meta = HashMap::new();
