@@ -34,7 +34,12 @@ fn rewrite_name(reg: &mut Reg, meta: &RenameMeta) {
     reg.as_phi(phi_id);
 }
 fn phi_range(insts: &[Instruction]) -> Range<usize> {
-    0..insts.iter().take_while(|i| i.is_phi()).count()
+    let start = match insts {
+        [Instruction::Frame { .. }, Instruction::Label(..), Instruction::Phi(..), ..] => 2,
+        [Instruction::Label(..), Instruction::Phi(..), ..] => 1,
+        _ => return 0..0,
+    };
+    start..(start + insts.iter().skip(start).take_while(|i| i.is_phi()).count())
 }
 
 pub type ScopedExprTree = VecDeque<HashMap<(Operand, Option<Operand>, String), Reg>>;
@@ -54,7 +59,6 @@ pub fn dom_val_num(
             new_name(r, dst, meta);
         }
     }
-
     expr_tree.push_back(HashMap::new());
 
     // Remove redundant/meaningless phi instructions
