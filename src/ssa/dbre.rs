@@ -10,27 +10,24 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct RenameMeta {
-    counter: usize,
     stack: VecDeque<usize>,
 }
 impl Default for RenameMeta {
     fn default() -> Self {
-        Self { counter: 0, stack: VecDeque::from([0]) }
+        Self { stack: VecDeque::from([]) }
     }
 }
 
 fn new_name(reg: &Reg, dst: &mut Option<usize>, meta: &mut HashMap<Operand, RenameMeta>) {
     let m = meta.get_mut(&Operand::Register(*reg)).unwrap();
-    m.counter += 1;
-    let i = m.counter;
-
+    let i = *m.stack.back().unwrap() + 1;
     m.stack.push_back(i);
     *dst = Some(i);
 }
 fn rewrite_name(reg: &mut Reg, meta: &RenameMeta) {
     // `unwrap_or_default` is ok here since we want a zero if the stack
     // is empty
-    let phi_id = meta.stack.back().copied().unwrap();
+    let phi_id = meta.stack.back().copied().unwrap_or_default();
     reg.as_phi(phi_id);
 }
 fn phi_range(insts: &[Instruction]) -> Range<usize> {
@@ -85,6 +82,7 @@ pub fn dom_val_num(
         if let Instruction::Phi(..) = op {
             continue;
         }
+
         let (mut a, mut b) = op.operands_mut();
         if let Some((a, meta)) = a.as_mut().map(|reg| {
             let cpy = **reg;
@@ -120,15 +118,6 @@ pub fn dom_val_num(
         }
 
         // This needs to run before we bail out for calls/stores, stuff like that...
-        if let Some(dst) = op.target_reg_mut() {
-            let m = meta.entry(Operand::Register(*dst)).or_default();
-            // This is `new_name` minus the set addition
-            m.counter += 1;
-            let i = m.counter;
-
-            m.stack.push_back(i);
-            dst.as_phi(i);
-        }
 
         if let (Some(a), b) = op.operands() {
             let expr = (a.clone(), b.clone(), op.inst_name().to_string());
@@ -141,21 +130,23 @@ pub fn dom_val_num(
 
                 if let Some(dst) = op.target_reg() {
                     // if dst == prev_reg {
-                    *op = Instruction::Skip(format!("[ssa] {op}"));
+                    *op = Instruction::Skip(format!("[ssadbre] {op}"));
                     // } else {
                     // op.as_new_move_instruction(*prev_reg, *dst);
                     // }
                 }
+            } else if let Some(dst) = op.target_reg_mut() {
+                //
+                let m = meta.entry(Operand::Register(dst.as_register())).or_default();
+                if let Some(i) = m.stack.back() {
+                    let new_val = *i + 1;
+                    m.stack.push_back(new_val);
+                    dst.as_phi(new_val);
+                } else {
+                    m.stack.push_back(0);
+                    dst.as_phi(0);
+                }
             }
-            //  else if let Some(dst) = op.target_reg_mut() {
-            //     expr_tree.back_mut().unwrap().insert(expr, *dst);
-            //     // We value number the assignments
-            //     let m = meta.entry(Operand::Register(*dst)).or_default();
-            //     let i = m.counter;
-            //     m.counter += 1;
-            //     m.stack.push_back(i);
-            //     dst.as_phi(i);
-            // }
         }
     }
 
@@ -168,23 +159,22 @@ pub fn dom_val_num(
         let rng = phi_range(&blks[idx].instructions);
 
         for phi in &mut blks[idx].instructions[rng] {
-            if let Instruction::Phi(r, set, ..) = phi {
-                let m = meta.get_mut(&Operand::Register(*r)).unwrap();
-                if m.stack.is_empty() {
-                    let i = m.counter;
-                    m.counter += 1;
-                    m.stack.push_back(i);
-                }
-                let fill = m.stack.back().unwrap();
-                set.insert(*fill);
+            if let Instruction::Phi(r, set, dst) = phi {
+                println!("{:?}", (blk, idx, &r, &dst));
+                let m = meta.get_mut(&Operand::Register(r.as_register())).unwrap();
+                let i = *m.stack.back().unwrap_or_else(|| panic!("{:?}", (blk, idx, r, dst)));
+                m.stack.push_back(i + 1);
+                set.insert(i);
+                // `new_name` minus the overwriting of subscripts
             }
         }
     }
 
     // This is what drives the rename algorithm
-    for blk in dtree.dom_succs_map.get(blk_label.as_str()).unwrap_or(&empty) {
+    for blk in dtree.dom_tree.get(blk_label.as_str()).unwrap_or(&empty) {
+        // println!("{} -> {}", blk_label, blk.as_str());
         // TODO: make block -> index map
-        let idx = blks.iter().position(|b| b.label.replace(':', "") == blk.as_str()).unwrap();
+        let idx = blks.iter().position(|b| b.label.starts_with(blk.as_str())).unwrap();
         dom_val_num(blks, idx, meta, dtree, expr_tree);
     }
 

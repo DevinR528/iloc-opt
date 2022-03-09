@@ -1,0 +1,157 @@
+	.data
+	.string	.int_wformat, "%d\12"
+	.string	.float_wformat, "%f\12"
+	.string	.char_wformat, "%c\12"
+	.string	.string_wformat, "%s\12"
+	.string	.int_rformat, "%d"
+	.string	.float_rformat, "%f"
+	.string	.char_rformat, "%c"
+	.string	.string_rformat, "%s"
+	.float	.float_const_0, 0.01
+	.global	main_fp, 4, 4
+	.text
+.frame	main, 40
+	loadI	main_fp  => %vr4_0
+	store	%vr0_1  => %vr4_0
+	loadI	-4  => %vr5_0
+	add	%vr0_1, %vr5_0 => %vr6_0
+	call	init, %vr6_0
+	call	writearray, %vr6_0
+	loadI	1  => %vr7_0
+	i2i	%vr7_0  => %vr4_1
+	loadI	10  => %vr8_0
+	comp	%vr4_1, %vr8_0 => %vr9_0
+	testgt	%vr9_0  => %vr10_0
+	cbr	%vr10_0  -> .L0
+
+	Phi Nodes for Block .L1
+		phi	%vr4_1, %vr4_3 	 => %vr4_2
+
+.L1:	nop
+	i2i	%vr0_1  => %vr11_0
+	add	%vr11_0, %vr5_0 => %vr12_0
+	sub	%vr4_2, %vr7_0 => %vr13_0
+	loadI	4  => %vr14_0
+	mult	%vr13_0, %vr14_0 => %vr15_0
+	sub	%vr12_0, %vr15_0 => %vr16_0
+	load	%vr16_0  => %vr17_0
+	mult	%vr17_0, %vr4_2 => %vr18_0
+	i2i	%vr0_1  => %vr11_1
+	add	%vr11_1, %vr5_0 => %vr12_1
+	sub	%vr12_1, %vr15_0 => %vr16_1
+	store	%vr18_0  => %vr16_1
+	i2i	%vr0_1  => %vr11_2
+	add	%vr11_2, %vr5_0 => %vr12_2
+	sub	%vr12_2, %vr15_0 => %vr16_2
+	call	inc, %vr16_2
+	add	%vr4_2, %vr7_0 => %vr19_0
+	i2i	%vr19_0  => %vr4_3
+	comp	%vr4_3, %vr8_0 => %vr9_1
+	testle	%vr9_1  => %vr10_1
+	cbr	%vr10_1  -> .L1
+.L0:	nop
+	call	writearray, %vr6_0
+	ret
+.frame	init, 0, %vr8_1
+	loadI	1  => %vr9_0
+	i2i	%vr9_0  => %vr4_0
+	loadI	10  => %vr10_0
+	i2i	%vr10_0  => %vr5_0
+	comp	%vr4_0, %vr10_0 => %vr11_0
+	testgt	%vr11_0  => %vr12_0
+	cbr	%vr12_0  -> .L2
+
+	Phi Nodes for Block .L3
+		phi	%vr4_0, %vr4_2 	 => %vr4_1
+		phi	%vr5_0, %vr5_2 	 => %vr5_1
+
+.L3:	nop
+	i2f	%vr4_1  => %vr13_0
+	loadI	.float_const_0  => %vr14_0
+	fload	%vr14_0  => %vr15_0
+	fmult	%vr13_0, %vr15_0 => %vr16_0
+	i2f	%vr5_1  => %vr17_0
+	fadd	%vr16_0, %vr17_0 => %vr18_0
+	f2i	%vr18_0  => %vr19_0
+	sub	%vr4_1, %vr9_0 => %vr20_0
+	loadI	4  => %vr21_0
+	mult	%vr20_0, %vr21_0 => %vr22_0
+	sub	%vr8_1, %vr22_0 => %vr23_0
+	store	%vr19_0  => %vr23_0
+	add	%vr4_1, %vr9_0 => %vr24_0
+	i2i	%vr24_0  => %vr4_2
+	add	%vr5_1, %vr9_0 => %vr25_0
+	i2i	%vr25_0  => %vr5_2
+	comp	%vr4_2, %vr10_0 => %vr11_1
+	testle	%vr11_1  => %vr12_1
+	cbr	%vr12_1  -> .L3
+.L2:	nop
+	ret
+.frame	writearray, 0, %vr4_1
+	loadI	1  => %vr5_0
+	sub	%vr5_0, %vr5_0 => %vr6_0
+	loadI	4  => %vr7_0
+	mult	%vr6_0, %vr7_0 => %vr8_0
+	sub	%vr4_1, %vr8_0 => %vr9_0
+	load	%vr9_0  => %vr10_0
+	iwrite	%vr10_0
+	loadI	2  => %vr11_0
+	sub	%vr11_0, %vr5_0 => %vr12_0
+	mult	%vr12_0, %vr7_0 => %vr13_0
+	sub	%vr4_1, %vr13_0 => %vr14_0
+	load	%vr14_0  => %vr15_0
+	iwrite	%vr15_0
+	loadI	3  => %vr16_0
+	sub	%vr16_0, %vr5_0 => %vr17_0
+	mult	%vr17_0, %vr7_0 => %vr18_0
+	sub	%vr4_1, %vr18_0 => %vr19_0
+	load	%vr19_0  => %vr20_0
+	iwrite	%vr20_0
+	sub	%vr7_0, %vr5_0 => %vr21_0
+	mult	%vr21_0, %vr7_0 => %vr22_0
+	sub	%vr4_1, %vr22_0 => %vr23_0
+	load	%vr23_0  => %vr24_0
+	iwrite	%vr24_0
+	loadI	5  => %vr25_0
+	sub	%vr25_0, %vr5_0 => %vr26_0
+	mult	%vr26_0, %vr7_0 => %vr27_0
+	sub	%vr4_1, %vr27_0 => %vr28_0
+	load	%vr28_0  => %vr29_0
+	iwrite	%vr29_0
+	loadI	6  => %vr30_0
+	sub	%vr30_0, %vr5_0 => %vr31_0
+	mult	%vr31_0, %vr7_0 => %vr32_0
+	sub	%vr4_1, %vr32_0 => %vr33_0
+	load	%vr33_0  => %vr34_0
+	iwrite	%vr34_0
+	loadI	7  => %vr35_0
+	sub	%vr35_0, %vr5_0 => %vr36_0
+	mult	%vr36_0, %vr7_0 => %vr37_0
+	sub	%vr4_1, %vr37_0 => %vr38_0
+	load	%vr38_0  => %vr39_0
+	iwrite	%vr39_0
+	loadI	8  => %vr40_0
+	sub	%vr40_0, %vr5_0 => %vr41_0
+	mult	%vr41_0, %vr7_0 => %vr42_0
+	sub	%vr4_1, %vr42_0 => %vr43_0
+	load	%vr43_0  => %vr44_0
+	iwrite	%vr44_0
+	loadI	9  => %vr45_0
+	sub	%vr45_0, %vr5_0 => %vr46_0
+	mult	%vr46_0, %vr7_0 => %vr47_0
+	sub	%vr4_1, %vr47_0 => %vr48_0
+	load	%vr48_0  => %vr49_0
+	iwrite	%vr49_0
+	loadI	10  => %vr50_0
+	sub	%vr50_0, %vr5_0 => %vr51_0
+	mult	%vr51_0, %vr7_0 => %vr52_0
+	sub	%vr4_1, %vr52_0 => %vr53_0
+	load	%vr53_0  => %vr54_0
+	iwrite	%vr54_0
+	ret
+.frame	inc, 0, %vr4_1
+	load	%vr4_1  => %vr5_0
+	loadI	1  => %vr6_0
+	add	%vr5_0, %vr6_0 => %vr7_0
+	store	%vr7_0  => %vr4_1
+	ret

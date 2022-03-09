@@ -1,0 +1,240 @@
+	.data
+	.string	.int_wformat, "%d\12"
+	.string	.float_wformat, "%f\12"
+	.string	.char_wformat, "%c\12"
+	.string	.string_wformat, "%s\12"
+	.string	.int_rformat, "%d"
+	.string	.float_rformat, "%f"
+	.string	.char_rformat, "%c"
+	.string	.string_rformat, "%s"
+	.string	.string_const_0, "A?"
+	.string	.string_const_1, "A:"
+	.float	.float_const_0, 1.7
+	.global	main_fp, 4, 4
+	.text
+.frame	main, 92
+	loadI	main_fp  => %vr4_0
+	store	%vr0_1  => %vr4_0
+	loadI	0  => %vr5_0
+	loadI	1  => %vr6_0
+	sub	%vr5_0, %vr6_0 => %vr7_0
+	i2i	%vr0_1  => %vr8_0
+	loadI	-4  => %vr9_0
+	add	%vr8_0, %vr9_0 => %vr10_0
+	sub	%vr5_0, %vr5_0 => %vr11_0
+	loadI	4  => %vr12_0
+	mult	%vr11_0, %vr12_0 => %vr13_0
+	sub	%vr10_0, %vr13_0 => %vr14_0
+	store	%vr7_0  => %vr14_0
+	loadI	1000  => %vr15_0
+	loadI	20  => %vr16_0
+	i2i	%vr0_1  => %vr8_1
+	add	%vr8_1, %vr9_0 => %vr10_1
+	sub	%vr16_0, %vr5_0 => %vr17_0
+	mult	%vr17_0, %vr12_0 => %vr18_0
+	sub	%vr10_1, %vr18_0 => %vr19_0
+	store	%vr15_0  => %vr19_0
+	call	readarray
+	call	writearray
+	add	%vr0_1, %vr9_0 => %vr20_0
+	loadI	-88  => %vr21_0
+	add	%vr0_1, %vr21_0 => %vr22_0
+	store	%vr6_0  => %vr22_0
+	loadI	19  => %vr23_0
+	loadI	-92  => %vr24_0
+	add	%vr0_1, %vr24_0 => %vr25_0
+	store	%vr23_0  => %vr25_0
+	call	quicksort, %vr20_0, %vr22_0, %vr25_0
+	call	writearray
+	ret
+.frame	readarray, 0
+	loadI	.string_const_0  => %vr5_0
+	swrite	%vr5_0
+	loadI	1  => %vr6_0
+	i2i	%vr6_0  => %vr4_0
+	loadI	20  => %vr7_0
+	comp	%vr4_0, %vr7_0 => %vr8_0
+	testge	%vr8_0  => %vr9_0
+	cbr	%vr9_0  -> .L0
+
+	Phi Nodes for Block .L1
+		phi	%vr4_0, %vr4_2 	 => %vr4_1
+
+.L1:	nop
+	iwrite	%vr4_1
+	loadI	main_fp  => %vr10_0
+	load	%vr10_0  => %vr11_0
+	loadI	-4  => %vr12_0
+	add	%vr11_0, %vr12_0 => %vr13_0
+	loadI	0  => %vr14_0
+	sub	%vr4_1, %vr14_0 => %vr15_0
+	loadI	4  => %vr16_0
+	mult	%vr15_0, %vr16_0 => %vr17_0
+	sub	%vr13_0, %vr17_0 => %vr18_0
+	iread	%vr18_0
+	add	%vr4_1, %vr6_0 => %vr19_0
+	i2i	%vr19_0  => %vr4_2
+	comp	%vr4_2, %vr7_0 => %vr8_1
+	testlt	%vr8_1  => %vr9_1
+	cbr	%vr9_1  -> .L1
+.L0:	nop
+	ret
+.frame	writearray, 0
+	loadI	.string_const_1  => %vr5_0
+	swrite	%vr5_0
+	loadI	1  => %vr6_0
+	i2i	%vr6_0  => %vr4_0
+	loadI	20  => %vr7_0
+	comp	%vr4_0, %vr7_0 => %vr8_0
+	testge	%vr8_0  => %vr9_0
+	cbr	%vr9_0  -> .L2
+
+	Phi Nodes for Block .L3
+		phi	%vr4_0, %vr4_2 	 => %vr4_1
+
+.L3:	nop
+	loadI	main_fp  => %vr10_0
+	load	%vr10_0  => %vr11_0
+	loadI	-4  => %vr12_0
+	add	%vr11_0, %vr12_0 => %vr13_0
+	loadI	0  => %vr14_0
+	sub	%vr4_1, %vr14_0 => %vr15_0
+	loadI	4  => %vr16_0
+	mult	%vr15_0, %vr16_0 => %vr17_0
+	sub	%vr13_0, %vr17_0 => %vr18_0
+	load	%vr18_0  => %vr19_0
+	iwrite	%vr19_0
+	add	%vr4_1, %vr6_0 => %vr20_0
+	i2i	%vr20_0  => %vr4_2
+	comp	%vr4_2, %vr7_0 => %vr8_1
+	testlt	%vr8_1  => %vr9_1
+	cbr	%vr9_1  -> .L3
+.L2:	nop
+	ret
+.frame	partition, 0, %vr4_1, %vr5_1, %vr6_1
+	load	%vr5_1  => %vr12_0
+	loadI	0  => %vr13_0
+	sub	%vr12_0, %vr13_0 => %vr14_0
+	loadI	4  => %vr15_0
+	mult	%vr14_0, %vr15_0 => %vr16_0
+	sub	%vr4_1, %vr16_0 => %vr17_0
+	load	%vr17_0  => %vr18_0
+	i2i	%vr18_0  => %vr9_0
+	load	%vr5_1  => %vr12_1
+	loadI	1  => %vr19_0
+	sub	%vr12_1, %vr19_0 => %vr20_0
+	i2i	%vr20_0  => %vr7_0
+	load	%vr6_1  => %vr21_0
+	add	%vr21_0, %vr19_0 => %vr22_0
+	i2i	%vr22_0  => %vr8_0
+	loadI	.float_const_0  => %vr23_0
+	fload	%vr23_0  => %vr24_0
+	f2i	%vr24_0  => %vr25_0
+	comp	%vr25_0, %vr13_0 => %vr26_0
+	testeq	%vr26_0  => %vr27_0
+	cbr	%vr27_0  -> .L4
+
+	Phi Nodes for Block .L5
+		phi	%vr7_0, %vr7_5 	 => %vr7_1
+		phi	%vr8_0, %vr8_5 	 => %vr8_1
+
+.L5:	nop
+	sub	%vr8_1, %vr19_0 => %vr28_0
+	i2i	%vr28_0  => %vr8_2
+	sub	%vr8_2, %vr13_0 => %vr29_0
+	mult	%vr29_0, %vr15_0 => %vr30_0
+	sub	%vr4_1, %vr30_0 => %vr31_0
+	load	%vr31_0  => %vr32_0
+	comp	%vr32_0, %vr9_0 => %vr33_0
+	testle	%vr33_0  => %vr34_0
+	cbr	%vr34_0  -> .L6
+
+	Phi Nodes for Block .L7
+		phi	%vr8_2, %vr8_4 	 => %vr8_3
+
+.L7:	nop
+	sub	%vr8_3, %vr19_0 => %vr28_1
+	i2i	%vr28_1  => %vr8_4
+	sub	%vr8_4, %vr13_0 => %vr29_1
+	mult	%vr29_1, %vr15_0 => %vr30_1
+	sub	%vr4_1, %vr30_1 => %vr31_1
+	load	%vr31_1  => %vr32_1
+	comp	%vr32_1, %vr9_0 => %vr33_1
+	testgt	%vr33_1  => %vr34_1
+	cbr	%vr34_1  -> .L7
+
+	Phi Nodes for Block .L6
+		phi	%vr8_2, %vr8_4 	 => %vr8_5
+
+.L6:	nop
+	add	%vr7_1, %vr19_0 => %vr35_0
+	i2i	%vr35_0  => %vr7_2
+	sub	%vr7_2, %vr13_0 => %vr36_0
+	mult	%vr36_0, %vr15_0 => %vr37_0
+	sub	%vr4_1, %vr37_0 => %vr38_0
+	load	%vr38_0  => %vr39_0
+	comp	%vr39_0, %vr9_0 => %vr40_0
+	testge	%vr40_0  => %vr41_0
+	cbr	%vr41_0  -> .L8
+
+	Phi Nodes for Block .L9
+		phi	%vr7_2, %vr7_4 	 => %vr7_3
+
+.L9:	nop
+	add	%vr7_3, %vr19_0 => %vr35_1
+	i2i	%vr35_1  => %vr7_4
+	sub	%vr7_4, %vr13_0 => %vr36_1
+	mult	%vr36_1, %vr15_0 => %vr37_1
+	sub	%vr4_1, %vr37_1 => %vr38_1
+	load	%vr38_1  => %vr39_1
+	comp	%vr39_1, %vr9_0 => %vr40_1
+	testlt	%vr40_1  => %vr41_1
+	cbr	%vr41_1  -> .L9
+
+	Phi Nodes for Block .L8
+		phi	%vr7_2, %vr7_4 	 => %vr7_5
+
+.L8:	nop
+	comp	%vr7_5, %vr8_5 => %vr42_0
+	testlt	%vr42_0  => %vr43_0
+	cbrne	%vr43_0  -> .L10
+	sub	%vr7_5, %vr13_0 => %vr36_2
+	mult	%vr36_2, %vr15_0 => %vr37_2
+	sub	%vr4_1, %vr37_2 => %vr38_2
+	load	%vr38_2  => %vr39_2
+	i2i	%vr39_2  => %vr10_0
+	sub	%vr8_5, %vr13_0 => %vr29_2
+	mult	%vr29_2, %vr15_0 => %vr30_2
+	sub	%vr4_1, %vr30_2 => %vr31_2
+	load	%vr31_2  => %vr32_2
+	store	%vr32_2  => %vr38_2
+	store	%vr10_0  => %vr31_2
+	jumpI	-> .L11
+.L10:	nop
+	iret	%vr8_5
+.L11:	nop
+	fload	%vr23_0  => %vr24_1
+	f2i	%vr24_1  => %vr25_1
+	cbr	%vr25_1  -> .L5
+.L4:	nop
+	ret
+.frame	quicksort, 8, %vr4_1, %vr5_1, %vr6_1
+	load	%vr5_1  => %vr7_0
+	load	%vr6_1  => %vr8_0
+	comp	%vr7_0, %vr8_0 => %vr9_0
+	testlt	%vr9_0  => %vr10_0
+	cbrne	%vr10_0  -> .L12
+	icall	partition, %vr4_1, %vr5_1, %vr6_1 	 => %vr11_0
+	loadI	-4  => %vr12_0
+	add	%vr0_1, %vr12_0 => %vr13_0
+	store	%vr11_0  => %vr13_0
+	call	quicksort, %vr4_1, %vr5_1, %vr13_0
+	load	%vr13_0  => %vr14_0
+	loadI	1  => %vr15_0
+	add	%vr14_0, %vr15_0 => %vr16_0
+	loadI	-8  => %vr17_0
+	add	%vr0_1, %vr17_0 => %vr18_0
+	store	%vr16_0  => %vr18_0
+	call	quicksort, %vr4_1, %vr18_0, %vr6_1
+.L12:	nop
+	ret

@@ -11,14 +11,14 @@ use std::{
 
 use crate::iloc::{make_basic_blocks, Block, Function, IlocProgram, Instruction, Operand};
 
+mod dbre;
 mod dce;
-mod dnre;
 mod fold;
 mod lcm;
 mod licm;
 
+pub use dbre::{dom_val_num, RenameMeta};
 use dce::dead_code;
-pub use dnre::{dom_val_num, RenameMeta};
 use fold::{const_fold, ConstMap, ValueKind, WorkStuff};
 #[allow(unused)]
 use licm::find_loops;
@@ -164,8 +164,8 @@ impl fmt::Display for OrdLabel {
 }
 impl fmt::Debug for OrdLabel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({} {})", self.0, self.1)
-        // self.as_str().fmt(f)
+        // write!(f, "({} {})", self.0, self.1)
+        self.as_str().fmt(f)
     }
 }
 impl PartialEq for OrdLabel {
@@ -309,7 +309,8 @@ pub struct DominatorTree {
     pub dom_frontier_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_dom_frontier: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_dom: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
-    dom_succs_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
+    dom_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
+    dom_tree: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     #[allow(unused)]
     dom_preds_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     cfg_succs_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
@@ -332,11 +333,11 @@ pub fn dominator_tree(
 
     for node in &blocks_label {
         let mut is_reachable = false;
-        let mut set = blocks_label.iter().collect::<HashSet<_>>();
+        let mut set = blocks_label.iter().collect::<BTreeSet<_>>();
         for path in paths.iter().filter(|p| p.contains(node)) {
             is_reachable = true;
 
-            let path_set = path.iter().take_while(|l| *l != node).collect::<HashSet<_>>();
+            let path_set = path.iter().take_while(|l| *l != node).collect::<BTreeSet<_>>();
             set = set.intersection(&path_set).copied().collect();
             if set.is_empty() {
                 break;
@@ -345,7 +346,7 @@ pub fn dominator_tree(
 
         if is_reachable {
             set.insert(node);
-            dom_map.insert(node.clone(), set);
+            dom_map.insert(node.clone(), set.into_iter().cloned().collect());
         }
     }
 
@@ -379,7 +380,7 @@ pub fn dominator_tree(
                         cfg_first = false;
                     }
                     if prev != node {
-                        if dom_map.get(node).map_or(false, |dom| dom.contains(prev)) {
+                        if dom_map.get(node).map_or(false, |dom: &BTreeSet<_>| dom.contains(prev)) {
                             pred.insert(prev.clone());
                             break;
                         } else {
@@ -399,10 +400,10 @@ pub fn dominator_tree(
             cfg_preds_map.insert(node.clone(), cfg_pred);
         }
     }
-    let mut dom_succs_map = HashMap::with_capacity(blocks_label.len());
+    let mut dom_tree = HashMap::with_capacity(blocks_label.len());
     for (to, set) in &dom_preds_map {
         for from in set {
-            dom_succs_map.entry(from.clone()).or_insert_with(BTreeSet::new).insert(to.clone());
+            dom_tree.entry(from.clone()).or_insert_with(BTreeSet::new).insert(to.clone());
         }
     }
     let mut cfg_succs_map = HashMap::with_capacity(blocks_label.len());
@@ -492,7 +493,7 @@ pub fn dominator_tree(
         let mut labels = VecDeque::from([node]);
         while let Some(pdfset) = labels.pop_front().and_then(|l| post_dom_tree_preds.get(l)) {
             if pdfset.len() == 1 {
-                post_idom_map.insert(node, (*pdfset.iter().next().unwrap()).clone());
+                post_idom_map.insert(node.clone(), (*pdfset.first().unwrap()).clone());
                 break;
             }
             labels.extend(pdfset);
@@ -504,7 +505,7 @@ pub fn dominator_tree(
     for node in postorder(&post_dom_tree, cfg.end.as_ref().unwrap()) {
         // This is post dominator frontier
         // This includes 1 -> 2 __and__ 1 -> 5 (the graph from his notes
-        // and similar to https://pages.cs.wisc.edu/~fischer/cs701.f08/lectures/Lecture19.4up.pdf slide 8)
+        // and similar to https://pages.cs.wisc.edu/~fischer/cs701.f08/lectures/Lecture19.4up.pdf slide 6)
         //
         // for p in cfg_succs_map.get(node).unwrap_or(&BTreeSet::new()) {
         //     let mut run = p;
@@ -533,13 +534,16 @@ pub fn dominator_tree(
         }
     }
 
-    // panic!("{:#?} {:#?}", post_dom_tree, post_dom_frontier);
+    if start == ".F_partition" {
+        println!("{:#?}", dom_tree);
+    }
 
     DominatorTree {
         dom_frontier_map,
         post_dom_frontier,
         post_dom,
-        dom_succs_map,
+        dom_map,
+        dom_tree,
         dom_preds_map,
         cfg_preds_map,
         cfg_succs_map,
@@ -591,6 +595,8 @@ pub fn insert_phi_functions(
             // The dominance frontier (join point) is the block that needs
             // the 𝛟 added to it
             for d in dom_front.get(blk).unwrap_or(&empty_set) {
+                // println!("{} -> {}", blk.as_str(), d.as_str());
+
                 // If we have done this before skip it
                 if !phis.get(d).map_or(false, |set| set.contains(global_reg)) {
                     // insert phi func
@@ -620,7 +626,7 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
 
         let dtree = dominator_tree(&cfg, &mut func.blocks, &OrdLabel::new_start(&func.label));
 
-        // println!("{:#?}", dtree);
+        // panic!("{:#?}", dtree);
 
         let phis = insert_phi_functions(&mut func.blocks, &dtree.dom_frontier_map);
 
