@@ -294,7 +294,7 @@ fn traverse(val: &OrdLabel, cfg: &ControlFlowGraph, paths: &mut Vec<Vec<OrdLabel
             paths.push(last.clone())
         };
 
-        if s == val || matches!(node.state.get(), TraversalState::Seen) {
+        if matches!(node.state.get(), TraversalState::Seen) {
             continue;
         }
 
@@ -326,6 +326,8 @@ pub fn dominator_tree(
     let mut paths = vec![];
     traverse(start, cfg, &mut paths);
 
+    println!("{:#?}", cfg.paths);
+
     // Build dominator tree
     let mut dom_map = HashMap::with_capacity(blocks.len());
     let blocks_label =
@@ -345,7 +347,7 @@ pub fn dominator_tree(
         }
 
         if is_reachable {
-            set.insert(node);
+            // set.insert(node);
             dom_map.insert(node.clone(), set.into_iter().cloned().collect());
         }
     }
@@ -534,9 +536,7 @@ pub fn dominator_tree(
         }
     }
 
-    if start == ".F_partition" {
-        println!("{:#?}", dom_tree);
-    }
+    // println!("{:#?}", cfg_succs_map);
 
     DominatorTree {
         dom_frontier_map,
@@ -626,7 +626,7 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
 
         let dtree = dominator_tree(&cfg, &mut func.blocks, &OrdLabel::new_start(&func.label));
 
-        // panic!("{:#?}", dtree);
+        println!("{:#?}", dtree);
 
         let phis = insert_phi_functions(&mut func.blocks, &dtree.dom_frontier_map);
 

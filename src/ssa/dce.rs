@@ -40,14 +40,14 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
     }
     for (b_label, blk) in &copied_blocks {
         for &inst in blk {
-            match inst {
-                Instruction::Phi(_, set, _) if set.len() > 1 => {
-                    if critical_map.insert(inst) {
-                        stack.push_back((inst, b_label));
-                    }
-                }
-                _ => (),
-            }
+            // match inst {
+            //     Instruction::Phi(_, set, _) if set.len() > 1 => {
+            //         if critical_map.insert(inst) {
+            //             stack.push_back((inst, b_label));
+            //         }
+            //     }
+            //     _ => (),
+            // }
             // If it's critical and we haven't seen it before
             if inst.is_critical() && critical_map.insert(inst) {
                 stack.push_back((inst, b_label));

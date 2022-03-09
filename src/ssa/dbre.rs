@@ -20,8 +20,8 @@ impl Default for RenameMeta {
 
 fn new_name(reg: &Reg, dst: &mut Option<usize>, meta: &mut HashMap<Operand, RenameMeta>) {
     let m = meta.get_mut(&Operand::Register(*reg)).unwrap();
-    let i = *m.stack.back().unwrap() + 1;
-    m.stack.push_back(i);
+    let i = *m.stack.back().unwrap();
+    m.stack.push_back(i + 1);
     *dst = Some(i);
 }
 fn rewrite_name(reg: &mut Reg, meta: &RenameMeta) {
@@ -48,6 +48,7 @@ pub fn dom_val_num(
     dtree: &DominatorTree,
     expr_tree: &mut ScopedExprTree,
 ) {
+    println!("{:?}", blks[blk_idx].label);
     let ssa = unsafe { crate::SSA };
     let rng = phi_range(&blks[blk_idx].instructions);
     // The phi instructions must be filled in before their expressions are saved
@@ -137,7 +138,7 @@ pub fn dom_val_num(
                 }
             } else if let Some(dst) = op.target_reg_mut() {
                 //
-                let m = meta.entry(Operand::Register(dst.as_register())).or_default();
+                let m = meta.entry(Operand::Register(*dst)).or_default();
                 if let Some(i) = m.stack.back() {
                     let new_val = *i + 1;
                     m.stack.push_back(new_val);
@@ -154,6 +155,7 @@ pub fn dom_val_num(
     let blk_label = blks[blk_idx].label.replace(':', "");
 
     for blk in dtree.cfg_succs_map.get(blk_label.as_str()).unwrap_or(&empty) {
+        println!("  {}", blk.as_str());
         // TODO: make block -> index map
         let idx = blks.iter().position(|b| b.label.replace(':', "") == blk.as_str()).unwrap();
         let rng = phi_range(&blks[idx].instructions);
@@ -161,8 +163,10 @@ pub fn dom_val_num(
 
         for phi in &mut blks[idx].instructions[rng] {
             if let Instruction::Phi(r, set, dst) = phi {
-                println!("{:?}", (blk, idx, &r, &dst));
-                let m = meta.get_mut(&Operand::Register(r.as_register())).unwrap();
+                let m = meta.get_mut(&Operand::Register(*r)).unwrap();
+                println!("child {:?}", (blk, idx, &r, &m));
+
+                // TODO: this is wrong for sets maybe not the subs
                 if let Some(&i) = m.stack.back() {
                     m.stack.push_back(i + 1);
                     set.insert(i);
@@ -177,15 +181,15 @@ pub fn dom_val_num(
 
     // This is what drives the rename algorithm
     for blk in dtree.dom_tree.get(blk_label.as_str()).unwrap_or(&empty) {
-        // println!("{} -> {}", blk_label, blk.as_str());
+        println!("domtree {} -> {}", blk_label, blk.as_str());
         // TODO: make block -> index map
         let idx = blks.iter().position(|b| b.label.starts_with(blk.as_str())).unwrap();
         dom_val_num(blks, idx, meta, dtree, expr_tree);
     }
 
     for op in &blks[blk_idx].instructions {
-        if let Some(dst) = op.target_reg().map(Reg::as_register) {
-            if let Some(meta) = meta.get_mut(&Operand::Register(dst)) {
+        if let Some(dst) = op.target_reg() {
+            if let Some(meta) = meta.get_mut(&Operand::Register(*dst)) {
                 meta.stack.pop_back();
             }
         }
