@@ -157,14 +157,19 @@ pub fn dom_val_num(
         // TODO: make block -> index map
         let idx = blks.iter().position(|b| b.label.replace(':', "") == blk.as_str()).unwrap();
         let rng = phi_range(&blks[idx].instructions);
+        let lab = blks[idx].label.clone();
 
         for phi in &mut blks[idx].instructions[rng] {
             if let Instruction::Phi(r, set, dst) = phi {
                 println!("{:?}", (blk, idx, &r, &dst));
                 let m = meta.get_mut(&Operand::Register(r.as_register())).unwrap();
-                let i = *m.stack.back().unwrap_or_else(|| panic!("{:?}", (blk, idx, r, dst)));
-                m.stack.push_back(i + 1);
-                set.insert(i);
+                if let Some(&i) = m.stack.back() {
+                    m.stack.push_back(i + 1);
+                    set.insert(i);
+                } else {
+                    m.stack.push_back(0);
+                    set.insert(0);
+                }
                 // `new_name` minus the overwriting of subscripts
             }
         }
