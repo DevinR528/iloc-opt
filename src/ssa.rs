@@ -326,8 +326,6 @@ pub fn dominator_tree(
     let mut paths = vec![];
     traverse(start, cfg, &mut paths);
 
-    println!("{:#?}", cfg.paths);
-
     // Build dominator tree
     let mut dom_map = HashMap::with_capacity(blocks.len());
     let blocks_label =
@@ -597,11 +595,14 @@ pub fn insert_phi_functions(
             for d in dom_front.get(blk).unwrap_or(&empty_set) {
                 // println!("{} -> {}", blk.as_str(), d.as_str());
 
-                // If we have done this before skip it
-                if !phis.get(d).map_or(false, |set| set.contains(global_reg)) {
+                // If we have seen this register or it isn't in the current block we are checking
+                // skip it
+                if !phis.get(d).map_or(false, |set| set.contains(global_reg))
+                    && blocks_map.get(global_reg).map_or(false, |blk_set| blk_set.contains(d))
+                {
                     // insert phi func
                     phis.entry(d.clone()).or_default().insert(global_reg.clone());
-                    // This needs to be propagated back up the graph
+                    // Add the dom frontier node to the `worklist`
                     worklist.push_back(d);
                 }
             }
@@ -609,14 +610,14 @@ pub fn insert_phi_functions(
     }
 
     for (label, set) in &phis {
-        let blk = blocks.iter_mut().find(|b| b.label.replace(':', "") == label.as_str()).unwrap();
+        let blk = blocks.iter_mut().find(|b| b.label.starts_with(label.as_str())).unwrap();
         // If the block starts with a frame and label skip it other wise just skip a label
         let index = if let Instruction::Frame { .. } = &blk.instructions[0] { 2 } else { 1 };
         for reg in set {
-            blk.instructions
-                .insert(index, Instruction::Phi(reg.copy_to_register(), BTreeSet::default(), None));
+            blk.instructions.insert(index, Instruction::new_phi(reg.copy_to_register()));
         }
     }
+
     phis
 }
 
@@ -631,9 +632,6 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         let phis = insert_phi_functions(&mut func.blocks, &dtree.dom_frontier_map);
 
         let mut meta = HashMap::new();
-        for (_blk_label, register_set) in phis {
-            meta.extend(register_set.iter().map(|op| (op.clone(), RenameMeta::default())));
-        }
         let mut stack = VecDeque::new();
         dom_val_num(&mut func.blocks, 0, &mut meta, &dtree, &mut stack);
 
