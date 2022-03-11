@@ -1001,6 +1001,9 @@ impl Operand {
 }
 
 impl Instruction {
+    pub fn new_phi(reg: Reg) -> Self {
+        Self::Phi(reg, BTreeSet::default(), None)
+    }
     pub fn remove_phis(&mut self) {
         match self {
             Instruction::FLoad { src, dst }
@@ -1207,8 +1210,7 @@ impl Instruction {
             | Instruction::FLoadAddImm { dst, .. }
             | Instruction::FLoadAdd { dst, .. } => Some(dst),
             // Call with return `call arg, arg => ret`
-            Instruction::ImmCall { ret, .. } => Some(ret),
-            Instruction::ImmRCall { ret, .. } => Some(ret),
+            Instruction::ImmCall { ret, .. } | Instruction::ImmRCall { ret, .. } => Some(ret),
             _ => None,
         }
     }
@@ -1266,8 +1268,7 @@ impl Instruction {
             | Instruction::FLoadAddImm { dst, .. }
             | Instruction::FLoadAdd { dst, .. } => Some(dst),
             // Call with return `call arg, arg => ret`
-            Instruction::ImmCall { ret, .. } => Some(ret),
-            Instruction::ImmRCall { ret, .. } => Some(ret),
+            Instruction::ImmCall { ret, .. } | Instruction::ImmRCall { ret, .. } => Some(ret),
             _ => None,
         }
     }

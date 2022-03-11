@@ -48,13 +48,23 @@ pub fn dom_val_num(
     dtree: &DominatorTree,
     expr_tree: &mut ScopedExprTree,
 ) {
-    println!("{:?}", blks[blk_idx].label);
     let ssa = unsafe { crate::SSA };
     let rng = phi_range(&blks[blk_idx].instructions);
     // The phi instructions must be filled in before their expressions are saved
     for phi in &mut blks[blk_idx].instructions[rng.clone()] {
-        if let Instruction::Phi(r, _, dst) = phi {
-            new_name(r, dst, meta);
+        // Only when we are actually in the block that contains the phi do we set the subscript for
+        // that phi
+        if let Instruction::Phi(r, set, dst) = phi {
+            let m = meta.entry(Operand::Register(*r)).or_default();
+            if let Some(i) = m.stack.back() {
+                let new_val = *i + 1;
+                dst.replace(new_val);
+                m.stack.push_back(new_val);
+                set.insert(new_val);
+            } else {
+                m.stack.push_back(0);
+                set.insert(0);
+            }
         }
     }
     expr_tree.push_back(HashMap::new());
@@ -98,7 +108,7 @@ pub fn dom_val_num(
             rewrite_name(b, meta);
         }
 
-        // Rename registers that don't fit neatly into th operands category
+        // Rename registers that don't fit neatly into the operands category
         match op {
             Instruction::Call { args, .. }
             | Instruction::Frame { params: args, .. }
@@ -130,11 +140,11 @@ pub fn dom_val_num(
                 }
 
                 if let Some(dst) = op.target_reg() {
-                    // if dst == prev_reg {
-                    *op = Instruction::Skip(format!("[ssadbre] {op}"));
-                    // } else {
-                    // op.as_new_move_instruction(*prev_reg, *dst);
-                    // }
+                    if dst == prev_reg {
+                        *op = Instruction::Skip(format!("[ssadbre] {op}"));
+                    } else {
+                        op.as_new_move_instruction(*prev_reg, *dst);
+                    }
                 }
             } else if let Some(dst) = op.target_reg_mut() {
                 //
@@ -155,33 +165,29 @@ pub fn dom_val_num(
     let blk_label = blks[blk_idx].label.replace(':', "");
 
     for blk in dtree.cfg_succs_map.get(blk_label.as_str()).unwrap_or(&empty) {
-        println!("  {}", blk.as_str());
         // TODO: make block -> index map
-        let idx = blks.iter().position(|b| b.label.replace(':', "") == blk.as_str()).unwrap();
+        let idx = blks.iter().position(|b| b.label.starts_with(blk.as_str())).unwrap();
         let rng = phi_range(&blks[idx].instructions);
         let lab = blks[idx].label.clone();
 
         for phi in &mut blks[idx].instructions[rng] {
             if let Instruction::Phi(r, set, dst) = phi {
                 let m = meta.get_mut(&Operand::Register(*r)).unwrap();
-                println!("child {:?}", (blk, idx, &r, &m));
+                // println!("child {:?}", (blk, &lab, &r, &m));
 
                 // TODO: this is wrong for sets maybe not the subs
                 if let Some(&i) = m.stack.back() {
-                    m.stack.push_back(i + 1);
                     set.insert(i);
                 } else {
                     m.stack.push_back(0);
                     set.insert(0);
                 }
-                // `new_name` minus the overwriting of subscripts
             }
         }
     }
 
     // This is what drives the rename algorithm
     for blk in dtree.dom_tree.get(blk_label.as_str()).unwrap_or(&empty) {
-        println!("domtree {} -> {}", blk_label, blk.as_str());
         // TODO: make block -> index map
         let idx = blks.iter().position(|b| b.label.starts_with(blk.as_str())).unwrap();
         dom_val_num(blks, idx, meta, dtree, expr_tree);
