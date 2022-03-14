@@ -70,6 +70,8 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
         }
     }
 
+    println!("{:?}", stack);
+
     let empty = BTreeSet::new();
     while let Some((inst, b_label)) = stack.pop_front() {
         let (a, b) = inst.operands();
