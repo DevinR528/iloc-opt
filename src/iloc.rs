@@ -240,6 +240,7 @@ impl fmt::Display for Reg {
         match self {
             Reg::Var(num) if unsafe { crate::SSA } => write!(f, "%vr{}", num),
             Reg::Phi(num, subs) if unsafe { crate::SSA } => write!(f, "%vr{}_{}", num, subs),
+            // Reg::Phi(num, subs) => write!(f, "%vr{}_{}", num, subs),
             Reg::Var(num) | Reg::Phi(num, ..) => write!(f, "%vr{}", num),
         }
     }
@@ -1519,6 +1520,7 @@ impl Instruction {
         }
     }
 
+    /// Any `jumpI` or conditional branch instructions.
     pub fn uses_label(&self) -> Option<&str> {
         match self {
             Instruction::ImmJump(loc)

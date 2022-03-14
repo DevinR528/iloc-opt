@@ -140,11 +140,11 @@ pub fn dom_val_num(
                 }
 
                 if let Some(dst) = op.target_reg() {
-                    if dst == prev_reg {
-                        *op = Instruction::Skip(format!("[ssadbre] {op}"));
-                    } else {
-                        op.as_new_move_instruction(*prev_reg, *dst);
-                    }
+                    // if dst == prev_reg {
+                    *op = Instruction::Skip(format!("[ssadbre] {op}"));
+                    // } else {
+                    //     op.as_new_move_instruction(*prev_reg, *dst);
+                    // }
                 }
             } else if let Some(dst) = op.target_reg_mut() {
                 //
@@ -171,11 +171,9 @@ pub fn dom_val_num(
         let lab = blks[idx].label.clone();
 
         for phi in &mut blks[idx].instructions[rng] {
+            let p2 = phi.clone();
             if let Instruction::Phi(r, set, dst) = phi {
-                let m = meta.get_mut(&Operand::Register(*r)).unwrap();
-                // println!("child {:?}", (blk, &lab, &r, &m));
-
-                // TODO: this is wrong for sets maybe not the subs
+                let m = meta.entry(Operand::Register(*r)).or_default();
                 if let Some(&i) = m.stack.back() {
                     set.insert(i);
                 } else {

@@ -38,16 +38,9 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
     for blk in &func.blocks {
         copied_blocks.push((OrdLabel::new(&blk.label), blk.instructions().collect::<Vec<_>>()));
     }
+    let start_block = true;
     for (b_label, blk) in &copied_blocks {
         for &inst in blk {
-            // match inst {
-            //     Instruction::Phi(_, set, _) if set.len() > 1 => {
-            //         if critical_map.insert(inst) {
-            //             stack.push_back((inst, b_label));
-            //         }
-            //     }
-            //     _ => (),
-            // }
             // If it's critical and we haven't seen it before
             if inst.is_critical() && critical_map.insert(inst) {
                 stack.push_back((inst, b_label));
@@ -55,13 +48,23 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
 
             if let Some(reg) = inst.target_reg() {
                 def_map.insert(*reg, (inst, b_label));
-            } else if let Instruction::ImmRCall { ret: reg, .. }
-            | Instruction::ImmCall { ret: reg, .. } = inst
-            {
-                def_map.insert(*reg, (inst, b_label));
-            } else if let Instruction::Frame { params: args, .. } = inst {
-                for reg in args {
-                    def_map.insert(*reg, (inst, b_label));
+            } else {
+                match inst {
+                    Instruction::ImmRCall { ret: reg, .. }
+                    | Instruction::ImmCall { ret: reg, .. } => {
+                        def_map.insert(*reg, (inst, b_label));
+                    }
+                    Instruction::Frame { params: args, .. } => {
+                        for reg in args {
+                            def_map.insert(*reg, (inst, b_label));
+                        }
+                    }
+                    Instruction::Phi(reg, set, Some(subs)) => {
+                        let mut reg = *reg;
+                        reg.as_phi(*subs);
+                        def_map.insert(reg, (inst, b_label));
+                    }
+                    _ => {}
                 }
             }
         }
@@ -118,17 +121,26 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
         // Which blocks does `b_label` control the execution of (where does this block
         // jump/branch/fall-through to)
         for blk in domtree.post_dom_frontier.get(b_label).unwrap_or(&empty) {
+            // println!("dtree: {} = {:?} from: {}", blk.as_str(), last_inst, b_label.as_str());
+
             let Some(block) = func.blocks.iter()
                 .find(|b| {
                     b.label.starts_with(blk.as_str())
-                }) else { continue; };
+                }) else {
+                    println!("oh shit {}", blk.as_str());
+                    continue;
+                };
 
             // TODO: A fall through would be important also...
             let Some(last_inst) = block.instructions.iter()
-                .find(|i| i.is_cnd_jump() || matches!(i, Instruction::ImmJump(..))) else { continue; };
+                .find(|i|
+                    i.is_cnd_jump() || matches!(i, Instruction::ImmJump(..))
+                ) else {
+                    println!("{} {:?}",blk.as_str(), block.instructions().last());
+                    continue;
+                };
 
             if critical_map.insert(last_inst) {
-                // println!("dtree: {} = {:?} from: {}", blk.as_str(), last_inst, b_label.as_str());
                 stack.push_back((last_inst, blk));
             }
         }
@@ -145,13 +157,13 @@ pub fn dead_code(func: &mut Function, cfg: &mut ControlFlowGraph, domtree: &Domi
                     // post dominance
                     // Which blocks will for sure run next (so we can jump to it)
                     if let Some(label) = domtree
-                        .post_dom
+                        .post_dom_tree
                         .get(blk.label.replace(':', "").as_str())
                         .and_then(|set| if set.len() == 1 { set.iter().next() } else { None })
                     {
                         println!(
                             "rewrite branch {} jumpI -> {:?} {:#?} {:#?}",
-                            inst, label, domtree.post_dom, domtree.post_dom_frontier
+                            inst, label, domtree.post_dom_tree, domtree.post_dom_frontier
                         );
 
                         jumps.push((b, i, Instruction::ImmJump(Loc(label.to_string()))));
