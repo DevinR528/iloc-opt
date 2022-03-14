@@ -495,45 +495,45 @@ pub fn dominator_tree(
         // This includes 1 -> 2 __and__ 1 -> 5 (the graph from his notes
         // and similar to https://pages.cs.wisc.edu/~fischer/cs701.f08/lectures/Lecture19.4up.pdf slide 6)
         //
-        // for p in succs.get(node).unwrap_or(&BTreeSet::new()) {
-        //     // We have to use the updated label orderings or we get duplicates
-        //     let mut run = &OrdLabel::from_known(p.as_str());
-        //     while Some(run) != post_idom_map.get(node) {
-        //         // post_dom_frontier.entry(node.clone()).or_default().insert(run.clone());
-        //         // TODO: confirm: This is node -> nodes it controls ??
-        //         post_dom_frontier.entry(run.clone()).or_default().insert(node.clone());
-        //         if let Some(idom) = post_idom_map.get(run) {
-        //             run = idom;
-        //         }
-        //     }
-        // }
+        for p in succs.get(node).unwrap_or(&BTreeSet::new()) {
+            // We have to use the updated label orderings or we get duplicates
+            let mut run = &OrdLabel::from_known(p.as_str());
+            while Some(run) != post_idom_map.get(node) {
+                // post_dom_frontier.entry(node.clone()).or_default().insert(run.clone());
+                // TODO: confirm: This is node -> nodes it controls ??
+                post_dom_frontier.entry(run.clone()).or_default().insert(node.clone());
+                if let Some(idom) = post_idom_map.get(run) {
+                    run = idom;
+                }
+            }
+        }
 
         // Carr's isn't the same as post dominator frontier...
         // It misses 1 -> 5 (see above)
         //
-        let empty = BTreeSet::new();
-        for c in succs.get(node).unwrap_or(&empty) {
-            for m in post_dom_frontier.get(c).cloned().unwrap_or_default() {
-                if !post_dom_tree.get(node).map_or(false, |set| set.contains(&m)) {
-                    // This is node -> nodes it controls
-                    // post_dom_frontier.entry(m.clone()).or_default().insert(node.clone());
+        // let empty = BTreeSet::new();
+        // for c in succs.get(node).unwrap_or(&empty) {
+        //     for m in post_dom_frontier.get(c).cloned().unwrap_or_default() {
+        //         if !post_dom_tree.get(node).map_or(false, |set| set.contains(&m)) {
+        //             // This is node -> nodes it controls
+        //             // post_dom_frontier.entry(m.clone()).or_default().insert(node.clone());
 
-                    // This is node -> nodes that control it (generally nodes above it)
-                    post_dom_frontier.entry(node.clone()).or_default().insert(m.clone());
-                }
-            }
-        }
-        for m in preds.get(node).unwrap_or(&empty) {
-            // We have to use the updated label orderings or we get duplicates
-            let m = OrdLabel::from_known(m.as_str());
-            if !post_dom_tree.get(node).map_or(false, |set| set.contains(&m)) {
-                // This is node -> nodes it controls
-                // post_dom_frontier.entry(m).or_default().insert(node.clone());
+        //             // This is node -> nodes that control it (generally nodes above it)
+        //             post_dom_frontier.entry(node.clone()).or_default().insert(m.clone());
+        //         }
+        //     }
+        // }
+        // for m in preds.get(node).unwrap_or(&empty) {
+        //     // We have to use the updated label orderings or we get duplicates
+        //     let m = OrdLabel::from_known(m.as_str());
+        //     if !post_dom_tree.get(node).map_or(false, |set| set.contains(&m)) {
+        //         // This is node -> nodes it controls
+        //         // post_dom_frontier.entry(m).or_default().insert(node.clone());
 
-                // This is node -> nodes that control it (generally nodes above it)
-                post_dom_frontier.entry(node.clone()).or_default().insert(m);
-            }
-        }
+        //         // This is node -> nodes that control it (generally nodes above it)
+        //         post_dom_frontier.entry(node.clone()).or_default().insert(m);
+        //     }
+        // }
     }
 
     // println!("{:#?}", succs);
