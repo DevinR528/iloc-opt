@@ -9,5 +9,7 @@ use crate::{
 };
 
 pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
-    for blk in preorder(&domtree.cfg_succs_map, &OrdLabel::new_start(&func.label)) {}
+    let start = OrdLabel::new_start(&func.label);
+    println!("{:?}", preorder(&domtree.cfg_succs_map, &start).collect::<Vec<_>>());
+    for blk in preorder(&domtree.cfg_succs_map, &start) {}
 }

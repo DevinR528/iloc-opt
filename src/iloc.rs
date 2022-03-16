@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    collections::{BTreeSet, HashSet},
+    collections::BTreeSet,
     fmt,
     hash::{self, Hash},
     mem::discriminant,
@@ -2260,6 +2260,9 @@ pub struct Block {
 }
 
 impl Block {
+    pub fn exit() -> Self {
+        Self { label: ".E_exit:".to_string(), instructions: vec![] }
+    }
     /// All `Instruction`s with `Instruction::Skip` filtered out.
     pub fn instructions(&self) -> impl Iterator<Item = &Instruction> + '_ {
         self.instructions.iter().filter(|i| !matches!(i, Instruction::Skip(..)))
@@ -2270,7 +2273,7 @@ impl Block {
     pub fn ends_with_cond_branch(&self) -> Option<&str> {
         self.instructions.last().and_then(|i| i.is_cnd_jump().then(|| i.uses_label()).flatten())
     }
-    /// Returns name a block a `jumpI` instruction goes to if block ends with jump immediate.
+    /// Returns the name of the block if `Instruction` is jump immediate.
     pub fn ends_with_jump(&self) -> Option<&str> {
         match self.instructions.last() {
             Some(Instruction::ImmJump(l)) => Some(l.as_str()),
