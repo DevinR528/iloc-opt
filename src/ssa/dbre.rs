@@ -49,6 +49,7 @@ pub fn dom_val_num(
     expr_tree: &mut ScopedExprTree,
 ) {
     let ssa = unsafe { crate::SSA };
+
     let rng = phi_range(&blks[blk_idx].instructions);
     // The phi instructions must be filled in before their expressions are saved
     for phi in &mut blks[blk_idx].instructions[rng.clone()] {
@@ -171,7 +172,6 @@ pub fn dom_val_num(
         let lab = blks[idx].label.clone();
 
         for phi in &mut blks[idx].instructions[rng] {
-            let p2 = phi.clone();
             if let Instruction::Phi(r, set, dst) = phi {
                 let m = meta.entry(Operand::Register(*r)).or_default();
                 if let Some(&i) = m.stack.back() {
