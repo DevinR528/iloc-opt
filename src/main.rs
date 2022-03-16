@@ -6,6 +6,7 @@ use std::{
     env, fs,
     io::Write,
     path::{Path, PathBuf},
+    time::Instant,
 };
 
 // Our Instruction definition
@@ -25,7 +26,7 @@ use ssa::{build_cfg, dominator_tree, ssa_optimization};
 
 use crate::{
     iloc::{make_basic_blocks, Instruction},
-    ssa::{OrdLabel, RenameMeta},
+    ssa::{reverse_postorder, OrdLabel, RenameMeta},
 };
 
 const JAVA_ILOC_BENCH: &[&str] =
@@ -60,6 +61,8 @@ fn main() {
         let buf = if optimize && !ssa {
             println!("performing optimization on: {}", file);
             let input = fs::read_to_string(&file).unwrap();
+
+            let now = Instant::now();
             let iloc = parse_text(&input).unwrap();
 
             let mut blocks = make_blks(iloc);
@@ -90,6 +93,8 @@ fn main() {
                 fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
             fd.write_all(buf.as_bytes()).unwrap();
 
+            println!("optimization done {}ms", now.elapsed().as_millis());
+
             fs::read_to_string(&path).unwrap()
         } else if ssa {
             println!("performing ssa numbering on: {}", file);
@@ -99,9 +104,11 @@ fn main() {
             let mut blocks = make_basic_blocks(&make_blks(iloc));
             for func in &mut blocks.functions {
                 let cfg = build_cfg(func);
-                let dtree =
-                    dominator_tree(&cfg, &mut func.blocks, &OrdLabel::new_start(&func.label));
+                let start = OrdLabel::new_start(&func.label);
+
+                let dtree = dominator_tree(&cfg, &mut func.blocks, &start);
                 let phis = ssa::insert_phi_functions(&mut func.blocks, &dtree.dom_frontier_map);
+
                 let mut meta = HashMap::new();
                 for (_blk_label, register_set) in phis {
                     meta.extend(register_set.iter().map(|op| (op.clone(), RenameMeta::default())));
