@@ -107,7 +107,12 @@ fn main() {
                 let start = OrdLabel::new_start(&func.label);
 
                 let dtree = dominator_tree(&cfg, &mut func.blocks, &start);
-                let phis = ssa::insert_phi_functions(&mut func.blocks, &dtree.dom_frontier_map);
+                let phis = ssa::insert_phi_functions(
+                    func,
+                    &dtree.cfg_succs_map,
+                    &start,
+                    &dtree.dom_frontier_map,
+                );
 
                 let mut meta = HashMap::new();
                 for (_blk_label, register_set) in phis {
