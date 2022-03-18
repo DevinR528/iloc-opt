@@ -191,7 +191,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
 }
 
 pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
-    let mut used_reg: HashMap<_, usize> = HashMap::new();
+    let mut used_reg = HashSet::new();
     let mut live_vars = HashSet::new();
     let mut indexes = vec![];
     for (idx, expr) in instructions.iter().enumerate().rev() {
@@ -201,7 +201,7 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
         // Don't modify any memory operations
         if expr.is_store() {
             for op in l.iter().chain(r.iter()) {
-                used_reg.insert(op.clone(), 1);
+                used_reg.insert(op.clone());
             }
             continue;
         }
@@ -211,37 +211,41 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
                 continue;
             }
         }
-        if let Instruction::I2I { src, .. } | Instruction::I2F { src, .. } = expr {
-            if let Some(dst) = dst {
-                live_vars.insert(dst);
+        match expr {
+            Instruction::I2I { src, .. } | Instruction::I2F { src, .. } => {
+                if let Some(dst) = dst {
+                    live_vars.insert(dst);
+                }
+                used_reg.insert(Operand::Register(*src));
+                continue;
             }
-            used_reg.insert(Operand::Register(*src), 1);
-
-            continue;
-        }
-
-        if matches!(expr, Instruction::ImmLoad { src: Val::Location(_), .. }) {
-            continue;
+            Instruction::ImmLoad { src: Val::Location(_), .. } => continue,
+            Instruction::Call { args, .. } | Instruction::ImmCall { args, .. } => {
+                for arg in args {
+                    used_reg.insert(Operand::Register(*arg));
+                }
+            }
+            _ => (),
         }
 
         match (l, r, dst) {
             (Some(left), Some(right), Some(_dst)) => {
                 if matches!(left, Operand::Register(..)) {
-                    used_reg.insert(left, 1);
+                    used_reg.insert(left);
                 }
                 if matches!(right, Operand::Register(..)) {
-                    used_reg.insert(right, 1);
+                    used_reg.insert(right);
                 }
             }
             (Some(src), None, Some(_dst)) => {
                 if matches!(src, Operand::Register(..)) {
-                    used_reg.insert(src, 1);
+                    used_reg.insert(src);
                 }
             }
             // Jumps, rets, push, and I/O instructions
             (Some(src), None, None) => {
                 if matches!(src, Operand::Register(..)) {
-                    used_reg.insert(src, 1);
+                    used_reg.insert(src);
                 }
                 // There is no register to remove so continue
                 continue;
@@ -249,10 +253,10 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
             // Conditional branch with (cbr_GT, etc)
             (Some(right), Some(left), None) => {
                 if matches!(left, Operand::Register(..)) {
-                    used_reg.insert(left, 1);
+                    used_reg.insert(left);
                 }
                 if matches!(right, Operand::Register(..)) {
-                    used_reg.insert(right, 1);
+                    used_reg.insert(right);
                 }
                 continue;
             }
@@ -269,7 +273,7 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
         }
 
         let dst = dst.unwrap();
-        if used_reg.remove(&Operand::Register(*dst)).is_none() {
+        if !used_reg.remove(&Operand::Register(*dst)) {
             indexes.push(idx);
         }
     }
