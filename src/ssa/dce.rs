@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::{
     iloc::{Function, Instruction, Loc, Val},
-    ssa::{postorder, reverse_postorder_exits, ControlFlowGraph, DominatorTree, OrdLabel},
+    ssa::{postorder, ControlFlowGraph, DominatorTree, OrdLabel},
 };
 
 impl Instruction {
@@ -265,6 +265,9 @@ fn cleanup(
 
         if changed {
             cfg_map = build_cfg(func);
+            // for (i, l) in func.blocks.iter().map(|b| b.label.replace(':', "")).enumerate() {
+            //     *func.block_map.get_mut(&l).unwrap() = i;
+            // }
         }
     }
 }
