@@ -12,7 +12,7 @@ mod utils;
 
 pub use dbre::{dom_val_num, RenameMeta};
 pub use label::OrdLabel;
-pub use utils::{postorder, preorder, reverse_postorder, reverse_postorder_exits};
+pub use utils::{dfs_order, postorder, preorder, reverse_postorder};
 
 use dce::dead_code;
 use fold::{const_fold, ConstMap, ValueKind, WorkStuff};
@@ -22,7 +22,7 @@ use licm::find_loops;
 #[derive(Clone, Debug, Default)]
 pub struct ControlFlowGraph {
     paths: HashMap<String, BTreeSet<OrdLabel>>,
-    exits: Vec<OrdLabel>,
+    pub exits: Vec<OrdLabel>,
 }
 
 impl ControlFlowGraph {
@@ -107,8 +107,8 @@ pub struct DominatorTree {
     dom_tree: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     #[allow(unused)]
     dom_tree_pred: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
-    cfg_succs_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
-    cfg_preds_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
+    pub cfg_succs_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
+    pub cfg_preds_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
 }
 
 // TODO: Cleanup (see todo's above loops and such)
@@ -246,7 +246,7 @@ pub fn dominator_tree(
     }
 
     // Reorder the numbering on each block so they are reversed
-    let all_nodes: Vec<_> = reverse_postorder_exits(&preds, &cfg.exits)
+    let all_nodes: Vec<_> = reverse_postorder(&preds, cfg.exits.first().unwrap())
         .enumerate()
         .map(|(i, l)| {
             OrdLabel::update(i as isize, l.as_str());
@@ -388,35 +388,47 @@ pub fn dominator_tree(
 }
 
 pub fn insert_phi_functions(
-    blocks: &mut Vec<Block>,
+    func: &mut Function,
+    cfg_succs: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
+    start: &OrdLabel,
     dom_front: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
 ) -> HashMap<OrdLabel, HashSet<Operand>> {
     // All the registers that are used across blocks
     let mut globals = vec![];
     let mut blocks_map = HashMap::new();
 
-    for blk in &*blocks {
+    // TODO: now that I do this bottom-up phis could be inserted as each block is encountered since
+    // we now dom frontier
+    for blk in postorder(cfg_succs, start) {
         // This represents any redefinitions that are local to the current block
         let mut varkil = HashSet::new();
-        for op in &blk.instructions {
-            let (a, b) = op.operands();
-            let dst = op.target_reg();
+        for inst in func
+            .blocks
+            .iter()
+            .find(|b| b.label.starts_with(blk.as_str()))
+            .map_or(&[] as &[_], |b| &b.instructions)
+        {
+            let (a, b) = inst.operands();
+            let dst = inst.target_reg();
             if let Some(a @ Operand::Register(..)) = a {
                 if !varkil.contains(&a) {
+                    blocks_map.entry(a.clone()).or_insert_with(HashSet::new).insert(blk);
                     globals.push(a);
                 }
             }
             if let Some(b @ Operand::Register(..)) = b {
                 if !varkil.contains(&b) {
+                    blocks_map.entry(b.clone()).or_insert_with(HashSet::new).insert(blk);
                     globals.push(b);
                 }
             }
             if let Some(dst) = dst {
                 varkil.insert(Operand::Register(*dst));
+                #[rustfmt::skip]
                 blocks_map
                     .entry(Operand::Register(*dst))
                     .or_insert_with(HashSet::new)
-                    .insert(OrdLabel::new(&blk.label));
+                    .insert(blk);
             }
         }
     }
@@ -426,7 +438,7 @@ pub fn insert_phi_functions(
     let mut phis: HashMap<_, HashSet<_>> = HashMap::new();
     for global_reg in &globals {
         let mut worklist =
-            blocks_map.get(global_reg).unwrap_or(&empty).iter().collect::<VecDeque<_>>();
+            blocks_map.get(global_reg).unwrap_or(&empty).iter().copied().collect::<VecDeque<_>>();
         // For every block that this variable is live in
         while let Some(blk) = worklist.pop_front() {
             // The dominance frontier (join point) is the block that needs
@@ -447,7 +459,7 @@ pub fn insert_phi_functions(
     }
 
     for (label, set) in &phis {
-        let blk = blocks.iter_mut().find(|b| b.label.starts_with(label.as_str())).unwrap();
+        let blk = func.blocks.iter_mut().find(|b| b.label.starts_with(label.as_str())).unwrap();
         // If the block starts with a frame and label skip it other wise just skip a label
         let index = if let Instruction::Frame { .. } = &blk.instructions[0] { 2 } else { 1 };
         for reg in set {
@@ -468,7 +480,8 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         // println!("pdtree: {:#?}\npdftree: {:#?}", dtree.post_dom_tree, dtree.post_dom_frontier);
 
         // The `phis` used to fill the `meta` map
-        let _phis = insert_phi_functions(&mut func.blocks, &dtree.dom_frontier_map);
+        let _phis =
+            insert_phi_functions(func, &dtree.cfg_succs_map, &start, &dtree.dom_frontier_map);
 
         let mut meta = HashMap::new();
         let mut stack = VecDeque::new();
@@ -511,6 +524,11 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
 
         dead_code(func, &mut cfg, &dtree, &start);
 
+        for blk in &mut func.blocks {
+            for inst in &mut blk.instructions {
+                inst.remove_phis();
+            }
+        }
         lcm::lazy_code_motion(func, &dtree);
 
         // find_loops(func, &dtree);
