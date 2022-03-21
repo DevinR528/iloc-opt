@@ -81,6 +81,10 @@ impl Val {
         Some(Self::Float(self.to_float()? / other.to_float()?))
     }
 
+    pub fn negate(&self) -> Option<Self> {
+        Some(Self::Integer(-self.to_int()?))
+    }
+
     pub fn is_zero(&self) -> bool {
         match self {
             Self::Integer(0) => true,
@@ -848,12 +852,17 @@ impl fmt::Display for Instruction {
             Instruction::ImmLoad { src, dst } => {
                 writeln!(f, "    {} {} => {}", self.inst_name(), src, dst)
             }
-            Instruction::LoadAddImm { src, add, dst }
-            | Instruction::StoreAddImm { src, add, dst } => {
+            Instruction::LoadAddImm { src, add, dst } => {
                 writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
             }
-            Instruction::LoadAdd { src, add, dst } | Instruction::StoreAdd { src, add, dst } => {
+            Instruction::LoadAdd { src, add, dst } => {
                 writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, add, dst)
+            }
+            Instruction::StoreAddImm { src, add, dst } => {
+                writeln!(f, "    {} {} => {}, {}", self.inst_name(), src, dst, add)
+            }
+            Instruction::StoreAdd { src, add, dst } => {
+                writeln!(f, "    {} {} => {}, {}", self.inst_name(), src, dst, add)
             }
 
             Instruction::CmpLT { a, b, dst }
@@ -2150,15 +2159,15 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             }),
             ["store", src, "=>", dst] => instructions
                 .push(Instruction::Store { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
-            ["storeAI", a, "=>", b, dst] => instructions.push(Instruction::StoreAddImm {
+            ["storeAI", a, "=>", b, konst] => instructions.push(Instruction::StoreAddImm {
                 src: Reg::from_str(a)?,
-                add: Val::from_str(b)?,
-                dst: Reg::from_str(dst)?,
+                add: Val::from_str(konst)?,
+                dst: Reg::from_str(b)?,
             }),
-            ["storeAO", a, "=>", b, dst] => instructions.push(Instruction::StoreAdd {
+            ["storeAO", a, "=>", b, add] => instructions.push(Instruction::StoreAdd {
                 src: Reg::from_str(a)?,
-                add: Reg::from_str(b)?,
-                dst: Reg::from_str(dst)?,
+                add: Reg::from_str(add)?,
+                dst: Reg::from_str(b)?,
             }),
             // Compare operations
             ["cmp_LT", a, b, "=>", dst] => instructions.push(Instruction::CmpLT {

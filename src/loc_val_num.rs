@@ -185,6 +185,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
     }
 
     transformed_block |= compress_conditional_branches(&mut new_instr);
+    transformed_block |= compress_load_stores(&mut new_instr);
 
     // if then -> Some(instructions)
     transformed_block.then(|| new_instr)
@@ -364,8 +365,9 @@ pub fn compress_conditional_branches(instructions: &mut [Instruction]) -> bool {
                 }
             };
 
-            instructions[idx] = Instruction::Skip(format!("[lvn] {}", instructions[idx]));
-            instructions[idx + 1] = Instruction::Skip(format!("[lvn] {}", instructions[idx + 1]));
+            instructions[idx] = Instruction::Skip(format!("[lvn cbc] {}", instructions[idx]));
+            instructions[idx + 1] =
+                Instruction::Skip(format!("[lvn cbc] {}", instructions[idx + 1]));
             instructions[idx + 2] = new_instruction;
             modified = true;
         }
@@ -387,4 +389,48 @@ fn is_cond_branch(idx: usize, insts: &[Instruction]) -> bool {
             Instruction::CbrT { .. } | Instruction::CbrF { .. }
         )
     )
+}
+
+pub fn compress_load_stores(instructions: &mut [Instruction]) -> bool {
+    let mut modified = false;
+    // We subtract 2 since we are using windows of 3 instructions to test for comparisons
+    let len = instructions.len().saturating_sub(2);
+    for idx in 0..len {
+        let new_instruction = match (&instructions[idx], &instructions[idx + 1]) {
+            (
+                Instruction::Add { src_a: sub_src_a, src_b: sub_src_b, dst: add_dst },
+                Instruction::Load { src: load_src, dst: load_dst },
+            ) if add_dst == load_src => {
+                Instruction::LoadAdd { src: *sub_src_a, add: *sub_src_b, dst: *load_dst }
+            }
+            (
+                Instruction::ImmSub { src: sub_src, konst, dst: sub_dst },
+                Instruction::Load { src: load_src, dst: load_dst },
+            ) if sub_dst == load_src => Instruction::LoadAddImm {
+                src: *sub_src,
+                add: konst.negate().unwrap(),
+                dst: *load_dst,
+            },
+            (
+                Instruction::Add { src_a: add_src_a, src_b: add_src_b, dst: add_dst },
+                Instruction::Store { src: store_src, dst: store_dst },
+            ) if add_dst == store_dst => {
+                Instruction::StoreAdd { src: *store_src, add: *add_src_b, dst: *add_src_a }
+            }
+            (
+                Instruction::ImmSub { src: sub_src, konst, dst: sub_dst },
+                Instruction::Store { src: store_src, dst: store_dst },
+            ) if sub_dst == store_dst => Instruction::StoreAddImm {
+                src: *store_src,
+                add: konst.negate().unwrap(),
+                dst: *sub_src,
+            },
+            _ => continue,
+        };
+
+        instructions[idx] = Instruction::Skip(format!("[lvn l/s] {}", instructions[idx]));
+        instructions[idx + 1] = new_instruction;
+        modified = true;
+    }
+    modified
 }

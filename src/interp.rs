@@ -245,39 +245,42 @@ impl Interpreter {
                 self.call_stack.last_mut()?.registers.insert(*dst, src);
             }
             Instruction::Load { src, dst } => {
-                let stack_idx = self.call_stack.last()?.registers.get(src)?;
-                let val = stack[stack_idx.to_int()? as usize].clone();
+                let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int()?;
+                let val = stack[stack_idx as usize].clone();
+
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::LoadAddImm { src, add, dst } => {
-                let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int()? as usize;
-                let val = stack[stack_idx + (add.to_int()? as usize)].clone();
+                let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int()?;
+                let val = stack[(stack_idx + add.to_int()?) as usize].clone();
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::LoadAdd { src, add, dst } => {
-                let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int()? as usize;
-                let add = self.call_stack.last()?.registers.get(add)?.to_int()? as usize;
+                let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int()?;
+                let add_amt = self.call_stack.last()?.registers.get(add)?.to_int()?;
 
-                let val = stack[stack_idx + add].clone();
+                let val = stack[(stack_idx + add_amt) as usize].clone();
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::Store { src, dst } => {
                 let val = self.call_stack.last()?.registers.get(src)?.clone();
-                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()? as usize;
-                stack[stack_idx] = val;
+                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()?;
+
+                stack[stack_idx as usize] = val;
             }
             Instruction::StoreAddImm { src, add, dst } => {
                 let val = self.call_stack.last()?.registers.get(src)?.clone();
-                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()? as usize;
-                stack[stack_idx + (add.to_int()? as usize)] = val;
+                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()?;
+
+                stack[(stack_idx + add.to_int()?) as usize] = val;
             }
             Instruction::StoreAdd { src, add, dst } => {
                 let val = self.call_stack.last()?.registers.get(src)?.clone();
 
-                let add = self.call_stack.last()?.registers.get(add)?.to_int()? as usize;
-                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()? as usize;
+                let add = self.call_stack.last()?.registers.get(add)?.to_int()?;
+                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()?;
 
-                stack[stack_idx + add] = val;
+                stack[(stack_idx + add) as usize] = val;
             }
             Instruction::CmpLT { a, b, dst } => {
                 let a = self.registers().get(a)?;
