@@ -529,12 +529,49 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
                 inst.remove_phis();
             }
         }
-        lcm::lazy_code_motion(func, &dtree);
+
+        lcm::lazy_code_motion(func, &dtree, cfg.exits.last().unwrap());
 
         // find_loops(func, &dtree);
 
         func.blocks.retain(|b| !b.label.starts_with(".E_exit"));
     }
+}
+
+#[test]
+fn lcm_pre() {
+    use std::{fs, io::Write, path::PathBuf};
+
+    use crate::iloc::{make_basic_blocks, make_blks, parse_text};
+
+    let input_file = "input/sloop.il";
+
+    let input = fs::read_to_string(input_file).unwrap();
+    let iloc = parse_text(&input).unwrap();
+    let mut blocks = make_basic_blocks(&make_blks(iloc));
+
+    let start = OrdLabel::new_start(&blocks.functions[0].label);
+
+    let cfg = build_cfg(&mut blocks.functions[0]);
+    let dtree = dominator_tree(&cfg, &mut blocks.functions[0].blocks, &start);
+
+    lcm::lazy_code_motion(&mut blocks.functions[0], &dtree, cfg.exits.last().unwrap());
+
+    let mut buf = String::new();
+    for inst in blocks.instruction_iter() {
+        if matches!(inst, Instruction::Skip(..)) {
+            continue;
+        }
+
+        buf.push_str(&inst.to_string())
+    }
+
+    let mut path = PathBuf::from(input_file);
+    let file = path.file_stem().unwrap().to_string_lossy().to_string();
+    path.set_file_name(&format!("{}.pre.il", file));
+    let mut fd =
+        fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
+    fd.write_all(buf.as_bytes()).unwrap();
 }
 
 #[test]

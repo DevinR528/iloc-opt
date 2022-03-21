@@ -1,4 +1,4 @@
-#![feature(let_else, map_first_last, once_cell)]
+#![feature(let_else, map_first_last, once_cell, stmt_expr_attributes, let_chains)]
 #![allow(unused)]
 
 use std::{

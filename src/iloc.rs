@@ -1276,6 +1276,83 @@ impl Instruction {
         }
     }
 
+    pub fn operand_iter(&self) -> Vec<Reg> {
+        match self {
+            Instruction::I2I { src, .. }
+            | Instruction::F2I { src, .. }
+            | Instruction::I2F { src, .. }
+            | Instruction::F2F { src, .. }
+            | Instruction::Not { src, .. }
+            | Instruction::FLoad { src, .. }
+            | Instruction::Load { src, .. } => vec![*src],
+
+            Instruction::Add { src_a, src_b, .. }
+            | Instruction::Sub { src_a, src_b, .. }
+            | Instruction::Mult { src_a, src_b, .. }
+            | Instruction::LShift { src_a, src_b, .. }
+            | Instruction::RShift { src_a, src_b, .. }
+            | Instruction::Mod { src_a, src_b, .. }
+            | Instruction::And { src_a, src_b, .. }
+            | Instruction::Or { src_a, src_b, .. }
+            | Instruction::FAdd { src_a, src_b, .. }
+            | Instruction::FSub { src_a, src_b, .. }
+            | Instruction::FMult { src_a, src_b, .. }
+            | Instruction::FDiv { src_a, src_b, .. }
+            | Instruction::FComp { src_a, src_b, .. } => vec![*src_a, *src_b],
+
+            Instruction::ImmAdd { src, .. }
+            | Instruction::ImmSub { src, .. }
+            | Instruction::ImmMult { src, .. }
+            | Instruction::ImmLShift { src, .. }
+            | Instruction::ImmRShift { src, .. }
+            | Instruction::LoadAddImm { src, .. }
+            | Instruction::FLoadAddImm { src, .. }
+            | Instruction::StoreAddImm { src, .. } => vec![*src],
+
+            // TODO: I think this is correct
+            // Instruction::ImmLoad { src, .. } => vec![],
+            Instruction::LoadAdd { src, add, .. }
+            | Instruction::StoreAdd { src, add, .. }
+            | Instruction::FLoadAdd { src, add, .. } => vec![*src, *add],
+
+            Instruction::Store { src, dst } => vec![*src, *dst],
+
+            Instruction::IWrite(r)
+            | Instruction::FWrite(r)
+            | Instruction::SWrite(r)
+            | Instruction::IRead(r)
+            | Instruction::FRead(r) => vec![*r],
+
+            Instruction::CmpLT { a, b, .. }
+            | Instruction::CmpLE { a, b, .. }
+            | Instruction::CmpGT { a, b, .. }
+            | Instruction::CmpGE { a, b, .. }
+            | Instruction::CmpEQ { a, b, .. }
+            | Instruction::CmpNE { a, b, .. }
+            | Instruction::Comp { a, b, .. }
+            | Instruction::CbrEQ { a, b, .. }
+            | Instruction::CbrNE { a, b, .. }
+            | Instruction::CbrGT { a, b, .. }
+            | Instruction::CbrGE { a, b, .. }
+            | Instruction::CbrLT { a, b, .. }
+            | Instruction::CbrLE { a, b, .. } => vec![*a, *b],
+
+            Instruction::CbrT { cond, .. } | Instruction::CbrF { cond, .. } => vec![*cond],
+
+            Instruction::TestEQ { test, .. }
+            | Instruction::TestNE { test, .. }
+            | Instruction::TestGT { test, .. }
+            | Instruction::TestGE { test, .. }
+            | Instruction::TestLT { test, .. }
+            | Instruction::TestLE { test, .. } => vec![*test],
+
+            Instruction::Call { args, .. } | Instruction::ImmCall { args, .. } => args.clone(),
+            Instruction::ImmRet(ret) => vec![*ret],
+
+            _ => vec![],
+        }
+    }
+
     /// The return value is (left, right) `Option<Operand>`.
     pub fn operands(&self) -> (Option<Operand>, Option<Operand>) {
         match self {
@@ -1920,6 +1997,57 @@ impl Instruction {
                 | Self::FSub { .. }
                 | Self::FMult { .. }
                 | Self::ImmLoad { src: Val::Integer(..) | Val::Float(..), .. }
+        )
+    }
+
+    pub fn is_pre_expr(&self) -> bool {
+        #[rustfmt::skip]
+        matches!(
+            self,
+            Self::Add { .. }
+                | Self::Sub { .. }
+                | Self::Mult { .. }
+                | Self::LShift { .. }
+                | Self::RShift { .. }
+                | Self::Mod { .. }
+                | Self::And { .. }
+                | Self::Or { .. }
+                | Self::Not { .. }
+                | Self::ImmAdd { .. }
+                | Self::ImmSub { .. }
+                | Self::ImmMult { .. }
+                | Self::ImmLShift { .. }
+                | Self::ImmRShift { .. }
+                | Self::FAdd { .. }
+                | Self::FSub { .. }
+                | Self::FMult { .. }
+                | Self::FDiv { .. }
+                | Self::FComp { .. }
+                // Comparisons
+                | Self::CmpLT { .. }
+                | Self::CmpLE { .. }
+                | Self::CmpGT { .. }
+                | Self::CmpGE { .. }
+                | Self::CmpEQ { .. }
+                | Self::CmpNE { .. }
+                | Self::Comp { .. }
+                | Self::TestEQ { .. }
+                | Self::TestNE { .. }
+                | Self::TestGT { .. }
+                | Self::TestGE { .. }
+                | Self::TestLT { .. }
+                | Self::TestLE { .. }
+                | Self::TestLE { .. }
+                // Loads
+                | Self::ImmLoad { src: Val::Integer(..) | Val::Float(..), .. }
+                | Self::Load { .. }
+                | Self::LoadAddImm { .. }
+                | Self::LoadAdd { .. }
+                // Stores
+                // TODO: is this an expression
+                | Self::Store { .. }
+                | Self::StoreAddImm { .. }
+                | Self::StoreAdd { .. }
         )
     }
 }
