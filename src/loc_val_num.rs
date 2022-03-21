@@ -4,6 +4,10 @@ use crate::iloc::{Block, Instruction, Loc, Operand, Reg, Val};
 
 pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
     let mut transformed_block = false;
+
+    // A set of all the register (destinations) that are kept, after some kind of fold/redundancy
+    // elimination, due to a move
+    let mut special = HashSet::new();
     let mut expr_map: HashMap<_, Reg> = HashMap::new();
     let mut const_map: HashMap<Operand, Val> = HashMap::new();
 
@@ -40,6 +44,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                         if let Some(id) = expr.identity_with_const_prop_left(c) {
                             transformed_block = true;
 
+                            special.insert(*dst);
                             // modify instruction with a move
                             new_instr[idx] = expr.as_new_move_instruction(*id, *dst);
                         } else if matches!(
@@ -59,6 +64,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                         if let Some(id) = expr.identity_with_const_prop_right(c) {
                             transformed_block = true;
 
+                            special.insert(*dst);
                             // modify instruction with a move
                             new_instr[idx] = expr.as_new_move_instruction(*id, *dst);
                         } else if matches!(
@@ -82,6 +88,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                         if let Some(id) = expr.identity_register() {
                             transformed_block = true;
 
+                            special.insert(*dst);
                             // modify instruction with a move
                             new_instr[idx] = expr.as_new_move_instruction(id, *dst);
                         }
@@ -109,6 +116,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                             continue;
                         }
 
+                        special.insert(*value);
                         // modify instruction with a move
                         new_instr[idx] = expr.as_new_move_instruction(*value, *dst);
                     }
@@ -153,6 +161,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                             continue;
                         }
 
+                        special.insert(*dst);
                         // modify instruction with a move
                         new_instr[idx] = expr.as_new_move_instruction(*value, *dst);
                     }
@@ -185,13 +194,13 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
     }
 
     transformed_block |= compress_conditional_branches(&mut new_instr);
-    transformed_block |= compress_load_stores(&mut new_instr);
+    transformed_block |= compress_load_stores(&mut new_instr, &special);
 
     // if then -> Some(instructions)
     transformed_block.then(|| new_instr)
 }
 
-pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
+fn track_used(instructions: &[Instruction]) -> Vec<usize> {
     let mut used_reg = HashSet::new();
     let mut live_vars = HashSet::new();
     let mut indexes = vec![];
@@ -282,7 +291,7 @@ pub fn track_used(instructions: &[Instruction]) -> Vec<usize> {
     indexes
 }
 
-pub fn compress_conditional_branches(instructions: &mut [Instruction]) -> bool {
+fn compress_conditional_branches(instructions: &mut [Instruction]) -> bool {
     let mut modified = false;
     // We subtract 2 since we are using windows of 3 instructions to test for comparisons
     let len = instructions.len().saturating_sub(2);
@@ -391,7 +400,8 @@ fn is_cond_branch(idx: usize, insts: &[Instruction]) -> bool {
     )
 }
 
-pub fn compress_load_stores(instructions: &mut [Instruction]) -> bool {
+fn compress_load_stores(instructions: &mut [Instruction], special: &HashSet<Reg>) -> bool {
+    // panic!("{:?}", special);
     let mut modified = false;
     // We subtract 2 since we are using windows of 3 instructions to test for comparisons
     let len = instructions.len().saturating_sub(2);
@@ -420,7 +430,7 @@ pub fn compress_load_stores(instructions: &mut [Instruction]) -> bool {
             (
                 Instruction::ImmSub { src: sub_src, konst, dst: sub_dst },
                 Instruction::Store { src: store_src, dst: store_dst },
-            ) if sub_dst == store_dst => Instruction::StoreAddImm {
+            ) if sub_dst == store_dst && !special.contains(sub_dst) => Instruction::StoreAddImm {
                 src: *store_src,
                 add: konst.negate().unwrap(),
                 dst: *sub_src,
