@@ -191,16 +191,15 @@ pub fn dead_code(
         func.blocks[b].instructions[i] = inst;
     }
 
-    cleanup(func, cfg, domtree, start);
+    cleanup(func, &domtree.cfg_succs_map, start);
 }
 
-fn cleanup(
+pub fn cleanup(
     func: &mut Function,
-    cfg: &mut ControlFlowGraph,
-    domtree: &DominatorTree,
+    domtree: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     start: &OrdLabel,
 ) {
-    let mut cfg_map = domtree.cfg_succs_map.clone();
+    let mut cfg_map = domtree.clone();
     let mut to_jump = vec![];
     let mut changed = true;
     while changed {
@@ -298,6 +297,7 @@ pub fn build_cfg(func: &Function) -> HashMap<OrdLabel, BTreeSet<OrdLabel>> {
 
         if let Some(next) = func.blocks.get(idx + 1) {
             let next_label = next.label.replace(':', "");
+
             cfg.entry(OrdLabel::from_known(&b_label))
                 .or_default()
                 .insert(OrdLabel::from_known(&next_label));

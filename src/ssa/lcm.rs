@@ -4,8 +4,13 @@ use std::{
 };
 
 use crate::{
-    iloc::{Function, Instruction, Operand, Reg},
-    ssa::{dfs_order, postorder, preorder, reverse_postorder, DominatorTree, OrdLabel},
+    iloc::{Block, Function, Instruction, Loc, Operand, Reg},
+    ssa::{
+        dce::{build_cfg, cleanup},
+        dfs_order,
+        licm::find_loops,
+        postorder, preorder, reverse_postorder, DominatorTree, OrdLabel,
+    },
 };
 
 fn print_maps<K: fmt::Debug, V: fmt::Debug>(name: &str, map: &HashMap<K, V>) {
@@ -30,8 +35,18 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     let start = OrdLabel::new_start(&func.label);
 
     let mut use_map: HashMap<_, Vec<_>> = HashMap::new();
+    let mut dst_map: HashMap<_, _> = HashMap::new();
     for (b, blk) in func.blocks.iter().enumerate() {
         for (i, inst) in blk.instructions.iter().enumerate() {
+            if let Some(dst) = inst.target_reg() {
+                if dst_map
+                    .insert((OrdLabel::from_known(&blk.label.replace(':', "")), *dst), inst.clone())
+                    .is_some()
+                {
+                    // println!("I think we want later instructions anyways {} {:?}", blk.label,
+                    // inst)
+                }
+            }
             for operand in inst.operand_iter() {
                 let Some(dst) = inst.target_reg() else { continue; };
                 use_map.entry(operand).or_default().push((&blk.label, *dst));
@@ -39,7 +54,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    print_maps("uses", &use_map);
+    // print_maps("uses", &use_map);
 
     let mut universe: HashMap<_, HashSet<Reg>> = HashMap::new();
 
@@ -70,19 +85,16 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 let dst = inst.target_reg();
 
                 if let Some(t) = dst {
-                    if inst.is_pre_expr() {
-                        uni.insert(*t);
-                        dloc.insert(*t);
-                        if !k_loc.contains(t) {
-                            changed |= uloc.insert(*t);
-                            // `t ∉ anticipated_local` is implicit in any sets behavior
-                        }
-                    } else {
-                        for (b, kdst) in use_map.get(t).unwrap_or(&vec![]) {
-                            changed |= k_loc.insert(*kdst);
-                            if b.starts_with(label.as_str()) {
-                                dloc.remove(kdst);
-                            }
+                    uni.insert(*t);
+                    dloc.insert(*t);
+                    if !k_loc.contains(t) {
+                        changed |= uloc.insert(*t);
+                        // `t ∉ anticipated_local` is implicit in any sets behavior
+                    }
+                    for (b, kdst) in use_map.get(t).unwrap_or(&vec![]) {
+                        changed |= k_loc.insert(*kdst);
+                        if b.starts_with(label.as_str()) {
+                            dloc.remove(kdst);
                         }
                     }
                 }
@@ -96,12 +108,12 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    print_maps("universe", &universe);
-    print_maps("dexpr", &dexpr);
-    print_maps("uexpr", &uexpr);
-    print_maps("trans", &transparent);
-    print_maps("kill", &kill);
-    println!();
+    // print_maps("universe", &universe);
+    // print_maps("dexpr", &dexpr);
+    // print_maps("uexpr", &uexpr);
+    // print_maps("trans", &transparent);
+    // print_maps("kill", &kill);
+    // println!();
 
     let empty = HashSet::new();
 
@@ -168,9 +180,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    print_maps("avail_in", &avail_in);
-    print_maps("avail_out", &avail_out);
-    println!();
+    // print_maps("avail_in", &avail_in);
+    // print_maps("avail_out", &avail_out);
+    // println!();
 
     changed = true;
     // ANTICIPATED
@@ -243,9 +255,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    print_maps("ant_in", &anti_in);
-    print_maps("ant_out", &anti_out);
-    println!();
+    // print_maps("ant_in", &anti_in);
+    // print_maps("ant_out", &anti_out);
+    // println!();
 
     // EARLIEST
     // Based on availability (is it above me) and anticipation (is it below me) we compute the
@@ -258,7 +270,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         for (succ, blk) in reverse_postorder(&domtree.cfg_succs_map, &start).filter_map(|label| {
             Some((label, func.blocks.iter().find(|b| b.label.starts_with(label.as_str()))?))
         }) {
-            // TODO:  this maybe wrong check...
+            // Same thing as succ != start
             let Some(preds) = domtree.cfg_preds_map.get(succ) else { continue; };
             for pred in preds {
                 // EARLIEST
@@ -278,10 +290,6 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                     // Ant_in(s) ∩ !Av_out(p) ∩ (!Trans(p) ∪ !Ant_out(p))
                     // Is equivalent to
                     // Ant_in(s) - Av_out(p) ∪ (Trans(p) ∩ Ant_out(p))
-                    // Ant_in(s) - Av_out(p) - (Trans(p) ∪ Ant_out(p))
-                    // Or is it this one
-                    //                         (Trans(p) ∩ Ant_out(p))
-
                     let inout: HashSet<_> = anti_in
                         .get(succ)
                         .unwrap_or(&empty)
@@ -296,41 +304,13 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                     for new in inout.union(&transout) {
                         changed |= old.insert(**new);
                     }
-
-                    let uni: HashSet<_> =
-                        universe.iter().flat_map(|(_, v)| v.iter().copied()).collect();
-                    let not_avout: HashSet<_> =
-                        uni.difference(avail_out.get(pred).unwrap_or(&empty)).copied().collect();
-                    let not_antiout: HashSet<_> =
-                        uni.difference(anti_out.get(pred).unwrap_or(&empty)).copied().collect();
-                    let not_transp: HashSet<_> =
-                        uni.difference(transparent.get(pred).unwrap_or(&empty)).copied().collect();
-
-                    // Ant_in(p) ∩ !Avail_out(p) ∩ (Kill(p) ∪ !Ant_out(p))
-                    println!(
-                        "{:?}",
-                        inout.intersection(
-                            &kill
-                                .get(pred)
-                                .unwrap_or(&empty)
-                                .union(&not_antiout)
-                                .collect::<HashSet<_>>()
-                        )
-                    );
-                    println!(
-                        "dragon: {:?}",
-                        anti_in
-                            .get(succ)
-                            .unwrap_or(&empty)
-                            .difference(avail_in.get(succ).unwrap_or(&empty))
-                    );
                 }
             }
         }
     }
 
-    print_maps("earliest", &earliest);
-    println!();
+    // print_maps("earliest", &earliest);
+    // println!();
 
     // LATEST
     changed = true;
@@ -343,22 +323,23 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 Some((label, func.blocks.iter().find(|b| b.label.starts_with(label.as_str()))?))
             })
         {
-            // TODO:  this maybe wrong check...
+            // This is the same as b_label != start
             let Some(preds) = domtree.cfg_preds_map.get(b_label) else { continue; };
+
             for pred in preds {
                 // LATER
                 let old = later.entry((pred.clone(), b_label.clone())).or_default();
-                // Ant_in(s) ∩ !Av_out(p) ∩ (!UExpr(p) ∪ !Ant_out(p))
+                // Earliest(p, s) ∪ (LaterIn(p) ∩ !Uexpr(p))
                 // Is equivalent to
-                // Ant_in(s) - Av_out(p) ∪ (UExpr(p) ∩ Ant_out(p))
+                // Earliest(p, s) ∪ (LaterIn(p) - Uexpr(p))
                 let inloc: HashSet<_> = later_in
                     .get(pred)
                     .unwrap_or(&empty)
                     .difference(uexpr.get(pred).unwrap_or(&empty))
                     .copied()
                     .collect();
-                let transout = earliest.get(&(pred.clone(), b_label.clone())).unwrap_or(&empty);
-                for new in inloc.union(transout) {
+                let early = earliest.get(&(pred.clone(), b_label.clone())).unwrap_or(&empty);
+                for new in early.union(&inloc) {
                     changed |= old.insert(*new);
                 }
             }
@@ -385,9 +366,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    print_maps("later_in", &later_in);
-    print_maps("later", &later);
-    println!();
+    // print_maps("later_in", &later_in);
+    // print_maps("later", &later);
+    // println!();
 
     // INSERT and DELETE
     changed = true;
@@ -431,4 +412,129 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     print_maps("insert", &insert);
     print_maps("delete", &delete);
     println!();
+
+    let mut loop_analysis = find_loops(func, domtree);
+    print_maps("loops", loop_analysis.loop_map());
+
+    let mut deleted = HashSet::new();
+    for ((pred, succ), registers) in insert.into_iter().filter(|(_, regs)| !regs.is_empty()) {
+        let mut to_move = vec![];
+        for r in &registers {
+            if delete.get(&pred).map_or(false, |dset| dset.contains(r)) {
+                deleted.insert((pred.clone(), *r));
+                continue;
+            }
+
+            let Some(inst) = dst_map.get(&(succ.clone(), *r)) else {
+                continue;
+            };
+            let Some(b) = func.blocks.iter().position(|b| b.label.starts_with(succ.as_str())) else {
+                unreachable!("{:?}", succ)
+            };
+            let Some(i) = func.blocks[b].instructions.iter().position(|i| i == inst) else {
+                unreachable!("{:?}", (succ, &func.blocks[b]))
+            };
+            let can_delete = delete.get(&succ).map_or(false, |dset| dset.contains(r));
+            to_move.push(if can_delete {
+                deleted.insert((succ.clone(), *r));
+                let inst = func.blocks[b].instructions[i].clone();
+                func.blocks[b].instructions[i] =
+                    Instruction::Skip(format!("[pre deleted] {}", func.blocks[b].instructions[i]));
+                inst
+            } else {
+                func.blocks[b].instructions[i].clone()
+            });
+        }
+
+        if to_move.is_empty() {
+            continue;
+        }
+
+        // If pred has only one successor insert at end of pred
+        // If succ has only one predecessor insert at entry to succ
+        // Else edge is critical so insert block into middle of edge
+        if domtree.cfg_succs_map.get(&pred).unwrap().len() == 1 {
+            let Some(pred_blk) = func.blocks
+                .iter_mut()
+                .find(|b| b.label.starts_with(pred.as_str())) else { unreachable!() };
+
+            let end_idx =
+                if pred_blk.instructions.last().map_or(false, |inst| inst.uses_label().is_some()) {
+                    pred_blk.instructions.len() - 2
+                } else {
+                    pred_blk.instructions.len() - 1
+                };
+
+            for inst in to_move.into_iter().rev() {
+                pred_blk.instructions.insert(end_idx, inst);
+            }
+        } else if domtree.cfg_preds_map.get(&succ).unwrap().len() == 1 {
+            let Some(succ_blk) = func.blocks
+                .iter_mut()
+                .find(|b| b.label.starts_with(succ.as_str())) else { unreachable!() };
+
+            let start_idx = if succ_blk
+                .instructions
+                .last()
+                .map_or(false, |inst| matches!(inst, Instruction::Frame { .. }))
+            {
+                2
+            } else {
+                1
+            };
+
+            for inst in to_move.into_iter().rev() {
+                succ_blk.instructions.insert(start_idx, inst);
+            }
+        } else {
+            let label = format!(".pre{}{}:", pred.as_str(), succ.as_str());
+            let mut instructions = vec![Instruction::Label(label.clone())];
+            instructions.extend(to_move);
+            instructions.push(Instruction::ImmJump(Loc(succ.as_str().to_string())));
+            let new_block = Block { label, instructions };
+
+            let Some(succ_idx) = func.blocks
+                .iter()
+                .position(|b| b.label.starts_with(succ.as_str())) else { unreachable!() };
+            let Some(pred_idx) = func.blocks
+                .iter()
+                .position(|b| b.label.starts_with(pred.as_str())) else { unreachable!() };
+
+            println!(
+                "{} {} {} {} {:#?}",
+                pred.as_str(),
+                pred_idx,
+                succ.as_str(),
+                succ_idx,
+                domtree.dom_tree
+            );
+
+            let pred_idx = if pred == succ {
+                println!("pred {} == succ {}", pred.as_str(), succ.as_str());
+                pred_idx
+            } else {
+                pred_idx + 1
+            };
+
+            func.blocks.insert(pred_idx, new_block);
+        }
+    }
+
+    for (label, dels) in delete {
+        for del in dels {
+            if !deleted.contains(&(label.clone(), del)) {
+                let Some(inst) = dst_map.get(&(label.clone(), del)) else {
+                    unreachable!("{:?}", label)
+                };
+                let Some(b) = func.blocks.iter().position(|b| b.label.starts_with(label.as_str())) else {
+                    unreachable!("{:?}", label)
+                };
+                let Some(i) = func.blocks[b].instructions.iter().position(|i| i == inst) else {
+                    unreachable!("{:?}", (label, &func.blocks[b]))
+                };
+                func.blocks[b].instructions[i] =
+                    Instruction::Skip(format!("[pre deleted] {}", func.blocks[b].instructions[i]));
+            }
+        }
+    }
 }
