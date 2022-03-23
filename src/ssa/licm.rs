@@ -47,6 +47,14 @@ impl LoopAnalysis {
             _ => false,
         }
     }
+
+    pub fn is_move_into_nested(&self, to: &OrdLabel, from: &OrdLabel) -> bool {
+        match self.loop_map.get(from.as_str()) {
+            Some(LoopInfo::Loop { parent: Some(..), .. }) => todo!(),
+            Some(LoopInfo::PartOf(lp)) => todo!(),
+            _ => false,
+        }
+    }
 }
 
 pub fn find_loops(func: &mut Function, domtree: &DominatorTree) -> LoopAnalysis {

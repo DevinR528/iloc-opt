@@ -10,6 +10,11 @@ The PRE pass, once I got correct initial sets (Available/Anticipated/Transparent
 working insertion and removal pass, moving instruction up to predecessor blocks or splitting critical edges by adding
 a block between.
 
+I added a loop analysis pass that generates all the loop information, what block is the loop header and what blocks are
+part of it's loop. It also can calculate the parents of any nested loops. This was used for `bubble.il` where normal PRE
+seems to want to move instruction deeper into the loop. With loop detection I can determine when this is a net loss or
+find the parent header of nested loops and insert invariant instruction there.
+
 We are using my interpreter for the commands you will run, but the output and way the interpreter
 counts instructions are identical.
 

@@ -487,6 +487,13 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 succ_blk.instructions.insert(start_idx, inst);
             }
         } else {
+            // This is if a move of instructions from succ into pred's edge is actually a move into
+            // a more nested loop
+            if loop_analysis.is_move_into_nested(&pred, &succ) {
+                unimplemented!();
+                todo!();
+            }
+
             let label = format!(".pre{}{}:", pred.as_str(), succ.as_str());
             let mut instructions = vec![Instruction::Label(label.clone())];
             instructions.extend(to_move);

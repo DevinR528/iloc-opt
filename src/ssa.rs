@@ -582,13 +582,13 @@ fn ssa_cfg() {
 
     use crate::iloc::{make_basic_blocks, make_blks, parse_text};
 
-    let input = fs::read_to_string("input/arrayparam.il").unwrap();
+    let input = fs::read_to_string("input/bubble.il").unwrap();
     let iloc = parse_text(&input).unwrap();
     let mut blocks = make_basic_blocks(&make_blks(iloc));
 
-    let cfg = build_cfg(&mut blocks.functions[1]);
+    let cfg = build_cfg(&mut blocks.functions[0]);
     println!("{:?}", cfg);
-    emit_cfg_viz(&cfg, "graphs/arrayparam.dot");
+    emit_cfg_viz(&cfg, "graphs/bubble.dot");
 }
 
 #[test]
