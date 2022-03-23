@@ -1,4 +1,4 @@
-#![feature(let_else, map_first_last, once_cell, stmt_expr_attributes, let_chains)]
+#![feature(let_else, map_first_last, once_cell, stmt_expr_attributes, let_chains, try_blocks)]
 #![allow(unused)]
 
 use std::{
@@ -80,7 +80,7 @@ fn main() {
             let mut buf = String::new();
             for inst in blocks.instruction_iter() {
                 if matches!(inst, Instruction::Skip(..)) {
-                    // continue;
+                    continue;
                 }
                 // println!("{:?}", inst);
                 buf.push_str(&inst.to_string())
@@ -88,7 +88,7 @@ fn main() {
 
             let mut path = PathBuf::from(&file);
             let file = path.file_stem().unwrap().to_string_lossy().to_string();
-            path.set_file_name(&format!("{}.lvn.dbre.dce.il", file));
+            path.set_file_name(&format!("{}.lvn.dbre.dce.pre.il", file));
             let mut fd =
                 fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
             fd.write_all(buf.as_bytes()).unwrap();

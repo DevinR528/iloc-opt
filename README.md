@@ -14,14 +14,14 @@ Original instruction counts
 
 My instruction counts
 
-| File            | Original | LVN    | SSA DBRE | SSA DCE | RA       | % Reduction |
+| File            | Original | LVN    | SSA DBRE | SSA DCE | PRE      | % Reduction |
 | -               | -        | -      | -        | -       | -        | -           |
-|`arrayparam.il`  |841       | 442    | 408      | N/A     | N/A      | 47.3%       |
-|`bubble.il`      |4374      | 2374   | 1970     | N/A     | N/A      | 43.3%       |
-|`check.il`       |140       | 87     | 56       | N/A     | N/A      | 97.9%       |
-|`dynamic.il`     |39155     | 19129  | 16846    | N/A     | N/A      | 50.7%       |
-|`fib.il`         |274       | 209    | 168      | N/A     | N/A      | 23%         |
-|`gcd.il`         |103       | 72     | 62       | N/A     | N/A      | 29.1%       |
-|`newdyn.il`      |136919    | 58436  | 51557    | N/A     | N/A      | 52.4%       |
-|`qs.il`          |4574      | 2907   | 2589     | N/A     | N/A      | 32.8%       |
-|`while_array.il` |377       | 250    | 190      | N/A     | N/A      | 32.4%       |
+|`arrayparam.il`  |841       | 442    | 408      | 401     | 364      | 47.3%       |
+|`bubble.il`      |4374      | 2374   | 1970     | 2105    | 1955     | 43.3%       |
+|`check.il`       |140       | 87     | 56       | 3       | 3        | 97.9%       |
+|`dynamic.il`     |39155     | 19129  | 16846    | 17944   | 17115    | 50.7%       |
+|`fib.il`         |274       | 209    | 168      | 188     | ??       | 23%         |
+|`gcd.il`         |103       | 72     | 62       | 65      | 59       | 29.1%       |
+|`newdyn.il`      |136919    | 58436  | 51557    | 54951   | 52429    | 52.4%       |
+|`qs.il`          |4574      | 2907   | 2589     | 2588    | 2420     | 32.8%       |
+|`while_array.il` |377       | 250    | 190      | 212     | 185      | 32.4%       |

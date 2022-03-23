@@ -22,7 +22,7 @@
     iwrite %vr3
     ret
 .frame main, 0
-    loadI 3 => %vr12
+    loadI 1 => %vr12
     loadI 2 => %vr13
     loadI 0 => %vr14
     call pre_example, %vr12, %vr13, %vr14

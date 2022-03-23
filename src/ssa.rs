@@ -100,6 +100,8 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
 
 #[derive(Debug)]
 pub struct DominatorTree {
+    /// Dominator frontiers are the join points of a graph, this is not necessarily the direct
+    /// predecessors of a block but it will always be a join of two predecessors into one.
     pub dom_frontier_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_dom_frontier: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_dom_tree: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
