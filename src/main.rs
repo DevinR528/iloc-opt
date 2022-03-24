@@ -64,7 +64,6 @@ fn main() {
 
             let now = Instant::now();
             let iloc = parse_text(&input).unwrap();
-
             let mut blocks = make_blks(iloc);
             for func in &mut blocks.functions {
                 for blk in &mut func.blocks {
@@ -73,9 +72,9 @@ fn main() {
                     }
                 }
             }
-
             let mut blocks = make_basic_blocks(&blocks);
             ssa::ssa_optimization(&mut blocks);
+            println!("optimization done {}ms", now.elapsed().as_millis());
 
             let mut buf = String::new();
             for inst in blocks.instruction_iter() {
@@ -92,8 +91,6 @@ fn main() {
             let mut fd =
                 fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
             fd.write_all(buf.as_bytes()).unwrap();
-
-            println!("optimization done {}ms", now.elapsed().as_millis());
 
             fs::read_to_string(&path).unwrap()
         } else if ssa {

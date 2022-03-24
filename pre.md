@@ -12,23 +12,23 @@ a block between.
 
 I added a loop analysis pass that generates all the loop information, what block is the loop header and what blocks are
 part of it's loop. It also can calculate the parents of any nested loops. This was used for `bubble.il` where normal PRE
-seems to want to move instruction deeper into the loop. With loop detection I can determine when this is a net loss or
-find the parent header of nested loops and insert invariant instruction there.
+seems to want to move instruction deeper into the nested loop causing higher instruction count. With loop detection I can
+determine when this is a net loss or find the parent header of nested loops and insert invariant instruction there.
 
 We are using my interpreter for the commands you will run, but the output and way the interpreter
 counts instructions are identical.
 
 
-| File            | Original | PRE/DCE   | Time     |
-| -               | -        | -         | -        |
-|`arrayparam.il`  |841       | 364       | 4.41 ms  |
-|`bubble.il`      |4374      | 1955?      | 5.83 ms  |
-|`check.il`       |140       | 3         | 4.26 ms  |
-|`dynamic.il`     |39155     | 17115     | 17.32 ms |
-|`fib.il`         |274       | 168       | 3.88 ms  |
-|`gcd.il`         |103       | 59        | 3.78 ms  |
-|`newdyn.il`      |136919    | 52429     | 19.70 ms |
-|`qs.il`          |4574      | 2420      | 6.69  ms |
-|`while_array.il` |377       | 185       | 4.44 ms  |
+| File            | Original | PRE/DCE   | Time     | Percentage |
+| -               | -        | -         | -        | -          |
+|`arrayparam.il`  |841       | 364       | 1 ms     | 56.7%      |
+|`bubble.il`      |4374      | 1927      | 1 ms     | 55.9%      |
+|`check.il`       |140       | 3         | 0 ms     | 97.8%      |
+|`dynamic.il`     |39155     | 17115     | 4 ms     | 56.2%      |
+|`fib.il`         |274       | 168       | 0 ms     | 38.6%      |
+|`gcd.il`         |103       | 59        | 0 ms     | 42.7%      |
+|`newdyn.il`      |136919    | 52429     | 2 ms     | 61.7%      |
+|`qs.il`          |4574      | 2420      | 2  ms    | 47.0%      |
+|`while_array.il` |377       | 185       | 0 ms     | 50.9%      |
 
-Time includes the time taken to interpret the program; it would be slightly better.
+Time is ONLY the time taken to optimize the program.

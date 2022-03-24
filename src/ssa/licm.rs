@@ -41,18 +41,15 @@ impl LoopAnalysis {
     }
 
     pub fn is_nested(&self, child: &OrdLabel) -> bool {
-        match self.loop_map.get(child.as_str()) {
-            Some(LoopInfo::Loop { parent: Some(..), .. }) => todo!(),
-            Some(LoopInfo::PartOf(lp)) => todo!(),
-            _ => false,
-        }
-    }
-
-    pub fn is_move_into_nested(&self, to: &OrdLabel, from: &OrdLabel) -> bool {
-        match self.loop_map.get(from.as_str()) {
-            Some(LoopInfo::Loop { parent: Some(..), .. }) => todo!(),
-            Some(LoopInfo::PartOf(lp)) => todo!(),
-            _ => false,
+        let mut child = child.as_str();
+        loop {
+            match self.loop_map.get(child) {
+                Some(LoopInfo::Loop { parent: Some(..), .. }) => return true,
+                Some(LoopInfo::PartOf(lp)) => {
+                    child = lp;
+                }
+                _ => return false,
+            }
         }
     }
 }
@@ -93,7 +90,6 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) -> LoopAnalysis 
         }
 
         while let Some(node) = stack.pop() {
-            // println!("{:#?}", loop_map);
             let mut continue_dfs = None;
             if let Entry::Vacant(unseen) = loop_map.entry(node.to_string()) {
                 unseen.insert(LoopInfo::PartOf(lp.to_string()));
@@ -102,10 +98,7 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) -> LoopAnalysis 
                 let mut node_loop = node_loop.header().to_string();
                 let mut nlp_opt = loop_map.get(&node_loop).and_then(|l| l.parent());
 
-                // println!("{:?} {} {}", nlp_opt, node_loop, lp);
-
                 while let Some(nlp) = nlp_opt {
-                    // println!("{} {}", nlp, lp);
                     if nlp == lp {
                         // We have walked back to the start of the loop
                         break;
@@ -122,8 +115,6 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) -> LoopAnalysis 
                     None => {
                         if node_loop != lp {
                             let key = node_loop.to_string();
-                            // println!("Parent {} {}", key, lp);
-                            // println!("{:?}", loop_map);
                             match loop_map.entry(key) {
                                 Entry::Occupied(mut o) => match o.get_mut() {
                                     LoopInfo::Loop { parent, .. } => *parent = Some(lp.to_string()),

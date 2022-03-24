@@ -125,8 +125,6 @@ pub fn dead_code(
         // Which blocks does `b_label` control the execution of (where does this block
         // jump/branch/fall-through to)
         for blk in domtree.post_dom_frontier.get(b_label).unwrap_or(&empty) {
-            // println!("dtree: {} = {:?} from: {}", blk.as_str(), last_inst, b_label.as_str());
-
             let Some(block) = func.blocks.iter()
                 .find(|b| {
                     b.label.starts_with(blk.as_str())
@@ -140,7 +138,6 @@ pub fn dead_code(
                 .find(|i|
                     i.is_cnd_jump() || matches!(i, Instruction::ImmJump(..))
                 ) else {
-                    // println!("{} {:?}",blk.as_str(), block.instructions().last());
                     continue;
                 };
 
@@ -171,17 +168,11 @@ pub fn dead_code(
                         jumps.push((b, i, Instruction::ImmJump(Loc(label.to_string()))));
                     }
                 } else if !matches!(inst, Instruction::ImmJump(..) | Instruction::Label(..)) {
-                    println!("remove {:?}", inst);
                     remove.push((b, i));
                 }
             }
         }
     }
-
-    // println!(
-    //     "post_dom: {:#?}\npost_dom_front: {:#?}\n{:#?}",
-    //     domtree.post_dom, domtree.post_dom_frontier, domtree.dom_frontier_map
-    // );
 
     for (b, i) in remove {
         func.blocks[b].instructions[i] =
@@ -220,8 +211,6 @@ pub fn cleanup(
             let cond_branch = block.ends_with_cond_branch();
             if let Some(loc) = cond_branch {
                 if Some(loc) == fall_through {
-                    println!("immJump {loc} == {:?}", fall_through);
-
                     changed = true;
                     to_jump.push((idx, Instruction::ImmJump(Loc(loc.to_string()))));
                 }

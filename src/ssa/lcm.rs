@@ -486,42 +486,24 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             for inst in to_move.into_iter().rev() {
                 succ_blk.instructions.insert(start_idx, inst);
             }
+        // This is to guard against a move of instructions from succ into pred's edge  actually
+        // being a move into a more nested loop
+        } else if loop_analysis.is_nested(&pred) {
+            // TODO: move up to loop header of parent loop?
+            // maybe move to successor if this is a back edge successor may actually execute less???
+            // todo!()
         } else {
-            // This is if a move of instructions from succ into pred's edge is actually a move into
-            // a more nested loop
-            if loop_analysis.is_move_into_nested(&pred, &succ) {
-                unimplemented!();
-                todo!();
-            }
-
             let label = format!(".pre{}{}:", pred.as_str(), succ.as_str());
             let mut instructions = vec![Instruction::Label(label.clone())];
             instructions.extend(to_move);
             instructions.push(Instruction::ImmJump(Loc(succ.as_str().to_string())));
             let new_block = Block { label, instructions };
 
-            let Some(succ_idx) = func.blocks
-                .iter()
-                .position(|b| b.label.starts_with(succ.as_str())) else { unreachable!() };
             let Some(pred_idx) = func.blocks
                 .iter()
                 .position(|b| b.label.starts_with(pred.as_str())) else { unreachable!() };
 
-            println!(
-                "{} {} {} {} {:#?}",
-                pred.as_str(),
-                pred_idx,
-                succ.as_str(),
-                succ_idx,
-                domtree.dom_tree
-            );
-
-            let pred_idx = if pred == succ {
-                println!("pred {} == succ {}", pred.as_str(), succ.as_str());
-                pred_idx
-            } else {
-                pred_idx + 1
-            };
+            let pred_idx = if pred == succ { pred_idx } else { pred_idx + 1 };
 
             func.blocks.insert(pred_idx, new_block);
         }
