@@ -3,21 +3,17 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use crate::iloc::{Block, Function, IlocProgram, Instruction, Operand};
 
 mod dbre;
-mod dce;
+pub mod dce;
 mod fold;
-mod label;
-mod lcm;
-mod licm;
-mod utils;
 
+pub use crate::{
+    label::OrdLabel,
+    lcm::{dfs_order, find_loops, lazy_code_motion, postorder, preorder, reverse_postorder},
+};
 pub use dbre::{dom_val_num, RenameMeta};
-pub use label::OrdLabel;
-pub use utils::{dfs_order, postorder, preorder, reverse_postorder};
 
 use dce::dead_code;
 use fold::{const_fold, ConstMap, ValueKind, WorkStuff};
-#[allow(unused)]
-use licm::find_loops;
 
 #[derive(Clone, Debug, Default)]
 pub struct ControlFlowGraph {
@@ -106,7 +102,7 @@ pub struct DominatorTree {
     post_dom_frontier: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_dom_tree: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_idom_map: HashMap<OrdLabel, OrdLabel>,
-    dom_tree: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
+    pub dom_tree: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     #[allow(unused)]
     dom_tree_pred: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     pub cfg_succs_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
@@ -532,7 +528,7 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
             }
         }
 
-        lcm::lazy_code_motion(func, &dtree, cfg.exits.last().unwrap());
+        lazy_code_motion(func, &dtree, cfg.exits.last().unwrap());
 
         // find_loops(func, &dtree);
 
@@ -557,7 +553,7 @@ fn lcm_pre() {
     let cfg = build_cfg(&mut blocks.functions[0]);
     let dtree = dominator_tree(&cfg, &mut blocks.functions[0].blocks, &start);
 
-    lcm::lazy_code_motion(&mut blocks.functions[0], &dtree, cfg.exits.last().unwrap());
+    lazy_code_motion(&mut blocks.functions[0], &dtree, cfg.exits.last().unwrap());
 
     let mut buf = String::new();
     for inst in blocks.instruction_iter() {

@@ -12,7 +12,8 @@ use std::{
 // Our Instruction definition
 mod iloc;
 mod interp;
-
+mod label;
+mod lcm;
 // Each pass of our optimizing compiler
 //
 /// Local Value Numbering
@@ -21,12 +22,14 @@ mod loc_val_num;
 mod ssa;
 
 use iloc::{make_blks, parse_text};
+use label::OrdLabel;
 #[allow(unused)]
 use ssa::{build_cfg, dominator_tree, ssa_optimization};
 
 use crate::{
     iloc::{make_basic_blocks, Instruction},
-    ssa::{reverse_postorder, OrdLabel, RenameMeta},
+    lcm::reverse_postorder,
+    ssa::RenameMeta,
 };
 
 const JAVA_ILOC_BENCH: &[&str] =

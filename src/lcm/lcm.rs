@@ -5,11 +5,10 @@ use std::{
 
 use crate::{
     iloc::{Block, Function, Instruction, Loc, Operand, Reg},
+    lcm::find_loops,
     ssa::{
         dce::{build_cfg, cleanup},
-        dfs_order,
-        licm::find_loops,
-        postorder, preorder, reverse_postorder, DominatorTree, OrdLabel,
+        dfs_order, postorder, preorder, reverse_postorder, DominatorTree, OrdLabel,
     },
 };
 

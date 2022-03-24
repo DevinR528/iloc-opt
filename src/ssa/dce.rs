@@ -2,7 +2,8 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::{
     iloc::{Function, Instruction, Loc, Val},
-    ssa::{postorder, ControlFlowGraph, DominatorTree, OrdLabel},
+    ssa::{postorder, ControlFlowGraph, DominatorTree},
+    OrdLabel,
 };
 
 impl Instruction {
