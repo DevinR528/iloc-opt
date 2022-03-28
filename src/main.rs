@@ -13,13 +13,25 @@ use std::{
 mod iloc;
 mod interp;
 mod label;
-mod lcm;
+
 // Each pass of our optimizing compiler
 //
-/// Local Value Numbering
+/// ## Local Value Numbering
+/// Working on extended basic blocks we remove redundant expressions and fold constants.
 mod loc_val_num;
-/// Build a single static assingment
+
+/// ## Lazy Code Motion
+/// Removes the SSA numbering and runs lcm or partial redundancy elimination.
+mod lcm;
+
+/// ## Single Static Assignment
+/// Build SSA form of the program and runs all optimizations that rely on SSA.
 mod ssa;
+
+/// ## Register Allocation
+/// Using live ranges, an interference graph, and coloring of that graph we allocate registers
+/// for our currently infinite set.
+mod ralloc;
 
 use iloc::{make_blks, parse_text};
 use label::OrdLabel;
@@ -28,7 +40,6 @@ use ssa::{build_cfg, dominator_tree, ssa_optimization};
 
 use crate::{
     iloc::{make_basic_blocks, Instruction},
-    lcm::reverse_postorder,
     ssa::RenameMeta,
 };
 
@@ -77,12 +88,14 @@ fn main() {
             }
             let mut blocks = make_basic_blocks(&blocks);
             ssa::ssa_optimization(&mut blocks);
+
+            ralloc::allocate_registers(&mut blocks);
             println!("optimization done {}ms", now.elapsed().as_millis());
 
             let mut buf = String::new();
             for inst in blocks.instruction_iter() {
                 if matches!(inst, Instruction::Skip(..)) {
-                    continue;
+                    // continue;
                 }
                 // println!("{:?}", inst);
                 buf.push_str(&inst.to_string())

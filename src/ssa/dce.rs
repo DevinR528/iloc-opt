@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::{
     iloc::{Function, Instruction, Loc, Val},
-    ssa::{postorder, ControlFlowGraph, DominatorTree},
+    ssa::{postorder, DominatorTree},
     OrdLabel,
 };
 
@@ -30,12 +30,7 @@ impl Instruction {
     }
 }
 
-pub fn dead_code(
-    func: &mut Function,
-    cfg: &mut ControlFlowGraph,
-    domtree: &DominatorTree,
-    start: &OrdLabel,
-) {
+pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel) {
     let mut stack = VecDeque::new();
     let mut critical_map = HashSet::new();
     let mut def_map = HashMap::new();

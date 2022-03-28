@@ -1,6 +1,9 @@
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
-use crate::iloc::{Block, Function, IlocProgram, Instruction, Operand};
+use crate::{
+    iloc::{Block, Function, IlocProgram, Instruction, Operand},
+    lcm::print_maps,
+};
 
 mod dbre;
 pub mod dce;
@@ -8,7 +11,7 @@ mod fold;
 
 pub use crate::{
     label::OrdLabel,
-    lcm::{dfs_order, find_loops, lazy_code_motion, postorder, preorder, reverse_postorder},
+    lcm::{find_loops, lazy_code_motion, postorder, reverse_postorder},
 };
 pub use dbre::{dom_val_num, RenameMeta};
 
@@ -100,11 +103,8 @@ pub struct DominatorTree {
     /// predecessors of a block but it will always be a join of two predecessors into one.
     pub dom_frontier_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_dom_frontier: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
-    post_dom_tree: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_idom_map: HashMap<OrdLabel, OrdLabel>,
     pub dom_tree: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
-    #[allow(unused)]
-    dom_tree_pred: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     pub cfg_succs_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     pub cfg_preds_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
 }
@@ -115,23 +115,20 @@ pub fn dominator_tree(
     blocks: &mut [Block],
     start: &OrdLabel,
 ) -> DominatorTree {
-    let mut ord = 0;
-    let mut nodes = VecDeque::from([start]);
-    let mut seen = HashSet::new();
-    while let Some(n) = nodes.pop_front() {
-        if seen.contains(n) {
-            continue;
-        }
+    for (ord, n) in reverse_postorder(
+        &cfg.paths.iter().map(|(k, v)| (OrdLabel::new(k), v.clone())).collect::<HashMap<_, _>>(),
+        start,
+    )
+    .enumerate()
+    {
         // Updates the global map that keeps track of a labels order in the graph
-        OrdLabel::update(ord, n.as_str());
-        ord += 1;
-        seen.insert(n);
-        if let Some(kids) = cfg.paths.get(n.as_str()) {
-            for k in kids {
-                nodes.push_back(k);
-            }
-        }
+        OrdLabel::update(ord as isize, n.as_str());
     }
+
+    // We need this to be accurate to the numbering of `succs` below, otherwise
+    // when ralloc needs SSA numbering we crash, since the las value for `start` was the last from
+    // doing RPO based on predecessors and the single exit
+    let start = OrdLabel::from_known(start.as_str());
 
     let succs: HashMap<_, BTreeSet<OrdLabel>> = cfg
         .paths
@@ -150,8 +147,8 @@ pub fn dominator_tree(
 
     // Build dominator tree
     let mut dom_map = HashMap::with_capacity(blocks.len());
-    let all_nodes: Vec<_> = reverse_postorder(&succs, start).cloned().collect();
-    dom_map.insert(start.clone(), BTreeSet::new());
+    let all_nodes: Vec<_> = reverse_postorder(&succs, &start).cloned().collect();
+    dom_map.insert(start, BTreeSet::new());
     for n in all_nodes.iter().skip(1) {
         dom_map.insert(n.clone(), all_nodes.iter().cloned().collect());
     }
@@ -179,9 +176,7 @@ pub fn dominator_tree(
         }
     }
 
-    // Build dominance predecessor map (AKA find join points)
-    let mut dom_tree: HashMap<OrdLabel, BTreeSet<OrdLabel>> =
-        HashMap::with_capacity(all_nodes.len());
+    let mut dom_tree: HashMap<_, BTreeSet<_>> = HashMap::with_capacity(all_nodes.len());
     for set in dom_map.values() {
         let mut tree_leaf: Option<&OrdLabel> = None;
         for m in set {
@@ -194,6 +189,7 @@ pub fn dominator_tree(
         }
     }
 
+    // Build dominance predecessor map (AKA find join points)
     let mut dom_tree_pred = HashMap::with_capacity(all_nodes.len());
     for (to, set) in &dom_tree {
         for from in set {
@@ -376,10 +372,8 @@ pub fn dominator_tree(
     DominatorTree {
         dom_frontier_map,
         post_dom_frontier,
-        post_dom_tree,
         post_idom_map,
         dom_tree,
-        dom_tree_pred,
         cfg_preds_map: preds,
         cfg_succs_map: succs,
     }
@@ -470,7 +464,7 @@ pub fn insert_phi_functions(
 
 pub fn ssa_optimization(iloc: &mut IlocProgram) {
     for func in &mut iloc.functions {
-        let mut cfg = build_cfg(func);
+        let cfg = build_cfg(func);
 
         let start = OrdLabel::new_start(&func.label);
         let dtree = dominator_tree(&cfg, &mut func.blocks, &start);
@@ -520,7 +514,7 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
 
         const_fold(&mut worklist, &mut const_vals, func);
 
-        dead_code(func, &mut cfg, &dtree, &start);
+        dead_code(func, &dtree, &start);
 
         for blk in &mut func.blocks {
             for inst in &mut blk.instructions {
@@ -578,13 +572,13 @@ fn ssa_cfg() {
 
     use crate::iloc::{make_basic_blocks, make_blks, parse_text};
 
-    let input = fs::read_to_string("input/bubble.il").unwrap();
+    let input = fs::read_to_string("input/while_array.lvn.dbre.dce.pre.il").unwrap();
     let iloc = parse_text(&input).unwrap();
     let mut blocks = make_basic_blocks(&make_blks(iloc));
 
     let cfg = build_cfg(&mut blocks.functions[0]);
     println!("{:?}", cfg);
-    emit_cfg_viz(&cfg, "graphs/bubble.dot");
+    emit_cfg_viz(&cfg, "graphs/while_array.dot");
 }
 
 #[test]

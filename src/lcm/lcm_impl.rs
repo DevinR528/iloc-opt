@@ -1,18 +1,15 @@
 use std::{
-    collections::{btree_map::Entry, BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt, vec,
 };
 
 use crate::{
-    iloc::{Block, Function, Instruction, Loc, Operand, Reg},
+    iloc::{Block, Function, Instruction, Loc, Reg},
     lcm::find_loops,
-    ssa::{
-        dce::{build_cfg, cleanup},
-        dfs_order, postorder, preorder, reverse_postorder, DominatorTree, OrdLabel,
-    },
+    ssa::{postorder, reverse_postorder, DominatorTree, OrdLabel},
 };
 
-fn print_maps<K: fmt::Debug, V: fmt::Debug>(name: &str, map: &HashMap<K, V>) {
+pub fn print_maps<K: fmt::Debug, V: fmt::Debug>(name: &str, map: impl Iterator<Item = (K, V)>) {
     println!("{} {{", name);
     for (k, v) in map {
         println!("    {:?}: {:?},", k, v);
@@ -35,8 +32,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
 
     let mut use_map: HashMap<_, Vec<_>> = HashMap::new();
     let mut dst_map: HashMap<_, _> = HashMap::new();
-    for (b, blk) in func.blocks.iter().enumerate() {
-        for (i, inst) in blk.instructions.iter().enumerate() {
+    for blk in &func.blocks {
+        for inst in &blk.instructions {
             if let Some(dst) = inst.target_reg() {
                 if dst_map
                     .insert((OrdLabel::from_known(&blk.label.replace(':', "")), *dst), inst.clone())
@@ -55,13 +52,11 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
 
     // print_maps("uses", &use_map);
 
-    let mut universe: HashMap<_, HashSet<Reg>> = HashMap::new();
-
-    // This should be something like
     let mut changed = true;
+
+    let mut universe: HashMap<_, HashSet<Reg>> = HashMap::new();
     let mut dexpr: HashMap<_, HashSet<Reg>> = HashMap::new();
     let mut uexpr: HashMap<_, HashSet<Reg>> = HashMap::new();
-
     let mut transparent: HashMap<_, HashSet<Reg>> = HashMap::new();
     let mut kill: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
     while changed {
@@ -80,7 +75,6 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
 
             let k_loc = kill.entry(label.clone()).or_default();
             for inst in &blk.instructions {
-                let (a, b) = inst.operands();
                 let dst = inst.target_reg();
 
                 if let Some(t) = dst {
@@ -124,9 +118,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     let mut avail_in: HashMap<OrdLabel, HashSet<_>> = HashMap::new();
     while changed {
         changed = false;
-        for (label, blk) in reverse_postorder(&domtree.cfg_succs_map, &start).filter_map(|label| {
-            Some((label, func.blocks.iter().find(|b| b.label.starts_with(label.as_str()))?))
-        }) {
+        for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
             let empty_bset = BTreeSet::new();
             // AVAILABLE-IN (only used to compute `avail_out`)
             // Empty set for anticipated-out exit block
@@ -194,15 +186,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     let mut anti_in: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for (label, blk) in
-            postorder(&domtree.cfg_succs_map, &start).into_iter().filter_map(|label| {
-                #[rustfmt::skip]
-                Some((
-                    label,
-                    func.blocks.iter().find(|b| b.label.starts_with(label.as_str()))?
-                ))
-            })
-        {
+        for label in postorder(&domtree.cfg_succs_map, &start) {
             let empty_bset = BTreeSet::new();
 
             // ANTICIPATED-IN
@@ -266,9 +250,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     let mut earliest: HashMap<(OrdLabel, OrdLabel), HashSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for (succ, blk) in reverse_postorder(&domtree.cfg_succs_map, &start).filter_map(|label| {
-            Some((label, func.blocks.iter().find(|b| b.label.starts_with(label.as_str()))?))
-        }) {
+        for succ in reverse_postorder(&domtree.cfg_succs_map, &start) {
             // Same thing as succ != start
             let Some(preds) = domtree.cfg_preds_map.get(succ) else { continue; };
             for pred in preds {
@@ -317,11 +299,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     let mut later_in: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for (b_label, blk) in
-            reverse_postorder(&domtree.cfg_succs_map, &start).filter_map(|label| {
-                Some((label, func.blocks.iter().find(|b| b.label.starts_with(label.as_str()))?))
-            })
-        {
+        for b_label in reverse_postorder(&domtree.cfg_succs_map, &start) {
             // This is the same as b_label != start
             let Some(preds) = domtree.cfg_preds_map.get(b_label) else { continue; };
 
@@ -375,11 +353,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     let mut delete: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for (b_label, blk) in
-            reverse_postorder(&domtree.cfg_succs_map, &start).filter_map(|label| {
-                Some((label, func.blocks.iter().find(|b| b.label.starts_with(label.as_str()))?))
-            })
-        {
+        for b_label in reverse_postorder(&domtree.cfg_succs_map, &start) {
             // This works as `if b_label == start { both == ∅ }`
             let Some(preds) = domtree.cfg_preds_map.get(b_label) else { continue; };
 
@@ -408,12 +382,12 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    print_maps("insert", &insert);
-    print_maps("delete", &delete);
+    print_maps("insert", insert.iter());
+    print_maps("delete", delete.iter());
     println!();
 
-    let mut loop_analysis = find_loops(func, domtree);
-    print_maps("loops", loop_analysis.loop_map());
+    let loop_analysis = find_loops(func, domtree);
+    print_maps("loops", loop_analysis.loop_map().iter());
 
     let mut deleted = HashSet::new();
     for ((pred, succ), registers) in insert.into_iter().filter(|(_, regs)| !regs.is_empty()) {

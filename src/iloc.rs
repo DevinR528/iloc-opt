@@ -1,14 +1,12 @@
 use std::{
     cmp::Ordering,
-    collections::{BTreeSet, HashMap},
+    collections::BTreeSet,
     fmt,
     hash::{self, Hash},
     mem::discriminant,
     str::FromStr,
     usize,
 };
-
-use crate::ssa::OrdLabel;
 
 #[derive(Clone, Debug)]
 pub enum Val {
@@ -261,15 +259,6 @@ impl Reg {
         }
     }
 
-    /// Convert Phi registers to normal virtual registers.
-    pub fn as_register(&self) -> Reg {
-        if let Reg::Phi(reg, ..) = self {
-            Reg::Var(*reg)
-        } else {
-            *self
-        }
-    }
-
     pub fn as_usize(&self) -> usize {
         if let Reg::Var(curr) = self {
             *curr
@@ -319,6 +308,7 @@ pub enum Instruction {
     Sub { src_a: Reg, src_b: Reg, dst: Reg },
     /// %r * %r => %r `mult`
     Mult { src_a: Reg, src_b: Reg, dst: Reg },
+    #[allow(unused)]
     /// %r / %r => %r `div`
     Div { src_a: Reg, src_b: Reg, dst: Reg },
     /// %r << %r => %r `lshift`
@@ -1315,14 +1305,16 @@ impl Instruction {
             | Instruction::ImmLShift { src, .. }
             | Instruction::ImmRShift { src, .. }
             | Instruction::LoadAddImm { src, .. }
-            | Instruction::FLoadAddImm { src, .. }
-            | Instruction::StoreAddImm { src, .. } => vec![*src],
+            | Instruction::FLoadAddImm { src, .. } => vec![*src],
+
+            Instruction::StoreAddImm { src, dst, .. } => vec![*src, *dst],
+            Instruction::StoreAdd { src, add, dst } => vec![*src, *add, *dst],
 
             // TODO: I think this is correct
             // Instruction::ImmLoad { src, .. } => vec![],
-            Instruction::LoadAdd { src, add, .. }
-            | Instruction::StoreAdd { src, add, .. }
-            | Instruction::FLoadAdd { src, add, .. } => vec![*src, *add],
+            Instruction::LoadAdd { src, add, .. } | Instruction::FLoadAdd { src, add, .. } => {
+                vec![*src, *add]
+            }
 
             Instruction::Store { src, dst } => vec![*src, *dst],
 
@@ -1966,6 +1958,17 @@ impl Instruction {
         )
     }
 
+    /// If the instruction is any `load`.
+    pub fn is_load(&self) -> bool {
+        matches!(
+            self,
+            Self::Load { .. }
+                | Self::LoadAddImm { .. }
+                | Self::LoadAdd { .. }
+                | Self::ImmLoad { .. }
+        )
+    }
+
     pub fn is_call_instruction(&self) -> bool {
         matches!(self, Self::Call { .. } | Self::ImmCall { .. } | Self::ImmRCall { .. })
     }
@@ -2006,57 +2009,6 @@ impl Instruction {
                 | Self::FSub { .. }
                 | Self::FMult { .. }
                 | Self::ImmLoad { src: Val::Integer(..) | Val::Float(..), .. }
-        )
-    }
-
-    pub fn is_pre_expr(&self) -> bool {
-        #[rustfmt::skip]
-        matches!(
-            self,
-            Self::Add { .. }
-                | Self::Sub { .. }
-                | Self::Mult { .. }
-                | Self::LShift { .. }
-                | Self::RShift { .. }
-                | Self::Mod { .. }
-                | Self::And { .. }
-                | Self::Or { .. }
-                | Self::Not { .. }
-                | Self::ImmAdd { .. }
-                | Self::ImmSub { .. }
-                | Self::ImmMult { .. }
-                | Self::ImmLShift { .. }
-                | Self::ImmRShift { .. }
-                | Self::FAdd { .. }
-                | Self::FSub { .. }
-                | Self::FMult { .. }
-                | Self::FDiv { .. }
-                | Self::FComp { .. }
-                // Comparisons
-                | Self::CmpLT { .. }
-                | Self::CmpLE { .. }
-                | Self::CmpGT { .. }
-                | Self::CmpGE { .. }
-                | Self::CmpEQ { .. }
-                | Self::CmpNE { .. }
-                | Self::Comp { .. }
-                | Self::TestEQ { .. }
-                | Self::TestNE { .. }
-                | Self::TestGT { .. }
-                | Self::TestGE { .. }
-                | Self::TestLT { .. }
-                | Self::TestLE { .. }
-                | Self::TestLE { .. }
-                // Loads
-                | Self::ImmLoad { src: Val::Integer(..) | Val::Float(..), .. }
-                | Self::Load { .. }
-                | Self::LoadAddImm { .. }
-                | Self::LoadAdd { .. }
-                // Stores
-                // TODO: is this an expression
-                | Self::Store { .. }
-                | Self::StoreAddImm { .. }
-                | Self::StoreAdd { .. }
         )
     }
 }

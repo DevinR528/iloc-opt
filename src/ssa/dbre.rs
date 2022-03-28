@@ -18,12 +18,6 @@ impl Default for RenameMeta {
     }
 }
 
-fn new_name(reg: &Reg, dst: &mut Option<usize>, meta: &mut HashMap<Operand, RenameMeta>) {
-    let m = meta.get_mut(&Operand::Register(*reg)).unwrap();
-    let i = *m.stack.back().unwrap();
-    m.stack.push_back(i + 1);
-    *dst = Some(i);
-}
 fn rewrite_name(reg: &mut Reg, meta: &RenameMeta) {
     // `unwrap_or_default` is ok here since we want a zero if the stack
     // is empty
@@ -53,9 +47,9 @@ pub fn dom_val_num(
     let rng = phi_range(&blks[blk_idx].instructions);
     // The phi instructions must be filled in before their expressions are saved
     for phi in &mut blks[blk_idx].instructions[rng.clone()] {
-        // Only when we are actually in the block that contains the phi do we set the subscript for
-        // that phi
         if let Instruction::Phi(r, set, dst) = phi {
+            // Only when we are actually in the block that contains the phi do we
+            // set the subscript for that phi
             let m = meta.entry(Operand::Register(*r)).or_default();
             if let Some(i) = m.stack.back() {
                 let new_val = *i + 1;
@@ -135,12 +129,12 @@ pub fn dom_val_num(
             let expr = (a.clone(), b.clone(), op.inst_name().to_string());
             // TODO: if expr can be simplified to expr' then replace assign with `x <- expr'`
 
-            if let Some(prev_reg) = expr_tree.iter().find_map(|map| map.get(&expr)) {
+            if let Some(_prev_reg) = expr_tree.iter().find_map(|map| map.get(&expr)) {
                 if !op.is_tmp_expr() || op.is_call_instruction() || ssa {
                     continue;
                 }
 
-                if let Some(dst) = op.target_reg() {
+                if let Some(_dst) = op.target_reg() {
                     // if dst == prev_reg {
                     *op = Instruction::Skip(format!("[ssadbre] {op}"));
                     // } else {
@@ -148,7 +142,7 @@ pub fn dom_val_num(
                     // }
                 }
             } else if let Some(dst) = op.target_reg_mut() {
-                //
+                // When we see a new definition of a register we increment it's phi value
                 let m = meta.entry(Operand::Register(*dst)).or_default();
                 if let Some(i) = m.stack.back() {
                     let new_val = *i + 1;
@@ -169,10 +163,13 @@ pub fn dom_val_num(
         // TODO: make block -> index map
         let idx = blks.iter().position(|b| b.label.starts_with(blk.as_str())).unwrap();
         let rng = phi_range(&blks[idx].instructions);
-        let lab = blks[idx].label.clone();
 
         for phi in &mut blks[idx].instructions[rng] {
-            if let Instruction::Phi(r, set, dst) = phi {
+            if let Instruction::Phi(r, set, _dst) = phi {
+                // When looking forward into successor blocks we transfer the current phi
+                // number since we know this is the correct number to cross the block
+                //
+                // We are adding the number to the set of incoming subscripts that makes up the phi
                 let m = meta.entry(Operand::Register(*r)).or_default();
                 if let Some(&i) = m.stack.back() {
                     set.insert(i);
