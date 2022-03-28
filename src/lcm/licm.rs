@@ -52,6 +52,27 @@ impl LoopAnalysis {
             }
         }
     }
+
+    pub fn level_of_nesting(&self, child: &OrdLabel) -> u32 {
+        let mut child = child.as_str();
+        let mut count = 0;
+        loop {
+            match self.loop_map.get(child) {
+                Some(LoopInfo::Loop { parent: Some(lp), .. }) => {
+                    count += 1;
+                    child = lp;
+                }
+                Some(LoopInfo::Loop { parent: None, .. }) => {
+                    count += 1;
+                    return count;
+                }
+                Some(LoopInfo::PartOf(lp)) => {
+                    child = lp;
+                }
+                _ => return count,
+            }
+        }
+    }
 }
 
 pub fn find_loops(func: &mut Function, domtree: &DominatorTree) -> LoopAnalysis {
