@@ -233,6 +233,7 @@ pub fn build_ranges(
                 es.insert(ColoredReg::Colored(r, curr_color));
             }
             graph.insert(r, ColorNode { color: curr_color, edges });
+            curr_color += 1;
         }
     }
 
@@ -268,8 +269,8 @@ impl ColoredReg {
 impl fmt::Debug for ColoredReg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Uncolored(r) => write!(f, "{}", r),
-            Self::Colored(r, color) => write!(f, "({}, {})", r, color.0),
+            Self::Uncolored(r) => write!(f, "{:?}", r),
+            Self::Colored(r, color) => write!(f, "({:?}, {})", r, color.0),
         }
     }
 }
