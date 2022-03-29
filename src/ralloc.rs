@@ -22,7 +22,8 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
 
         let loop_map = find_loops(func, &dtree);
         // TODO: safe to move instructions around here for better live ranges??
-        let ranges = live::build_ranges(&func.blocks, &dtree, &start, &loop_map);
+        let ranges =
+            live::build_ranges(&func.blocks, &dtree, cfg.exits.first().unwrap(), &start, &loop_map);
     }
 
     let mut buf = String::new();
@@ -41,7 +42,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
         crate::SSA = x;
     }
 
-    let mut path = std::path::PathBuf::from("./input/fib.il");
+    let mut path = std::path::PathBuf::from("./input/ralloc.il");
     let file = path.file_stem().unwrap().to_string_lossy().to_string();
     path.set_file_name(&format!("{}.pre.ssa.il", file));
     let mut fd =

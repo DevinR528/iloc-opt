@@ -7,7 +7,7 @@ use std::{
 use crate::{
     iloc::{Block, Function, Instruction, Operand, Reg},
     lcm::{print_maps, LoopAnalysis},
-    ssa::{reverse_postorder, DominatorTree, OrdLabel},
+    ssa::{postorder, reverse_postorder, DominatorTree, OrdLabel},
 };
 
 pub const K_DEGREE: usize = 4;
@@ -38,8 +38,8 @@ impl RegisterRange {
 fn find_cheap_spill(
     graph: &mut VecDeque<(Reg, BTreeSet<Reg>)>,
     blocks: &[Block],
-    defs: &BTreeMap<Reg, (usize, usize, usize)>,
-    uses: &BTreeMap<Reg, Vec<(&OrdLabel, usize, usize, usize)>>,
+    defs: &BTreeMap<Reg, (usize, usize)>,
+    uses: &BTreeMap<Reg, Vec<(&OrdLabel, usize, usize)>>,
     loop_map: &LoopAnalysis,
 ) -> (Reg, BTreeSet<Reg>) {
     let mut best = 10000000000_isize;
@@ -47,13 +47,13 @@ fn find_cheap_spill(
 
     for (idx, (r, set)) in graph.iter().enumerate() {
         let degree = set.len() as isize;
-        let (_, def_b, def_i) = defs.get(r).unwrap();
+        let (def_b, def_i) = defs.get(r).unwrap();
         let def = &blocks[*def_b].instructions[*def_i];
         let r_uses = uses
             .get(r)
             .unwrap()
             .iter()
-            .map(|(_, _, b, i)| &blocks[*b].instructions[*i])
+            .map(|(_, b, i)| &blocks[*b].instructions[*i])
             .collect::<Vec<_>>();
 
         let cost: isize = if def.is_load() && r_uses.iter().all(|i| i.is_store()) {
@@ -63,7 +63,7 @@ fn find_cheap_spill(
                 .get(r)
                 .unwrap()
                 .iter()
-                .map(|(l, _, _, _)| 10_usize.pow(loop_map.level_of_nesting(l)))
+                .map(|(l, _, _)| 10_usize.pow(loop_map.level_of_nesting(l)))
                 .sum();
 
             // TODO: this already is set.len() * loop_cost since we sum 10^nesting and get at least
@@ -85,24 +85,55 @@ fn find_cheap_spill(
 pub fn build_ranges(
     blocks: &[Block],
     domtree: &DominatorTree,
+    exit: &OrdLabel,
     start: &OrdLabel,
     loop_map: &LoopAnalysis,
 ) {
-    let mut range_count = 0;
     let mut phis: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     let mut use_map: BTreeMap<_, Vec<_>> = BTreeMap::new();
     let mut def_map: BTreeMap<_, _> = BTreeMap::new();
     for (b, (label, blk)) in reverse_postorder(&domtree.cfg_succs_map, start)
         .filter_map(|label| {
-            #[rustfmt::skip]
-        Some((
-            label,
-            blocks.iter().find(|b| b.label.starts_with(label.as_str()))?
-        ))
+            Some((label, blocks.iter().find(|b| b.label.starts_with(label.as_str()))?))
         })
         .enumerate()
     {
         for (i, inst) in blk.instructions.iter().enumerate() {
+            if matches!(inst, Instruction::Skip(..)) {
+                continue;
+            }
+            if let Instruction::Phi(reg, set, subs) = inst {
+                let subs = subs.unwrap();
+                let mut phi = *reg;
+                phi.as_phi(subs);
+                if def_map.insert(phi, (b, i)).is_some() {
+                    panic!("Should not be overlaping register names {} {:?}", blk.label, inst)
+                }
+                let cur_phi = phis.entry(reg).or_default();
+                *cur_phi = cur_phi.union(set).cloned().collect();
+            } else if let Some(dst) = inst.target_reg() {
+                if def_map.insert(*dst, (b, i)).is_some() {
+                    panic!("Should not be overlaping register names {} {:?}", blk.label, inst)
+                }
+            }
+            for operand in inst.operand_iter() {
+                use_map.entry(operand).or_default().push((label, b, i));
+            }
+        }
+    }
+
+    fn build_interference(
+        blocks: &[Block],
+        predecessors: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
+        curr: &OrdLabel,
+        graph: &mut HashMap<Reg, BTreeSet<Reg>>,
+        mut live_from_succ: BTreeSet<Reg>,
+        seen: &mut BTreeSet<OrdLabel>,
+    ) {
+        println!("{}", curr.as_str());
+        seen.insert(curr.clone());
+        let blk_idx = blocks.iter().position(|b| b.label.starts_with(curr.as_str())).unwrap();
+        for inst in blocks[blk_idx].instructions.iter().rev() {
             if matches!(inst, Instruction::Skip(..)) {
                 continue;
             }
@@ -111,79 +142,54 @@ pub fn build_ranges(
                 let subs = subs.unwrap();
                 let mut phi = *reg;
                 phi.as_phi(subs);
-                if def_map.insert(phi, (range_count, b, i)).is_some() {
-                    panic!("Should not be overlaping register names {} {:?}", blk.label, inst)
-                }
+                live_from_succ.remove(&phi);
 
-                let cur_phi = phis.entry(reg).or_default();
-                *cur_phi = cur_phi.union(set).cloned().collect();
-                // for s in set.iter().filter(|s| **s != subs) {
-                //     let mut p = *reg;
-                //     p.as_phi(*s);
-                //     use_map.entry(p).or_default().push((label, range_count, b, i));
-                // }
+                for s in set.iter().filter(|s| **s != subs) {
+                    let mut p = *reg;
+                    p.as_phi(*s);
+                    live_from_succ.insert(p);
+                }
             } else if let Some(dst) = inst.target_reg() {
-                if def_map.insert(*dst, (range_count, b, i)).is_some() {
-                    panic!("Should not be overlaping register names {} {:?}", blk.label, inst)
-                }
+                live_from_succ.remove(dst);
             }
-
             for operand in inst.operand_iter() {
-                use_map.entry(operand).or_default().push((label, range_count, b, i));
+                live_from_succ.insert(operand);
             }
-
-            range_count += 1;
+            for operand in inst.operand_iter() {
+                let interfere = graph.entry(operand).or_default();
+                live_from_succ.remove(&operand);
+                *interfere = interfere.union(&live_from_succ).cloned().collect();
+                live_from_succ.insert(operand);
+            }
         }
-    }
 
-    print_maps("use", use_map.iter());
-    print_maps("def", def_map.iter());
-    print_maps("phis", phis.iter());
-    println!();
-
-    let mut live_ranges: BTreeMap<_, _> = BTreeMap::new();
-    for (def, (rng_start, d_b, d_i)) in &def_map {
-        for (u_label, use_rng, u_b, u_i) in use_map.get(def).unwrap_or(&vec![]) {
-            live_ranges
-                .entry(def)
-                .or_insert_with(|| RegisterRange::new(*def, *rng_start))
-                .add_range(*use_rng, *u_b, *u_i);
-        }
-    }
-    let mut sort = live_ranges.iter().collect::<Vec<_>>();
-    sort.sort_by(|a, b| a.1.range.start.cmp(&b.1.range.start));
-
-    print_maps("ranges", sort.iter().cloned());
-    println!();
-
-    let mut sorted = live_ranges.values().collect::<Vec<_>>();
-    sorted.sort_by(|a, b| a.range.start.cmp(&b.range.start));
-
-    // Build the interference graph
-    let mut interference: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
-    let mut intrf_counts: BTreeMap<_, usize> = BTreeMap::new();
-    for (idx, reg) in sorted.iter().enumerate() {
-        for (i, reg_b) in sorted.iter().enumerate() {
-            // No need to interfere with ourselves
-            if idx == i {
+        let empty = BTreeSet::new();
+        let preds = predecessors.get(curr).unwrap_or(&empty);
+        if preds.len() == 1 {}
+        for pred in preds {
+            if pred == curr || seen.contains(pred) {
                 continue;
             }
-
-            if reg_b.range.contains(&reg.range.start)
-                || reg_b.range.contains(&reg.range.end)
-                // Now the other way round, since `3..6` interferes with `4..6`
-                || reg.range.contains(&reg_b.range.start)
-                || reg.range.contains(&reg_b.range.end)
-            {
-                interference.entry(reg.reg).or_default().insert(reg_b.reg);
-                (*intrf_counts.entry(reg_b.reg).or_default()) += 1;
-            }
+            build_interference(blocks, predecessors, pred, graph, live_from_succ.clone(), seen);
         }
     }
 
-    print_maps("counts", intrf_counts.iter());
+    // let mut phis: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
+    let mut interference: HashMap<_, BTreeSet<_>> = HashMap::new();
+    let mut seen: BTreeSet<_> = BTreeSet::new();
+
+    build_interference(
+        blocks,
+        &domtree.cfg_preds_map,
+        exit,
+        &mut interference,
+        BTreeSet::new(),
+        &mut seen,
+    );
+
     print_maps("interference", interference.iter());
     println!();
+    return;
 
     let mut spill: VecDeque<(_, BTreeSet<ColoredReg>)> = VecDeque::new();
     let mut graph_degree = interference.into_iter().collect::<Vec<_>>();
@@ -228,7 +234,7 @@ pub fn build_ranges(
             graph.insert(r, ColorNode { color: curr_color, edges });
         } else {
             for e in &edges {
-                let es = &mut graph.get_mut(e.as_reg()).unwrap().edges;
+                let Some(es) = graph.get_mut(e.as_reg()).map(|n| &mut n.edges) else { continue; };
                 es.remove(&ColoredReg::Uncolored(r));
                 es.insert(ColoredReg::Colored(r, curr_color));
             }
