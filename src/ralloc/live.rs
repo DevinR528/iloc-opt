@@ -122,72 +122,156 @@ pub fn build_ranges(
         }
     }
 
-    fn build_interference(
-        blocks: &[Block],
-        predecessors: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
-        curr: &OrdLabel,
-        graph: &mut HashMap<Reg, BTreeSet<Reg>>,
-        mut live_from_succ: BTreeSet<Reg>,
-        seen: &mut BTreeSet<OrdLabel>,
-    ) {
+    let mut changed = true;
+
+    let mut phi_defs: HashMap<_, HashSet<Reg>> = HashMap::new();
+    let mut phi_uses: HashMap<_, HashSet<Reg>> = HashMap::new();
+
+    let mut defs: HashMap<_, HashSet<Reg>> = HashMap::new();
+
+    let mut uexpr: HashMap<_, HashSet<Reg>> = HashMap::new();
+    while changed {
+        changed = false;
+        for (label, blk) in reverse_postorder(&domtree.cfg_succs_map, start).filter_map(|label| {
+            Some((label, blocks.iter().find(|b| b.label.starts_with(label.as_str()))?))
+        }) {
+            let uloc = uexpr.entry(label.clone()).or_default();
+
+            let def_loc = defs.entry(label.clone()).or_default();
+
+            let phi_def_loc = phi_defs.entry(label.clone()).or_default();
+            let phi_use_loc = phi_uses.entry(label.clone()).or_default();
+
+            for inst in &blk.instructions {
+                if let Instruction::Phi(r, set, subs) = inst {
+                    let subs = subs.unwrap();
+                    let mut phi = *r;
+                    phi.as_phi(subs);
+                    phi_def_loc.insert(phi);
+
+                    for s in set.iter().filter(|s| **s != subs) {
+                        let mut phi = *r;
+                        phi.as_phi(*s);
+                        phi_use_loc.insert(phi);
+                    }
+                }
+
+                if let Some(t) = inst.target_reg() {
+                    def_loc.insert(*t);
+                }
+                for op in inst.operand_iter() {
+                    if !def_loc.contains(&op) {
+                        changed |= uloc.insert(op);
+                    }
+                }
+            }
+        }
+    }
+
+    print_maps("uexpr", uexpr.iter());
+    println!();
+
+    changed = true;
+    let empty = HashSet::new();
+    let mut live_out: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
+    let mut live_in: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
+    while changed {
+        changed = false;
+        for label in postorder(&domtree.cfg_succs_map, start) {
+            let empty_bset = BTreeSet::new();
+
+            // LIVE-IN
+            // PhiDef(b) ∪ UpExpr(b) ∪ (LiveOut(b) - Defs(b))
+            let old = live_in.entry(label.clone()).or_default();
+            let new = phi_defs
+                .get(label)
+                .unwrap_or(&empty)
+                .union(
+                    &uexpr
+                        .get(label)
+                        .unwrap_or(&empty)
+                        .union(
+                            &live_out
+                                .get(label)
+                                .unwrap_or(&empty)
+                                .difference(defs.get(label).unwrap_or(&empty))
+                                .cloned()
+                                .collect(),
+                        )
+                        .cloned()
+                        .collect(),
+                )
+                .cloned()
+                .collect();
+
+            if *old != new {
+                *old = new;
+                changed |= true;
+            }
+
+            // LIVE-OUT
+            // Empty set for live-out exit block
+            if label == exit {
+                live_out.insert(label.clone(), HashSet::new());
+            } else {
+                // live-out is
+                // (∪ ∀s {s: succs b} LiveIn(s) - PhiDefs(s)) ∪ PhiUse(b)
+                let mut new = domtree
+                    .cfg_succs_map
+                    .get(label) // TODO: filter exit node out
+                    .unwrap_or(&empty_bset)
+                    .iter()
+                    .map(|l| {
+                        live_in
+                            .get(l)
+                            .unwrap_or(&empty)
+                            .difference(phi_defs.get(l).unwrap_or(&empty))
+                            .cloned()
+                            .collect::<HashSet<_>>()
+                    })
+                    .fold(HashSet::new(), |collect, next| collect.union(&next).cloned().collect())
+                    .union(phi_uses.get(label).unwrap_or(&empty))
+                    .cloned()
+                    .collect();
+
+                let old = live_out.entry(label.clone()).or_default();
+                if *old != new {
+                    *old = new;
+                    changed |= true;
+                }
+            }
+        }
+    }
+
+    print_maps("live_in", live_in.iter());
+    print_maps("live_out", live_out.iter());
+    println!();
+
+    // let mut phis: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
+    let mut interference: HashMap<_, BTreeSet<_>> = HashMap::new();
+    for curr in postorder(&domtree.cfg_succs_map, start) {
         println!("{}", curr.as_str());
-        seen.insert(curr.clone());
+        let livenow = live_out.get_mut(curr).unwrap();
         let blk_idx = blocks.iter().position(|b| b.label.starts_with(curr.as_str())).unwrap();
         for inst in blocks[blk_idx].instructions.iter().rev() {
             if matches!(inst, Instruction::Skip(..)) {
                 continue;
             }
 
-            if let Instruction::Phi(reg, set, subs) = inst {
-                let subs = subs.unwrap();
-                let mut phi = *reg;
-                phi.as_phi(subs);
-                live_from_succ.remove(&phi);
-
-                for s in set.iter().filter(|s| **s != subs) {
-                    let mut p = *reg;
-                    p.as_phi(*s);
-                    live_from_succ.insert(p);
+            if let Some(dst) = inst.target_reg() {
+                for reg in &*livenow {
+                    interference.entry(*dst).or_default().insert(*reg);
+                    interference.entry(*reg).or_default().insert(*dst);
                 }
-            } else if let Some(dst) = inst.target_reg() {
-                live_from_succ.remove(dst);
+                livenow.remove(dst);
             }
             for operand in inst.operand_iter() {
-                live_from_succ.insert(operand);
+                livenow.insert(operand);
             }
-            for operand in inst.operand_iter() {
-                let interfere = graph.entry(operand).or_default();
-                live_from_succ.remove(&operand);
-                *interfere = interfere.union(&live_from_succ).cloned().collect();
-                live_from_succ.insert(operand);
-            }
-        }
-
-        let empty = BTreeSet::new();
-        let preds = predecessors.get(curr).unwrap_or(&empty);
-        if preds.len() == 1 {}
-        for pred in preds {
-            if pred == curr || seen.contains(pred) {
-                continue;
-            }
-            build_interference(blocks, predecessors, pred, graph, live_from_succ.clone(), seen);
         }
     }
 
-    // let mut phis: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
-    let mut interference: HashMap<_, BTreeSet<_>> = HashMap::new();
-    let mut seen: BTreeSet<_> = BTreeSet::new();
-
-    build_interference(
-        blocks,
-        &domtree.cfg_preds_map,
-        exit,
-        &mut interference,
-        BTreeSet::new(),
-        &mut seen,
-    );
-
-    print_maps("interference", interference.iter());
+    print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
     println!();
     return;
 
@@ -216,7 +300,7 @@ pub fn build_ranges(
     print_maps("spill", spill.iter().cloned());
     println!();
 
-    let mut curr_color = WrappingInt(K_DEGREE as u8);
+    let mut curr_color = WrappingInt::default();
     // We have nodes to color or we don't and return.
     let Some((reg, node)) = spill.pop_front().map(|(reg, edges)| {
         if edges.is_empty() {
@@ -249,6 +333,11 @@ pub fn build_ranges(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WrappingInt(u8);
+impl Default for WrappingInt {
+    fn default() -> Self {
+        Self(K_DEGREE as u8)
+    }
+}
 impl AddAssign<u8> for WrappingInt {
     fn add_assign(&mut self, rhs: u8) {
         if usize::from(self.0) == K_DEGREE {
