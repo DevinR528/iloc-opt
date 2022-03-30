@@ -57,6 +57,7 @@ pub fn dom_val_num(
                 m.stack.push_back(new_val);
                 set.insert(new_val);
             } else {
+                dst.replace(0);
                 m.stack.push_back(0);
                 set.insert(0);
             }
@@ -66,8 +67,8 @@ pub fn dom_val_num(
 
     // Remove redundant/meaningless phi instructions
     for phi in &mut blks[blk_idx].instructions[rng] {
-        if let Instruction::Phi(r, set, dst) = phi {
-            let phi_reg = Reg::Phi(r.as_usize(), dst.unwrap());
+        if let Instruction::Phi(r, set, Some(dst)) = phi {
+            let phi_reg = Reg::Phi(r.as_usize(), *dst);
             let expr = (Operand::Register(phi_reg), None, "phi".to_string());
             if expr_tree.iter().find_map(|map| map.get(&expr)).is_some() {
                 *phi = Instruction::Skip(format!("[redundant phi] {}", phi));
@@ -78,7 +79,7 @@ pub fn dom_val_num(
                 }
             }
         } else {
-            unreachable!("must be φ(x, y)")
+            // unreachable!("must be φ(x, y)")
         }
     }
 
@@ -135,25 +136,9 @@ pub fn dom_val_num(
             _ => {}
         }
 
-        // This needs to run before we bail out for calls/stores, stuff like that...
-
         if let (Some(a), b) = op.operands() {
-            let expr = (a.clone(), b.clone(), op.inst_name().to_string());
-            // TODO: if expr can be simplified to expr' then replace assign with `x <- expr'`
-
-            if let Some(_prev_reg) = expr_tree.iter().find_map(|map| map.get(&expr)) {
-                if !op.is_tmp_expr() || op.is_call_instruction() || ssa {
-                    continue;
-                }
-
-                if let Some(_dst) = op.target_reg() {
-                    // if dst == prev_reg {
-                    *op = Instruction::Skip(format!("[ssadbre] {op}"));
-                    // } else {
-                    //     op.as_new_move_instruction(*prev_reg, *dst);
-                    // }
-                }
-            } else if let Some(dst) = op.target_reg_mut() {
+            // This needs to run before we bail out for calls/stores, stuff like that...
+            if let Some(dst) = op.target_reg_mut() {
                 // When we see a new definition of a register we increment it's phi value
                 let m = meta.entry(Operand::Register(*dst)).or_default();
                 if let Some(i) = m.stack.back() {
@@ -164,6 +149,26 @@ pub fn dom_val_num(
                     m.stack.push_back(0);
                     dst.as_phi(0);
                 }
+            }
+
+            let expr = (a.clone(), b.clone(), op.inst_name().to_string());
+            // TODO: if expr can be simplified to expr' then replace assign with `x <- expr'`
+            if let Some(prev_reg) = expr_tree.iter().find_map(|map| map.get(&expr)) {
+                if !op.is_tmp_expr() || op.is_call_instruction() || ssa {
+                    continue;
+                }
+
+                println!("{:?} {:?}", expr, prev_reg);
+
+                if let Some(dst) = op.target_reg() {
+                    if dst == prev_reg {
+                        *op = Instruction::Skip(format!("[ssadbre] {op}"));
+                    } else {
+                        op.as_new_move_instruction(*prev_reg, *dst);
+                    }
+                }
+            } else if let Some(dst) = op.target_reg() && op.is_tmp_expr() {
+                expr_tree.back_mut().unwrap().insert(expr, *dst);
             }
         }
     }
@@ -186,8 +191,8 @@ pub fn dom_val_num(
                 if let Some(&i) = m.stack.back() {
                     set.insert(i);
                 } else {
-                    m.stack.push_back(0);
-                    set.insert(0);
+                    // m.stack.push_back(0);
+                    // set.insert(0);
                 }
             }
         }
