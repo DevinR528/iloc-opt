@@ -438,7 +438,7 @@ fn compress_load_stores(instructions: &mut [Instruction], special: &HashSet<Reg>
             _ => continue,
         };
 
-        instructions[idx] = Instruction::Skip(format!("[lvn l/s] {}", instructions[idx]));
+        // instructions[idx] = Instruction::Skip(format!("[lvn l/s] {}", instructions[idx]));
         instructions[idx + 1] = new_instruction;
         modified = true;
     }

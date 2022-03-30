@@ -105,13 +105,25 @@ pub fn dom_val_num(
 
         // Rename registers that don't fit neatly into the operands category
         match op {
-            Instruction::Call { args, .. }
-            | Instruction::Frame { params: args, .. }
-            | Instruction::ImmCall { args, .. }
-            | Instruction::ImmRCall { args, .. } => {
+            Instruction::Call { args, .. } | Instruction::Frame { params: args, .. } => {
                 for arg in args {
                     let m = meta.entry(Operand::Register(*arg)).or_default();
                     rewrite_name(arg, m);
+                }
+            }
+            Instruction::ImmCall { args, ret, .. } | Instruction::ImmRCall { args, ret, .. } => {
+                for arg in args {
+                    let m = meta.entry(Operand::Register(*arg)).or_default();
+                    rewrite_name(arg, m);
+                }
+                let m = meta.entry(Operand::Register(*ret)).or_default();
+                if let Some(i) = m.stack.back() {
+                    let new_val = *i + 1;
+                    m.stack.push_back(new_val);
+                    ret.as_phi(new_val);
+                } else {
+                    m.stack.push_back(0);
+                    ret.as_phi(0);
                 }
             }
             Instruction::Store { dst, .. }

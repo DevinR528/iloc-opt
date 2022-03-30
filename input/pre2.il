@@ -1,7 +1,7 @@
 .data
     .string .str_const_0, "howdy"
 .text
-.frame main, 12
+.frame main, 16
     loadI 0 => %vr1
     i2i %vr1 => %vr2
     loadI 0 => %vr1
@@ -19,15 +19,20 @@
     testle %vr10 => %vr11
     cbr %vr11 -> .L0
     load %vr6 => %vr9
-    add %vr9, %vr8 => %vr12
-    i2i %vr12 => %vr2
+    load %vr6 => %vr9
+    add %vr9, %vr9 => %vr12
+    i2i %vr12 => %vr13
+    load %vr6 => %vr9
+    add %vr9, %vr8 => %vr14
+    i2i %vr14 => %vr2
+    iwrite %vr13
     jumpI -> .L1
 .L0: nop
     load %vr6 => %vr9
-    add %vr9, %vr8 => %vr12
-    i2i %vr12 => %vr2
-    loadI .str_const_0 => %vr13
-    swrite %vr13
+    add %vr9, %vr8 => %vr14
+    i2i %vr14 => %vr2
+    loadI .str_const_0 => %vr15
+    swrite %vr15
 .L1: nop
     iwrite %vr2
     ret
