@@ -10,6 +10,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
     let mut special = HashSet::new();
     let mut expr_map: HashMap<_, Reg> = HashMap::new();
     let mut const_map: HashMap<Operand, Val> = HashMap::new();
+    let mut back_const_map: HashMap<Val, Operand> = HashMap::new();
 
     let mut new_instr = blk.instructions.clone();
     for (idx, expr) in blk.instructions.iter().enumerate() {
@@ -32,10 +33,9 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                             transformed_block = true;
                             new_instr[idx] = folded;
 
-                            const_map.insert(
-                                Operand::Register(*dst),
-                                new_instr[idx].operands().0.unwrap().clone_to_value(),
-                            );
+                            let val = new_instr[idx].operands().0.unwrap().clone_to_value();
+                            const_map.insert(Operand::Register(*dst), val.clone());
+                            back_const_map.entry(val).or_insert(Operand::Register(*dst));
 
                             continue;
                         }
@@ -101,6 +101,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                 // Keep track of all registers that are constants
                 if new_instr[idx].is_load_imm() {
                     const_map.insert(Operand::Register(*dst), a.clone_to_value());
+                    back_const_map.entry(a.clone_to_value()).or_insert(Operand::Register(*dst));
                 }
 
                 // Have we seen this before in this block
@@ -116,7 +117,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                             continue;
                         }
 
-                        special.insert(*value);
+                        special.insert(*dst);
                         // modify instruction with a move
                         new_instr[idx] = expr.as_new_move_instruction(*value, *dst);
                     }
@@ -135,9 +136,22 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
             // This is basically a move/copy
             (Some(src), None, Some(dst)) => {
                 // TODO: this may do nothing..
-                if let Some(val) = const_map.get(&src) {
-                    if let Some(folded) = expr.fold_two_address(val) {
+                if let Some(val) = const_map.get(&src).cloned() {
+                    const_map.insert(Operand::Register(*dst), val.clone());
+                    back_const_map.entry(val.clone()).or_insert(Operand::Register(*dst));
+
+                    if let Some(folded) = expr.fold_two_address(val.clone()) {
                         new_instr[idx] = folded;
+                    } else {
+                        match (expr, back_const_map.get(&val)) {
+                            (Instruction::I2I { src, dst }, Some(Operand::Register(prev)))
+                                if src != prev =>
+                            {
+                                new_instr[idx] = Instruction::I2I { src: *prev, dst: *dst };
+                                continue;
+                            }
+                            _ => {}
+                        }
                     }
                 }
 
@@ -147,6 +161,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                 // Keep track of all registers that are constants
                 if new_instr[idx].is_load_imm() {
                     const_map.insert(Operand::Register(*dst), a.clone_to_value());
+                    back_const_map.entry(a.clone_to_value()).or_insert(Operand::Register(*dst));
                 }
 
                 match expr_map.get(&(a.clone(), b.clone(), new_instr[idx].inst_name())) {
@@ -161,9 +176,11 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                             continue;
                         }
 
+                        // if !new_instr[idx].is_load_imm() {
                         special.insert(*dst);
                         // modify instruction with a move
                         new_instr[idx] = expr.as_new_move_instruction(*value, *dst);
+                        // }
                     }
                     _ => {}
                 }
@@ -401,7 +418,6 @@ fn is_cond_branch(idx: usize, insts: &[Instruction]) -> bool {
 }
 
 fn compress_load_stores(instructions: &mut [Instruction], special: &HashSet<Reg>) -> bool {
-    // panic!("{:?}", special);
     let mut modified = false;
     // We subtract 2 since we are using windows of 3 instructions to test for comparisons
     let len = instructions.len().saturating_sub(2);
