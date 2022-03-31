@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::{
     iloc::{Function, Instruction, Loc, Val},
-    ssa::{postorder, DominatorTree},
+    ssa::{postorder, reverse_postorder, DominatorTree},
     OrdLabel,
 };
 
@@ -178,15 +178,12 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
         func.blocks[b].instructions[i] = inst;
     }
 
-    cleanup(func, &domtree.cfg_succs_map, start);
+    cleanup(func, start);
 }
 
-pub fn cleanup(
-    func: &mut Function,
-    domtree: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
-    start: &OrdLabel,
-) {
-    let mut cfg_map = domtree.clone();
+pub fn cleanup(func: &mut Function, start: &OrdLabel) {
+    let mut cfg_map = build_stripped_cfg(func);
+
     let mut to_jump = vec![];
     let mut changed = true;
     while changed {
@@ -247,8 +244,17 @@ pub fn cleanup(
             }
         }
 
+        let all: HashSet<_> = func.blocks.iter().map(|b| OrdLabel::new(&b.label)).collect();
+        let used: HashSet<_> = reverse_postorder(&cfg_map, start).cloned().collect();
+        for unused in all.difference(&used) {
+            changed = true;
+            let pos =
+                func.blocks.iter().position(|b| b.label.starts_with(unused.as_str())).unwrap();
+            func.blocks.remove(pos);
+        }
+
         if changed {
-            cfg_map = build_cfg(func);
+            cfg_map = build_stripped_cfg(func);
             // for (i, l) in func.blocks.iter().map(|b| b.label.replace(':', "")).enumerate() {
             //     *func.block_map.get_mut(&l).unwrap() = i;
             // }
@@ -256,38 +262,79 @@ pub fn cleanup(
     }
 }
 
-pub fn build_cfg(func: &Function) -> HashMap<OrdLabel, BTreeSet<OrdLabel>> {
+pub fn build_stripped_cfg(func: &Function) -> HashMap<OrdLabel, BTreeSet<OrdLabel>> {
     let mut cfg: HashMap<_, BTreeSet<_>> = HashMap::default();
-    'block: for (idx, block) in func.blocks.iter().enumerate() {
+
+    let mut blocks = func.blocks.iter().enumerate().next().into_iter().collect::<VecDeque<_>>();
+    'blk: while let Some((idx, block)) = blocks.pop_front() {
+        let mut extend_blocks = vec![];
         let b_label = block.label.replace(':', "");
-        // TODO: only iter the branch instructions with labels
         for inst in &block.instructions {
-            // TODO: can we make note of this for optimization...(if there are trailing
-            // unreachable instructions)
             if inst.is_return() {
-                continue 'block;
+                continue 'blk;
             }
 
             if let Some(label) = inst.uses_label() {
-                cfg.entry(OrdLabel::from_known(&b_label))
+                let pos = func.blocks.iter().position(|b| b.label.starts_with(label)).unwrap();
+
+                let unseen = cfg
+                    .entry(OrdLabel::from_known(&b_label))
                     .or_default()
                     .insert(OrdLabel::from_known(label));
                 // Skip the implicit branch to the block below the current one
                 // since we found an unconditional jump.
                 if inst.unconditional_jmp() {
-                    continue 'block;
+                    if unseen {
+                        blocks.push_back((pos, &func.blocks[pos]));
+                    }
+                    continue 'blk;
+                } else if unseen {
+                    extend_blocks.push((pos, &func.blocks[pos]));
                 }
             }
         }
 
         if let Some(next) = func.blocks.get(idx + 1) {
             let next_label = next.label.replace(':', "");
-
             cfg.entry(OrdLabel::from_known(&b_label))
                 .or_default()
                 .insert(OrdLabel::from_known(&next_label));
+            extend_blocks.push((idx + 1, next));
+            extend_blocks.reverse();
+            blocks.extend(extend_blocks);
         }
     }
+
+    // 'block: for (idx, block) in func.blocks.iter().enumerate() {
+    //     let b_label = block.label.replace(':', "");
+    //     // TODO: only iter the branch instructions with labels
+    //     for inst in &block.instructions {
+    //         // TODO: can we make note of this for optimization...(if there are trailing
+    //         // unreachable instructions)
+    //         if inst.is_return() {
+    //             continue 'block;
+    //         }
+
+    //         if let Some(label) = inst.uses_label() {
+    //             cfg.entry(OrdLabel::from_known(&b_label))
+    //                 .or_default()
+    //                 .insert(OrdLabel::from_known(label));
+    //             // Skip the implicit branch to the block below the current one
+    //             // since we found an unconditional jump.
+    //             if inst.unconditional_jmp() {
+    //                 continue 'block;
+    //             }
+    //         }
+    //     }
+
+    //     if let Some(next) = func.blocks.get(idx + 1) {
+    //         let next_label = next.label.replace(':', "");
+
+    //         cfg.entry(OrdLabel::from_known(&b_label))
+    //             .or_default()
+    //             .insert(OrdLabel::from_known(&next_label));
+    //     }
+    // }
     cfg
 }
 
