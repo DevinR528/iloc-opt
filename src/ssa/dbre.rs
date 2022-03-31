@@ -26,11 +26,19 @@ fn rewrite_name(reg: &mut Reg, meta: &RenameMeta) {
 }
 fn phi_range(insts: &[Instruction]) -> Range<usize> {
     let start = match insts {
-        [Instruction::Frame { .. }, Instruction::Label(..), Instruction::Phi(..), ..] => 2,
-        [Instruction::Label(..), Instruction::Phi(..), ..] => 1,
+        [Instruction::Frame { .. }, Instruction::Label(..), Instruction::Phi(..) | Instruction::Skip(..), ..] => {
+            2
+        }
+        [Instruction::Label(..), Instruction::Phi(..) | Instruction::Skip(..), ..] => 1,
         _ => return 0..0,
     };
-    start..(start + insts.iter().skip(start).take_while(|i| i.is_phi()).count())
+    start
+        ..(start
+            + insts
+                .iter()
+                .skip(start)
+                .take_while(|i| i.is_phi() || matches!(i, Instruction::Skip(..)))
+                .count())
 }
 
 pub type ScopedExprTree = VecDeque<HashMap<(Operand, Option<Operand>, String), Reg>>;
