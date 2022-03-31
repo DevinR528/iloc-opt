@@ -148,24 +148,18 @@ fn eval_instruction(
             // TODO: this may do nothing..
             match val {
                 ValueKind::Known(a) => {
-                    Some((ValueKind::Known(a.clone()), expr.fold_two_address(a)?))
+                    Some((ValueKind::Known(a.clone()), expr.fold_two_address(a.clone())?))
                 }
-                _ => {
-                    println!("{:?} {:?}", expr, val);
-                    None
-                }
+                _ => None,
             }
         }
         (None, Some(val), Some(_)) => {
             // TODO: this may do nothing..
             match val {
                 ValueKind::Known(a) => {
-                    Some((ValueKind::Known(a.clone()), expr.fold_two_address(a)?))
+                    Some((ValueKind::Known(a.clone()), expr.fold_two_address(a.clone())?))
                 }
-                _ => {
-                    println!("{:?} {:?}", expr, val);
-                    None
-                }
+                _ => None,
             }
         }
         // Jumps, rets, push, and I/O instructions
@@ -187,6 +181,7 @@ pub enum ValueKind {
     /// ⊥ = unknowable, because a const register has been reassigned.
     Unknowable,
 }
+
 #[derive(Debug, Default)]
 pub struct ConstMap {
     /// Register to a set of block index, instruction index.

@@ -50,7 +50,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("uses", &use_map);
+    // print_maps("uses", use_map.iter());
 
     let mut changed = true;
 
@@ -101,11 +101,11 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("universe", &universe);
-    // print_maps("dexpr", &dexpr);
-    // print_maps("uexpr", &uexpr);
-    // print_maps("trans", &transparent);
-    // print_maps("kill", &kill);
+    // print_maps("universe", universe.iter());
+    // print_maps("dexpr", dexpr.iter());
+    // print_maps("uexpr", uexpr.iter());
+    // print_maps("trans", transparent.iter());
+    // print_maps("kill", kill.iter());
     // println!();
 
     let empty = HashSet::new();
@@ -171,8 +171,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("avail_in", &avail_in);
-    // print_maps("avail_out", &avail_out);
+    // print_maps("avail_in", avail_in.iter());
+    // print_maps("avail_out", avail_out.iter());
     // println!();
 
     changed = true;
@@ -238,8 +238,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("ant_in", &anti_in);
-    // print_maps("ant_out", &anti_out);
+    // print_maps("ant_in", anti_in.iter());
+    // print_maps("ant_out", anti_out.iter());
     // println!();
 
     // EARLIEST
@@ -343,8 +343,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("later_in", &later_in);
-    // print_maps("later", &later);
+    // print_maps("later_in", later_in.iter());
+    // print_maps("later", later.iter());
     // println!();
 
     // INSERT and DELETE
@@ -382,12 +382,13 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    print_maps("insert", insert.iter());
-    print_maps("delete", delete.iter());
-    println!();
+    // print_maps("insert", insert.iter());
+    // print_maps("delete", delete.iter());
+    // println!();
 
     let loop_analysis = find_loops(func, domtree);
-    print_maps("loops", loop_analysis.loop_map().iter());
+
+    // print_maps("loops", loop_analysis.loop_map().iter());
 
     let mut deleted = HashSet::new();
     for ((pred, succ), registers) in insert.into_iter().filter(|(_, regs)| !regs.is_empty()) {

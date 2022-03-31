@@ -3,9 +3,12 @@
 .frame main, 0
 .B1: nop
     loadI 1 => %vr1
-    loadI 1 => %vr17
-    loadI 1 => %vr18
-    loadI 1 => %vr19
+    loadI 1 => %vr27
+    i2i %vr27 => %vr17
+    loadI 1 => %vr28
+    i2i %vr28 => %vr18
+    loadI 1 => %vr29
+    i2i %vr29 => %vr19
     i2i %vr1 => %vr2
     loadI 10 => %vr3
     i2i %vr3 => %vr4

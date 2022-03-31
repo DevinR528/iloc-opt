@@ -272,6 +272,13 @@ impl Reg {
             *self = Reg::Var(*reg)
         }
     }
+    pub fn to_register(self) -> Reg {
+        if let Reg::Phi(reg, ..) = self {
+            Reg::Var(reg)
+        } else {
+            self
+        }
+    }
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -1743,10 +1750,9 @@ impl Instruction {
         })
     }
 
-    pub fn fold_two_address(&self, a: &Val) -> Option<Instruction> {
+    pub fn fold_two_address(&self, a: Val) -> Option<Instruction> {
         Some(match self {
-            Instruction::Load { dst, .. } => Instruction::ImmLoad { src: a.clone(), dst: *dst },
-            Instruction::I2I { dst, .. } => Instruction::ImmLoad { src: a.clone(), dst: *dst },
+            Instruction::Load { dst, .. } => Instruction::ImmLoad { src: a, dst: *dst },
             _ => {
                 return None;
             }

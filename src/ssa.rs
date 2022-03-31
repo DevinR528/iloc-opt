@@ -197,8 +197,6 @@ pub fn dominator_tree(
         }
     }
 
-    // println!("tree: {:#?} \ndom_preds: {:#?}", dom_tree, dom_tree_pred);
-
     let mut idom_map = HashMap::with_capacity(all_nodes.len());
     for node in &all_nodes {
         let mut labels = VecDeque::from([node]);
@@ -211,6 +209,8 @@ pub fn dominator_tree(
             }
         }
     }
+
+    // println!("tree: {:#?} \ndom_preds: {:#?}\n{:?}", dom_tree, dom_tree_pred, preds);
 
     let empty = BTreeSet::new();
     // Keith Cooper/Linda Torczon EaC pg. 499 SSA dominance frontier algorithm
@@ -523,8 +523,6 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         }
 
         lazy_code_motion(func, &dtree, cfg.exits.last().unwrap());
-
-        // find_loops(func, &dtree);
 
         func.blocks.retain(|b| !b.label.starts_with(".E_exit"));
     }
