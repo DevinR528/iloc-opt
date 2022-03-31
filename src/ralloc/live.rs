@@ -47,11 +47,11 @@ fn find_cheap_spill(
 
     for (idx, (r, set)) in graph.iter().enumerate() {
         let degree = set.len() as isize;
-        let (def_b, def_i) = defs.get(r).unwrap();
+        let (def_b, def_i) = defs.get(r).unwrap_or_else(|| panic!("{:?}", r));
         let def = &blocks[*def_b].instructions[*def_i];
         let r_uses = uses
             .get(r)
-            .unwrap()
+            .unwrap_or(&vec![])
             .iter()
             .map(|(_, b, i)| &blocks[*b].instructions[*i])
             .collect::<Vec<_>>();
@@ -61,7 +61,7 @@ fn find_cheap_spill(
         } else {
             let loop_costs: usize = uses
                 .get(r)
-                .unwrap()
+                .unwrap_or(&vec![])
                 .iter()
                 .map(|(l, _, _)| 10_usize.pow(loop_map.level_of_nesting(l)))
                 .sum();
@@ -111,7 +111,8 @@ pub fn build_ranges(
                 }
                 let cur_phi = phis.entry(reg).or_default();
                 *cur_phi = cur_phi.union(set).cloned().collect();
-            } else if let Some(dst) = inst.target_reg() {
+            }
+            if let Some(dst) = inst.target_reg() {
                 if def_map.insert(*dst, (b, i)).is_some() {
                     panic!("Should not be overlaping register names {} {:?}", blk.label, inst)
                 }
@@ -123,12 +124,9 @@ pub fn build_ranges(
     }
 
     let mut changed = true;
-
     let mut phi_defs: HashMap<_, HashSet<Reg>> = HashMap::new();
     let mut phi_uses: HashMap<_, HashSet<Reg>> = HashMap::new();
-
     let mut defs: HashMap<_, HashSet<Reg>> = HashMap::new();
-
     let mut uexpr: HashMap<_, HashSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
@@ -143,6 +141,9 @@ pub fn build_ranges(
             let phi_use_loc = phi_uses.entry(label.clone()).or_default();
 
             for inst in &blk.instructions {
+                if matches!(inst, Instruction::Skip(..)) {
+                    continue;
+                }
                 if let Instruction::Phi(r, set, subs) = inst {
                     let subs = subs.unwrap();
                     let mut phi = *r;
@@ -168,8 +169,8 @@ pub fn build_ranges(
         }
     }
 
-    print_maps("uexpr", uexpr.iter());
-    println!();
+    // print_maps("uexpr", uexpr.iter());
+    // println!();
 
     changed = true;
     let empty = HashSet::new();
@@ -243,14 +244,13 @@ pub fn build_ranges(
         }
     }
 
-    print_maps("live_in", live_in.iter());
-    print_maps("live_out", live_out.iter());
-    println!();
+    // print_maps("live_in", live_in.iter());
+    // print_maps("live_out", live_out.iter());
+    // println!();
 
     // let mut phis: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
     let mut interference: HashMap<_, BTreeSet<_>> = HashMap::new();
     for curr in postorder(&domtree.cfg_succs_map, start) {
-        println!("{}", curr.as_str());
         let livenow = live_out.get_mut(curr).unwrap();
         let blk_idx = blocks.iter().position(|b| b.label.starts_with(curr.as_str())).unwrap();
         for inst in blocks[blk_idx].instructions.iter().rev() {
@@ -271,9 +271,16 @@ pub fn build_ranges(
         }
     }
 
+    let mut actual: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+    for (r, edges) in &interference {
+        let new_edges = actual.entry(r.to_register()).or_default();
+        for e in edges {
+            new_edges.insert(e.to_register());
+        }
+    }
     print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
+    print_maps("actual", actual.iter());
     println!();
-    return;
 
     let mut spill: VecDeque<(_, BTreeSet<ColoredReg>)> = VecDeque::new();
     let mut graph_degree = interference.into_iter().collect::<Vec<_>>();
@@ -327,7 +334,7 @@ pub fn build_ranges(
         }
     }
 
-    print_maps("colored", graph.iter());
+    // print_maps("colored", graph.iter());
     println!();
 }
 
