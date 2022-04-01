@@ -133,12 +133,12 @@ pub fn build_ranges(
         for (label, blk) in reverse_postorder(&domtree.cfg_succs_map, start).filter_map(|label| {
             Some((label, blocks.iter().find(|b| b.label.starts_with(label.as_str()))?))
         }) {
+            // TODO: this is really inefficient and ugly
+            let ugh = defs.clone();
+
             let uloc = uexpr.entry(label.clone()).or_default();
-
             let def_loc = defs.entry(label.clone()).or_default();
-
             let phi_def_loc = phi_defs.entry(label.clone()).or_default();
-            let phi_use_loc = phi_uses.entry(label.clone()).or_default();
 
             for inst in &blk.instructions {
                 if matches!(inst, Instruction::Skip(..)) {
@@ -153,7 +153,10 @@ pub fn build_ranges(
                     for s in set.iter().filter(|s| **s != subs) {
                         let mut phi = *r;
                         phi.as_phi(*s);
-                        phi_use_loc.insert(phi);
+                        // TODO: this is really inefficient and ugly
+                        if let Some((l, _)) = ugh.iter().find(|(l, set)| set.contains(&phi)) {
+                            phi_uses.entry(l.clone()).or_default().insert(phi);
+                        }
                     }
                 }
 
@@ -169,7 +172,9 @@ pub fn build_ranges(
         }
     }
 
-    // print_maps("uexpr", uexpr.iter());
+    // print_maps("phi_defs", phi_defs.iter());
+    // print_maps("phi_uses", phi_uses.iter());
+    // print_maps("defs", defs.iter());
     // println!();
 
     changed = true;
@@ -182,64 +187,54 @@ pub fn build_ranges(
             let empty_bset = BTreeSet::new();
 
             // LIVE-IN
-            // PhiDef(b) ∪ UpExpr(b) ∪ (LiveOut(b) - Defs(b))
-            let old = live_in.entry(label.clone()).or_default();
-            let new = phi_defs
+            let phi_def = phi_defs.get(label).unwrap_or(&empty);
+            let up_expr = uexpr.get(label).unwrap_or(&empty);
+            let live_def_diff = live_out
                 .get(label)
                 .unwrap_or(&empty)
-                .union(
-                    &uexpr
-                        .get(label)
-                        .unwrap_or(&empty)
-                        .union(
-                            &live_out
-                                .get(label)
-                                .unwrap_or(&empty)
-                                .difference(defs.get(label).unwrap_or(&empty))
-                                .cloned()
-                                .collect(),
-                        )
-                        .cloned()
-                        .collect(),
-                )
-                .cloned()
+                .difference(defs.get(label).unwrap_or(&empty))
+                .copied()
                 .collect();
 
+            // PhiDef(b) ∪ UpExpr(b) ∪ (LiveOut(b) - Defs(b))
+            let new = phi_def
+                .union(up_expr)
+                .copied()
+                .collect::<HashSet<_>>()
+                .union(&live_def_diff)
+                .copied()
+                .collect();
+
+            let old = live_in.entry(label.clone()).or_default();
             if *old != new {
                 *old = new;
                 changed |= true;
             }
 
-            // LIVE-OUT
-            // Empty set for live-out exit block
-            if label == exit {
-                live_out.insert(label.clone(), HashSet::new());
-            } else {
-                // live-out is
-                // (∪ ∀s {s: succs b} LiveIn(s) - PhiDefs(s)) ∪ PhiUse(b)
-                let mut new = domtree
-                    .cfg_succs_map
-                    .get(label) // TODO: filter exit node out
-                    .unwrap_or(&empty_bset)
-                    .iter()
-                    .map(|l| {
-                        live_in
-                            .get(l)
-                            .unwrap_or(&empty)
-                            .difference(phi_defs.get(l).unwrap_or(&empty))
-                            .cloned()
-                            .collect::<HashSet<_>>()
-                    })
-                    .fold(HashSet::new(), |collect, next| collect.union(&next).cloned().collect())
-                    .union(phi_uses.get(label).unwrap_or(&empty))
-                    .cloned()
-                    .collect();
+            // live-out is
+            // (∪ ∀s {s: succs b} LiveIn(s) - PhiDefs(s)) ∪ PhiUse(b)
+            let mut new = domtree
+                .cfg_succs_map
+                .get(label) // TODO: filter exit node out
+                .unwrap_or(&empty_bset)
+                .iter()
+                .map(|s| {
+                    live_in
+                        .get(s)
+                        .unwrap_or(&empty)
+                        .difference(phi_defs.get(s).unwrap_or(&empty))
+                        .copied()
+                        .collect::<HashSet<_>>()
+                })
+                .fold(HashSet::new(), |collect, next| collect.union(&next).copied().collect())
+                .union(phi_uses.get(label).unwrap_or(&empty))
+                .copied()
+                .collect();
 
-                let old = live_out.entry(label.clone()).or_default();
-                if *old != new {
-                    *old = new;
-                    changed |= true;
-                }
+            let old = live_out.entry(label.clone()).or_default();
+            if *old != new {
+                *old = new;
+                changed |= true;
             }
         }
     }
@@ -260,6 +255,9 @@ pub fn build_ranges(
 
             if let Some(dst) = inst.target_reg() {
                 for reg in &*livenow {
+                    if dst == reg || (*dst == Reg::Phi(0, 0) || *reg == Reg::Phi(0, 0)) {
+                        continue;
+                    }
                     interference.entry(*dst).or_default().insert(*reg);
                     interference.entry(*reg).or_default().insert(*dst);
                 }
@@ -273,20 +271,49 @@ pub fn build_ranges(
 
     let mut actual: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     for (r, edges) in &interference {
-        let new_edges = actual.entry(r.to_register()).or_default();
+        if *r == Reg::Phi(0, 0) {
+            continue;
+        }
+
+        let new_edges = actual.entry(*r).or_default();
         for e in edges {
-            new_edges.insert(e.to_register());
+            if *e == Reg::Phi(0, 0) {
+                continue;
+            }
+            new_edges.insert(*e);
         }
     }
+    for (p, subs) in phis {
+        if subs.len() > 1 {
+            let mut subs = subs.into_iter();
+            let mut combine = *p;
+
+            combine.as_phi(subs.next().unwrap());
+
+            for s in subs {
+                let mut new = *p;
+                new.as_phi(s);
+
+                let Some(merge) = actual.remove(&new) else { continue; };
+
+                let old = actual.entry(combine).or_default();
+                *old = old.union(&merge).copied().collect();
+            }
+        }
+    }
+
     print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
     print_maps("actual", actual.iter());
     println!();
 
-    let mut spill: VecDeque<(_, BTreeSet<ColoredReg>)> = VecDeque::new();
+    let mut spill: VecDeque<(_, Vec<ColoredReg>)> = VecDeque::new();
     let mut graph_degree = interference.into_iter().collect::<Vec<_>>();
     graph_degree.sort_by(|a, b| a.1.len().cmp(&b.1.len()));
     let mut graph_degree: VecDeque<_> = graph_degree.into();
     while let Some((register, edges)) = graph_degree.pop_front() {
+        if register == Reg::Phi(0, 0) {
+            continue;
+        }
         if edges.len() < K_DEGREE {
             let reg = register;
             for (_, es) in &mut graph_degree {
@@ -318,40 +345,75 @@ pub fn build_ranges(
             (reg, n)
         }
     }) else { return; };
+
     let mut graph = BTreeMap::from_iter(std::iter::once((reg, node)));
     // Color the graph
-    while let Some((r, edges)) = spill.pop_front() {
+    while let Some((r, mut edges)) = spill.pop_front() {
         if edges.is_empty() {
             graph.insert(r, ColorNode { color: curr_color, edges });
         } else {
-            for e in &edges {
-                let Some(es) = graph.get_mut(e.as_reg()).map(|n| &mut n.edges) else { continue; };
-                es.remove(&ColoredReg::Uncolored(r));
-                es.insert(ColoredReg::Colored(r, curr_color));
+            let mut conflict = false;
+            for e in edges.iter_mut() {
+                let Some(node) = graph.get_mut(e.as_reg()) else { continue; };
+                e.as_color(node.color);
+
+                if let Some(pos) =
+                    node.edges.iter().position(|ele| *ele == ColoredReg::Uncolored(r))
+                {
+                    node.edges.remove(pos);
+                }
+
+                node.edges.push(ColoredReg::Colored(r, curr_color));
+                let edge_color = e.color();
+                let give_up = curr_color;
+                while edge_color == curr_color && !conflict {
+                    curr_color += 1;
+                    if give_up == curr_color {
+                        conflict = true;
+                    }
+                }
             }
-            graph.insert(r, ColorNode { color: curr_color, edges });
-            curr_color += 1;
+
+            if conflict {
+                graph.insert(r, ColorNode { color: curr_color, edges });
+                curr_color += 1;
+            } else {
+                graph.insert(r, ColorNode { color: curr_color, edges });
+            }
         }
     }
 
-    // print_maps("colored", graph.iter());
+    print_maps("colored", graph.iter());
     println!();
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct WrappingInt(u8);
+pub enum WrappingInt {
+    Valid(u8),
+    Invalid,
+}
+impl WrappingInt {
+    fn int_mut(&mut self) -> &mut u8 {
+        let Self::Valid(int) = self else { unreachable!() };
+        int
+    }
+    fn int(&self) -> &u8 {
+        let Self::Valid(int) = self else { unreachable!() };
+        int
+    }
+}
 impl Default for WrappingInt {
     fn default() -> Self {
-        Self(K_DEGREE as u8)
+        Self::Valid(K_DEGREE as u8)
     }
 }
 impl AddAssign<u8> for WrappingInt {
     fn add_assign(&mut self, rhs: u8) {
-        if usize::from(self.0) == K_DEGREE {
-            self.0 = 0;
+        if usize::from(*self.int()) == K_DEGREE {
+            *self.int_mut() = 0;
         } else {
-            debug_assert!(usize::from(self.0) < K_DEGREE);
-            self.0 += 1;
+            debug_assert!(usize::from(*self.int()) < K_DEGREE);
+            *self.int_mut() += 1;
         }
     }
 }
@@ -367,23 +429,33 @@ impl ColoredReg {
             Self::Uncolored(r) | Self::Colored(r, _) => r,
         }
     }
+    fn color(&self) -> WrappingInt {
+        let Self::Colored(_, c) = self else { unreachable!("{:?}", self) };
+        *c
+    }
+
+    pub(crate) fn as_color(&mut self, color: WrappingInt) {
+        if let Self::Uncolored(r) = self {
+            *self = Self::Colored(*r, color);
+        }
+    }
 }
 impl fmt::Debug for ColoredReg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Uncolored(r) => write!(f, "{:?}", r),
-            Self::Colored(r, color) => write!(f, "({:?}, {})", r, color.0),
+            Self::Colored(r, color) => write!(f, "({:?}, {})", r, color.int()),
         }
     }
 }
 
 pub struct ColorNode {
     color: WrappingInt,
-    edges: BTreeSet<ColoredReg>,
+    edges: Vec<ColoredReg>,
 }
 impl fmt::Debug for ColorNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("ColorNode").field(&self.color.0).field(&self.edges).finish()
+        f.debug_tuple("ColorNode").field(&self.color.int()).field(&self.edges).finish()
     }
 }
 
