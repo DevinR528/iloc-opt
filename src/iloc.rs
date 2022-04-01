@@ -1653,17 +1653,18 @@ impl Instruction {
     }
 
     pub fn unconditional_jmp(&self) -> bool {
-        matches!(self, Instruction::ImmJump(..) | Instruction::Ret | Instruction::ImmRet(_))
+        matches!(self, Instruction::ImmJump(..))
     }
 
     pub fn is_return(&self) -> bool {
         matches!(self, Instruction::Ret | Instruction::ImmRet(_))
     }
 
-    pub fn as_new_move_instruction(&self, src: Reg, dst: Reg) -> Instruction {
+    /// Turn any instruction that would be more efficient as a move. This will not move around
+    /// existing `i2i` and `f2f` instructions since there is no gain.
+    pub fn as_new_move_instruction(&self, src: Reg, dst: Reg) -> Option<Instruction> {
         match self {
-            Instruction::I2I { .. }
-            | Instruction::Add { .. }
+            Instruction::Add { .. }
             | Instruction::Sub { .. }
             | Instruction::Mult { .. }
             | Instruction::LShift { .. }
@@ -1680,9 +1681,8 @@ impl Instruction {
             | Instruction::ImmLoad { .. }
             | Instruction::Load { .. }
             | Instruction::LoadAddImm { .. }
-            | Instruction::LoadAdd { .. } => Instruction::I2I { src, dst },
-            Instruction::F2I { .. }
-            | Instruction::I2F { .. }
+            | Instruction::LoadAdd { .. } => Some(Instruction::I2I { src, dst }),
+            Instruction::I2F { .. }
             | Instruction::F2F { .. }
             | Instruction::FAdd { .. }
             | Instruction::FSub { .. }
@@ -1691,10 +1691,11 @@ impl Instruction {
             | Instruction::FComp { .. }
             | Instruction::FLoad { .. }
             | Instruction::FLoadAddImm { .. }
-            | Instruction::FLoadAdd { .. } => Instruction::F2F { src, dst },
+            | Instruction::FLoadAdd { .. } => Some(Instruction::F2F { src, dst }),
             Self::Store { .. } | Self::StoreAddImm { .. } | Self::IRead(_) | Self::FRead(_) => {
                 unreachable!("cannot simplify store instruction")
             }
+            Instruction::I2I { .. } | Instruction::F2F { .. } => None,
             _ => unreachable!(
                 "stack, text/data section stuff, calls, jumps, and comp/test stuff {:?}",
                 self

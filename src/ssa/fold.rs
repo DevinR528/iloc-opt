@@ -107,7 +107,7 @@ fn eval_instruction(
                 (ValueKind::Known(c), ValueKind::Maybe) => {
                     if let Some(id) = expr.identity_with_const_prop_left(c) {
                         // modify instruction with a move
-                        Some((ValueKind::Maybe, expr.as_new_move_instruction(*id, *dst)))
+                        Some((ValueKind::Maybe, expr.as_new_move_instruction(*id, *dst)?))
                     } else if matches!(expr, Instruction::Mult { .. } | Instruction::FMult { .. })
                         && c.is_zero()
                     {
@@ -122,7 +122,7 @@ fn eval_instruction(
                 (ValueKind::Maybe, ValueKind::Known(c)) => {
                     if let Some(id) = expr.identity_with_const_prop_right(c) {
                         // modify instruction with a move
-                        Some((ValueKind::Maybe, expr.as_new_move_instruction(*id, *dst)))
+                        Some((ValueKind::Maybe, expr.as_new_move_instruction(*id, *dst)?))
                     } else if matches!(expr, Instruction::Mult { .. } | Instruction::FMult { .. })
                         && c.is_zero()
                     {
@@ -138,8 +138,9 @@ fn eval_instruction(
                     // Is this instruction identity
                     // This catches things like:
                     // `addI %vr3, 0 => %vr8`
-                    expr.identity_register()
-                        .map(|id| (ValueKind::Maybe, expr.as_new_move_instruction(id, *dst)))
+                    expr.identity_register().and_then(|id| {
+                        Some((ValueKind::Maybe, expr.as_new_move_instruction(id, *dst)?))
+                    })
                 }
             }
         }

@@ -46,7 +46,9 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
 
                             special.insert(*dst);
                             // modify instruction with a move
-                            new_instr[idx] = expr.as_new_move_instruction(*id, *dst);
+                            if let Some(mov) = expr.as_new_move_instruction(*id, *dst) {
+                                new_instr[idx] = mov;
+                            }
                         } else if matches!(
                             expr,
                             Instruction::Mult { .. } | Instruction::FMult { .. }
@@ -66,7 +68,9 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
 
                             special.insert(*dst);
                             // modify instruction with a move
-                            new_instr[idx] = expr.as_new_move_instruction(*id, *dst);
+                            if let Some(mov) = expr.as_new_move_instruction(*id, *dst) {
+                                new_instr[idx] = mov;
+                            }
                         } else if matches!(
                             expr,
                             Instruction::Mult { .. } | Instruction::FMult { .. }
@@ -90,7 +94,9 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
 
                             special.insert(*dst);
                             // modify instruction with a move
-                            new_instr[idx] = expr.as_new_move_instruction(id, *dst);
+                            if let Some(mov) = expr.as_new_move_instruction(id, *dst) {
+                                new_instr[idx] = mov;
+                            }
                         }
                     }
                 }
@@ -119,7 +125,9 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
 
                         special.insert(*dst);
                         // modify instruction with a move
-                        new_instr[idx] = expr.as_new_move_instruction(*value, *dst);
+                        if let Some(mov) = expr.as_new_move_instruction(*value, *dst) {
+                            new_instr[idx] = mov;
+                        }
                     }
                     _ => {}
                 }
@@ -135,7 +143,6 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
             // USUALLY VAR REGISTERS
             // This is basically a move/copy
             (Some(src), None, Some(dst)) => {
-                // TODO: this may do nothing..
                 if let Some(val) = const_map.get(&src).cloned() {
                     const_map.insert(Operand::Register(*dst), val.clone());
                     back_const_map.entry(val.clone()).or_insert(Operand::Register(*dst));
@@ -176,11 +183,11 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                             continue;
                         }
 
-                        // if !new_instr[idx].is_load_imm() {
                         special.insert(*dst);
                         // modify instruction with a move
-                        new_instr[idx] = expr.as_new_move_instruction(*value, *dst);
-                        // }
+                        if let Some(mov) = expr.as_new_move_instruction(*value, *dst) {
+                            new_instr[idx] = mov;
+                        }
                     }
                     _ => {}
                 }
@@ -219,7 +226,6 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
 
 fn track_used(instructions: &[Instruction]) -> Vec<usize> {
     let mut used_reg = HashSet::new();
-    let mut live_vars = HashSet::new();
     let mut indexes = vec![];
     for (idx, expr) in instructions.iter().enumerate().rev() {
         let (l, r) = expr.operands();
@@ -227,64 +233,47 @@ fn track_used(instructions: &[Instruction]) -> Vec<usize> {
 
         // Don't modify any memory operations
         if expr.is_store() {
-            for op in l.iter().chain(r.iter()) {
-                used_reg.insert(op.clone());
+            for op in l.iter().chain(r.iter()).filter_map(|o| o.opt_reg()) {
+                used_reg.insert(op);
             }
+
             continue;
         }
 
-        if let Some(dst) = dst {
-            if live_vars.contains(dst) {
-                continue;
-            }
-        }
         match expr {
             Instruction::I2I { src, .. } | Instruction::I2F { src, .. } => {
-                if let Some(dst) = dst {
-                    live_vars.insert(dst);
-                }
-                used_reg.insert(Operand::Register(*src));
+                used_reg.insert(*src);
                 continue;
             }
             Instruction::ImmLoad { src: Val::Location(_), .. } => continue,
             Instruction::Call { args, .. } | Instruction::ImmCall { args, .. } => {
                 for arg in args {
-                    used_reg.insert(Operand::Register(*arg));
+                    used_reg.insert(*arg);
                 }
             }
             _ => (),
         }
 
         match (l, r, dst) {
-            (Some(left), Some(right), Some(_dst)) => {
-                if matches!(left, Operand::Register(..)) {
-                    used_reg.insert(left);
-                }
-                if matches!(right, Operand::Register(..)) {
-                    used_reg.insert(right);
-                }
+            (Some(Operand::Register(left)), Some(Operand::Register(right)), Some(_dst)) => {
+                used_reg.insert(left);
+                used_reg.insert(right);
             }
-            (Some(src), None, Some(_dst)) => {
-                if matches!(src, Operand::Register(..)) {
-                    used_reg.insert(src);
-                }
+            (Some(Operand::Register(src)), _, Some(_dst)) => {
+                used_reg.insert(src);
             }
-            // Jumps, rets, push, and I/O instructions
-            (Some(src), None, None) => {
-                if matches!(src, Operand::Register(..)) {
-                    used_reg.insert(src);
-                }
-                // There is no register to remove so continue
+            // Load immediate
+            (Some(..), _, Some(_dst)) => {}
+            // Conditional branch with (cbr_GT, etc)
+            (Some(Operand::Register(right)), Some(Operand::Register(left)), None) => {
+                used_reg.insert(left);
+                used_reg.insert(right);
                 continue;
             }
-            // Conditional branch with (cbr_GT, etc)
-            (Some(right), Some(left), None) => {
-                if matches!(left, Operand::Register(..)) {
-                    used_reg.insert(left);
-                }
-                if matches!(right, Operand::Register(..)) {
-                    used_reg.insert(right);
-                }
+            // Jumps, rets, push, and I/O instructions
+            (Some(Operand::Register(src)), None, None) => {
+                used_reg.insert(src);
+                // There is no register to remove so continue
                 continue;
             }
             // Call expressions with return can have this
@@ -300,7 +289,7 @@ fn track_used(instructions: &[Instruction]) -> Vec<usize> {
         }
 
         let dst = dst.unwrap();
-        if !used_reg.remove(&Operand::Register(*dst)) {
+        if !used_reg.remove(dst) {
             indexes.push(idx);
         }
     }
