@@ -390,7 +390,7 @@ pub fn insert_phi_functions(
     let mut blocks_map = HashMap::new();
 
     // TODO: now that I do this bottom-up phis could be inserted as each block is encountered since
-    // we now dom frontier
+    // we know dom frontier
     for blk in postorder(cfg_succs, start) {
         // This represents any redefinitions that are local to the current block
         let mut varkil = HashSet::new();
@@ -416,11 +416,7 @@ pub fn insert_phi_functions(
             }
             if let Some(dst) = dst {
                 varkil.insert(Operand::Register(*dst));
-                #[rustfmt::skip]
-                blocks_map
-                    .entry(Operand::Register(*dst))
-                    .or_insert_with(HashSet::new)
-                    .insert(blk);
+                blocks_map.entry(Operand::Register(*dst)).or_insert_with(HashSet::new).insert(blk);
             }
         }
     }
