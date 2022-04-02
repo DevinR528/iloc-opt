@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    iloc::{IlocProgram, Instruction},
+    iloc::{IlocProgram, Instruction, Reg},
     lcm::LoopAnalysis,
     ssa::{build_cfg, dom_val_num, dominator_tree, find_loops, insert_phi_functions, OrdLabel},
 };
@@ -22,8 +22,44 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
 
         let loop_map = find_loops(func, &dtree);
         // TODO: safe to move instructions around here for better live ranges??
-        let ranges =
-            live::build_ranges(&func.blocks, &dtree, cfg.exits.first().unwrap(), &start, &loop_map);
+        let graph = loop {
+            let (defs, uses) = live::build_use_def_map(&dtree, &start, &func.blocks);
+            match live::build_ranges(
+                &func.blocks,
+                &dtree,
+                cfg.exits.first().unwrap(),
+                &start,
+                &defs,
+                &uses,
+                &loop_map,
+            ) {
+                Ok(colored_graph) => break colored_graph,
+                Err(insert_spills) => {
+                    println!("{:?}", insert_spills);
+                    for blk in &mut func.blocks {
+                        for inst in &mut blk.instructions {
+                            if let Some(dst) = inst.target_reg() && insert_spills.contains(&dst.to_register()) {
+                                panic!("SPILL ME NOOOOO {:?}", dst)
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        for blk in &mut func.blocks {
+            for inst in &mut blk.instructions {
+                for reg in inst.registers_mut_iter() {
+                    if *reg == Reg::Phi(0, 0) {
+                        *reg = Reg::Var(0);
+                        continue;
+                    }
+
+                    let node = graph.get(&reg.to_register()).unwrap_or_else(|| panic!("{:?}", reg));
+                    *reg = Reg::Var((*node.color.int()) as usize);
+                }
+            }
+        }
     }
 
     let mut buf = String::new();

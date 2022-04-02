@@ -10,92 +10,94 @@ use crate::{
     ssa::{postorder, reverse_postorder, DominatorTree, OrdLabel},
 };
 
-pub const K_DEGREE: usize = 4;
+const INFINITY: isize = isize::MAX;
+pub const K_DEGREE: usize = 16;
 
-#[derive(Debug)]
-pub struct RegisterRange {
-    reg: Reg,
-    range: Range<usize>,
-    count: usize,
+fn all_colors() -> BTreeSet<WrappingInt> {
+    (1..(K_DEGREE + 1)).into_iter().map(|i| WrappingInt::Valid(i as u8)).collect()
 }
-impl RegisterRange {
-    pub fn new(reg: Reg, start: usize) -> Self {
-        Self { reg, range: start..start, count: 0 }
-    }
 
-    pub fn add_range(&mut self, rng: usize, block_idx: usize, inst_idx: usize) {
-        self.count += 1;
-        if rng > self.range.end {
-            self.range.end = rng;
-        } else if rng < self.range.start {
-            self.range.start = rng;
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum WrappingInt {
+    Valid(u8),
+    Invalid,
+}
+impl WrappingInt {
+    fn int_mut(&mut self) -> &mut u8 {
+        let Self::Valid(int) = self else { unreachable!("{:?}", self) };
+        int
+    }
+    pub fn int(&self) -> &u8 {
+        let Self::Valid(int) = self else { unreachable!("{:?}", self) };
+        int
+    }
+}
+impl Default for WrappingInt {
+    fn default() -> Self {
+        Self::Valid((K_DEGREE + 1) as u8)
+    }
+}
+impl AddAssign<u8> for WrappingInt {
+    fn add_assign(&mut self, rhs: u8) {
+        if usize::from(*self.int()) == K_DEGREE + 1 {
+            *self.int_mut() = 1;
         } else {
-            println!("within range: {:?}", self);
+            debug_assert!((usize::from(*self.int())) < K_DEGREE + 1);
+            *self.int_mut() += 1;
         }
     }
 }
 
-fn find_cheap_spill(
-    graph: &mut VecDeque<(Reg, BTreeSet<Reg>)>,
-    blocks: &[Block],
-    defs: &BTreeMap<Reg, (usize, usize)>,
-    uses: &BTreeMap<Reg, Vec<(&OrdLabel, usize, usize)>>,
-    loop_map: &LoopAnalysis,
-) -> (Reg, BTreeSet<Reg>) {
-    let mut best = 10000000000_isize;
-    let mut best_idx = 0;
-
-    for (idx, (r, set)) in graph.iter().enumerate() {
-        let degree = set.len() as isize;
-        let (def_b, def_i) = defs.get(r).unwrap_or_else(|| panic!("{:?}", r));
-        let def = &blocks[*def_b].instructions[*def_i];
-        let r_uses = uses
-            .get(r)
-            .unwrap_or(&vec![])
-            .iter()
-            .map(|(_, b, i)| &blocks[*b].instructions[*i])
-            .collect::<Vec<_>>();
-
-        let cost: isize = if def.is_load() && r_uses.iter().all(|i| i.is_store()) {
-            -1
-        } else {
-            let loop_costs: usize = uses
-                .get(r)
-                .unwrap_or(&vec![])
-                .iter()
-                .map(|(l, _, _)| 10_usize.pow(loop_map.level_of_nesting(l)))
-                .sum();
-
-            // TODO: this already is set.len() * loop_cost since we sum 10^nesting and get at least
-            // 1 for each use.
-            (set.len() * loop_costs) as isize
-        };
-        // Just remove the fact that we multiplied by out degree
-        let curr = cost / degree;
-
-        if curr < best {
-            best_idx = idx;
-            best = curr;
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ColoredReg {
+    Uncolored(Reg),
+    Colored(Reg, WrappingInt),
+}
+impl ColoredReg {
+    pub fn as_reg(&self) -> &Reg {
+        match self {
+            Self::Uncolored(r) | Self::Colored(r, _) => r,
         }
     }
+    fn color(&self) -> WrappingInt {
+        let Self::Colored(_, c) = self else { unreachable!("{:?}", self) };
+        *c
+    }
 
-    graph.remove(best_idx).unwrap()
+    pub(crate) fn as_color(&mut self, color: WrappingInt) {
+        if let Self::Uncolored(r) = self {
+            *self = Self::Colored(*r, color);
+        }
+    }
+}
+impl fmt::Debug for ColoredReg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Uncolored(r) => write!(f, "Unclr({:?})", r),
+            Self::Colored(r, color) => write!(f, "Clr({:?}, {:?})", r, color),
+        }
+    }
 }
 
-pub fn build_ranges(
-    blocks: &[Block],
+pub struct ColorNode {
+    pub color: WrappingInt,
+    edges: Vec<ColoredReg>,
+}
+impl fmt::Debug for ColorNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("ColorNode").field(&self.color).field(&self.edges).finish()
+    }
+}
+
+pub fn build_use_def_map(
     domtree: &DominatorTree,
-    exit: &OrdLabel,
     start: &OrdLabel,
-    loop_map: &LoopAnalysis,
-) {
-    let mut phis: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+    blocks: &[Block],
+) -> (BTreeMap<Reg, Vec<(usize, usize)>>, BTreeMap<Reg, Vec<(usize, usize)>>) {
     let mut use_map: BTreeMap<_, Vec<_>> = BTreeMap::new();
-    let mut def_map: BTreeMap<_, _> = BTreeMap::new();
+    let mut def_map: BTreeMap<_, Vec<_>> = BTreeMap::new();
     for (b, (label, blk)) in reverse_postorder(&domtree.cfg_succs_map, start)
-        .filter_map(|label| {
-            Some((label, blocks.iter().find(|b| b.label.starts_with(label.as_str()))?))
-        })
+        .filter_map(|label| Some((label, blocks.iter().find(|b| b.label == label.as_str())?)))
         .enumerate()
     {
         for (i, inst) in blk.instructions.iter().enumerate() {
@@ -106,23 +108,29 @@ pub fn build_ranges(
                 let subs = subs.unwrap();
                 let mut phi = *reg;
                 phi.as_phi(subs);
-                if def_map.insert(phi, (b, i)).is_some() {
-                    panic!("Should not be overlaping register names {} {:?}", blk.label, inst)
-                }
-                let cur_phi = phis.entry(reg).or_default();
-                *cur_phi = cur_phi.union(set).cloned().collect();
+
+                def_map.entry(phi).or_default().push((b, i));
             }
             if let Some(dst) = inst.target_reg() {
-                if def_map.insert(*dst, (b, i)).is_some() {
-                    panic!("Should not be overlaping register names {} {:?}", blk.label, inst)
-                }
+                def_map.entry(*dst).or_default().push((b, i));
             }
             for operand in inst.operand_iter() {
-                use_map.entry(operand).or_default().push((label, b, i));
+                use_map.entry(operand).or_default().push((b, i));
             }
         }
     }
+    (def_map, use_map)
+}
 
+pub fn build_ranges(
+    blocks: &[Block],
+    domtree: &DominatorTree,
+    exit: &OrdLabel,
+    start: &OrdLabel,
+    def_map: &BTreeMap<Reg, Vec<(usize, usize)>>,
+    use_map: &BTreeMap<Reg, Vec<(usize, usize)>>,
+    loop_map: &LoopAnalysis,
+) -> Result<BTreeMap<Reg, ColorNode>, BTreeSet<Reg>> {
     let mut changed = true;
     let mut phi_defs: HashMap<_, HashSet<Reg>> = HashMap::new();
     let mut phi_uses: HashMap<_, HashSet<Reg>> = HashMap::new();
@@ -130,9 +138,9 @@ pub fn build_ranges(
     let mut uexpr: HashMap<_, HashSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for (label, blk) in reverse_postorder(&domtree.cfg_succs_map, start).filter_map(|label| {
-            Some((label, blocks.iter().find(|b| b.label.starts_with(label.as_str()))?))
-        }) {
+        for (label, blk) in reverse_postorder(&domtree.cfg_succs_map, start)
+            .filter_map(|label| Some((label, blocks.iter().find(|b| b.label == label.as_str())?)))
+        {
             // TODO: this is really inefficient and ugly
             let ugh = defs.clone();
 
@@ -243,11 +251,10 @@ pub fn build_ranges(
     // print_maps("live_out", live_out.iter());
     // println!();
 
-    // let mut phis: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
     let mut interference: HashMap<_, BTreeSet<_>> = HashMap::new();
     for curr in postorder(&domtree.cfg_succs_map, start) {
         let livenow = live_out.get_mut(curr).unwrap();
-        let blk_idx = blocks.iter().position(|b| b.label.starts_with(curr.as_str())).unwrap();
+        let blk_idx = blocks.iter().position(|b| b.label == curr.as_str()).unwrap();
         for inst in blocks[blk_idx].instructions.iter().rev() {
             if matches!(inst, Instruction::Skip(..)) {
                 continue;
@@ -258,55 +265,46 @@ pub fn build_ranges(
                     if dst == reg || (*dst == Reg::Phi(0, 0) || *reg == Reg::Phi(0, 0)) {
                         continue;
                     }
-                    interference.entry(*dst).or_default().insert(*reg);
-                    interference.entry(*reg).or_default().insert(*dst);
+
+                    interference.entry(dst.to_register()).or_default().insert(reg.to_register());
+                    interference.entry(reg.to_register()).or_default().insert(dst.to_register());
                 }
+
+                // Incase there is a register that has no overlapping live ranges
+                interference.entry(dst.to_register()).or_default();
                 livenow.remove(dst);
+            } else {
+                match inst {
+                    Instruction::Load { src, dst } => {
+                        interference
+                            .entry(dst.to_register())
+                            .or_default()
+                            .insert(src.to_register());
+                        interference
+                            .entry(src.to_register())
+                            .or_default()
+                            .insert(dst.to_register());
+                    }
+                    Instruction::ImmLoad { dst, .. } => {
+                        interference.entry(dst.to_register()).or_default();
+                    }
+                    _ => (),
+                }
             }
+
             for operand in inst.operand_iter() {
+                // Incase there is a register that has no overlapping live ranges
+                interference.entry(operand.to_register()).or_default();
                 livenow.insert(operand);
             }
         }
     }
 
-    let mut actual: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
-    for (r, edges) in &interference {
-        if *r == Reg::Phi(0, 0) {
-            continue;
-        }
-
-        let new_edges = actual.entry(*r).or_default();
-        for e in edges {
-            if *e == Reg::Phi(0, 0) {
-                continue;
-            }
-            new_edges.insert(*e);
-        }
-    }
-    for (p, subs) in phis {
-        if subs.len() > 1 {
-            let mut subs = subs.into_iter();
-            let mut combine = *p;
-
-            combine.as_phi(subs.next().unwrap());
-
-            for s in subs {
-                let mut new = *p;
-                new.as_phi(s);
-
-                let Some(merge) = actual.remove(&new) else { continue; };
-
-                let old = actual.entry(combine).or_default();
-                *old = old.union(&merge).copied().collect();
-            }
-        }
-    }
-
     print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
-    print_maps("actual", actual.iter());
     println!();
 
-    let mut spill: VecDeque<(_, Vec<ColoredReg>)> = VecDeque::new();
+    let mut insert_load_store = BTreeSet::new();
+    let mut color_hard_first: VecDeque<(_, Vec<ColoredReg>)> = VecDeque::new();
     let mut graph_degree = interference.into_iter().collect::<Vec<_>>();
     graph_degree.sort_by(|a, b| a.1.len().cmp(&b.1.len()));
     let mut graph_degree: VecDeque<_> = graph_degree.into();
@@ -319,7 +317,8 @@ pub fn build_ranges(
             for (_, es) in &mut graph_degree {
                 es.remove(&reg);
             }
-            spill.push_front((reg, edges.into_iter().map(ColoredReg::Uncolored).collect()));
+            color_hard_first
+                .push_front((reg, edges.into_iter().map(ColoredReg::Uncolored).collect()));
         } else {
             graph_degree.push_front((register, edges));
             let (reg, edges) =
@@ -327,136 +326,116 @@ pub fn build_ranges(
             for (_, es) in &mut graph_degree {
                 es.remove(&reg);
             }
-            spill.push_front((reg, edges.into_iter().map(ColoredReg::Uncolored).collect()));
+            color_hard_first
+                .push_front((reg, edges.into_iter().map(ColoredReg::Uncolored).collect()));
         }
     }
 
-    print_maps("spill", spill.iter().cloned());
+    print_maps("hard first", color_hard_first.iter().cloned());
     println!();
 
     let mut curr_color = WrappingInt::default();
     // We have nodes to color or we don't and return.
-    let Some((reg, node)) = spill.pop_front().map(|(reg, edges)| {
-        if edges.is_empty() {
+    let Some((reg, node)) = color_hard_first.pop_front().map(|(reg, edges)| {
             (reg, ColorNode { color: curr_color, edges })
-        } else {
-            let n = ColorNode { color: curr_color, edges };
-            curr_color += 1;
-            (reg, n)
-        }
-    }) else { return; };
+        }) else { return Ok(BTreeMap::new()); };
 
+    let mut need_to_spill = vec![];
     let mut graph = BTreeMap::from_iter(std::iter::once((reg, node)));
     // Color the graph
-    while let Some((r, mut edges)) = spill.pop_front() {
+    while let Some((r, mut edges)) = color_hard_first.pop_front() {
         if edges.is_empty() {
             graph.insert(r, ColorNode { color: curr_color, edges });
         } else {
             let mut conflict = false;
-            for e in edges.iter_mut() {
+            let mut colors = BTreeSet::new();
+            for e in &mut edges {
                 let Some(node) = graph.get_mut(e.as_reg()) else { continue; };
                 e.as_color(node.color);
 
-                if let Some(pos) =
-                    node.edges.iter().position(|ele| *ele == ColoredReg::Uncolored(r))
-                {
-                    node.edges.remove(pos);
+                if !colors.insert(node.color) {
+                    println!("edges have == color {:?}", node)
                 }
+            }
 
-                node.edges.push(ColoredReg::Colored(r, curr_color));
-                let edge_color = e.color();
-                let give_up = curr_color;
-                while edge_color == curr_color && !conflict {
-                    curr_color += 1;
-                    if give_up == curr_color {
-                        conflict = true;
+            if let Some(clr) = all_colors().difference(&colors).next() {
+                for e in &mut edges {
+                    let Some(node) = graph.get_mut(e.as_reg()) else { continue; };
+                    if let Some(pos) =
+                        node.edges.iter().position(|ele| *ele == ColoredReg::Uncolored(r))
+                    {
+                        node.edges[pos] = ColoredReg::Colored(r, *clr);
                     }
                 }
-            }
-
-            if conflict {
-                graph.insert(r, ColorNode { color: curr_color, edges });
-                curr_color += 1;
+                graph.insert(r, ColorNode { color: *clr, edges });
             } else {
-                graph.insert(r, ColorNode { color: curr_color, edges });
+                graph.insert(r, ColorNode { color: WrappingInt::Invalid, edges });
+                need_to_spill.push(r);
             }
         }
     }
 
-    print_maps("colored", graph.iter());
-    println!();
-}
+    if need_to_spill.is_empty() {
+        print!("{} ", start);
+        print_maps("colored", graph.iter());
+        println!("{:?}", insert_load_store);
+        println!();
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum WrappingInt {
-    Valid(u8),
-    Invalid,
-}
-impl WrappingInt {
-    fn int_mut(&mut self) -> &mut u8 {
-        let Self::Valid(int) = self else { unreachable!() };
-        int
-    }
-    fn int(&self) -> &u8 {
-        let Self::Valid(int) = self else { unreachable!() };
-        int
-    }
-}
-impl Default for WrappingInt {
-    fn default() -> Self {
-        Self::Valid(K_DEGREE as u8)
-    }
-}
-impl AddAssign<u8> for WrappingInt {
-    fn add_assign(&mut self, rhs: u8) {
-        if usize::from(*self.int()) == K_DEGREE {
-            *self.int_mut() = 0;
-        } else {
-            debug_assert!(usize::from(*self.int()) < K_DEGREE);
-            *self.int_mut() += 1;
+        Ok(graph)
+    } else {
+        print_maps("colored", graph.iter());
+
+        for spilled in need_to_spill.drain(..) {
+            insert_load_store.insert(spilled);
         }
+
+        Err(insert_load_store)
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ColoredReg {
-    Uncolored(Reg),
-    Colored(Reg, WrappingInt),
-}
-impl ColoredReg {
-    pub fn as_reg(&self) -> &Reg {
-        match self {
-            Self::Uncolored(r) | Self::Colored(r, _) => r,
+fn find_cheap_spill(
+    graph: &mut VecDeque<(Reg, BTreeSet<Reg>)>,
+    blocks: &[Block],
+    defs: &BTreeMap<Reg, Vec<(usize, usize)>>,
+    uses: &BTreeMap<Reg, Vec<(usize, usize)>>,
+    loop_map: &LoopAnalysis,
+) -> (Reg, BTreeSet<Reg>) {
+    let mut best = INFINITY;
+    let mut best_idx = 0;
+
+    let empty_def = vec![];
+    let empty_use = vec![];
+    for (idx, (r, set)) in graph.iter().enumerate() {
+        let degree = set.len() as isize;
+        let defs = defs.get(r).unwrap_or(&empty_def);
+        let r_defs = defs.iter().map(|(b, i)| &blocks[*b].instructions[*i]).collect::<Vec<_>>();
+        let uses = uses.get(r).unwrap_or(&empty_use);
+        let r_uses = uses.iter().map(|(b, i)| &blocks[*b].instructions[*i]).collect::<Vec<_>>();
+
+        let cost: isize =
+            if r_defs.iter().all(|i| i.is_load()) && r_uses.iter().all(|i| i.is_store()) {
+                -1
+            } else if let ([(def_block, def_inst)], [(use_block, use_inst)]) = (defs.as_slice(), uses.as_slice())
+                && (def_block == use_block && *def_inst == use_inst + 1) {
+                INFINITY
+            } else {
+                let loop_costs: usize =
+                    uses.iter().map(|(b, _)| 10_usize.pow(loop_map.level_of_nesting(&OrdLabel::from_known(&blocks[*b].label)))).sum();
+
+                // TODO: this already is set.len() * loop_cost since we sum 10^nesting and get at
+                // least 1 for each use.
+                (set.len() * loop_costs) as isize
+            };
+        // Just remove the fact that we multiplied by out degree
+        let curr = cost / degree;
+
+        if curr < best {
+            best_idx = idx;
+            best = curr;
         }
-    }
-    fn color(&self) -> WrappingInt {
-        let Self::Colored(_, c) = self else { unreachable!("{:?}", self) };
-        *c
     }
 
-    pub(crate) fn as_color(&mut self, color: WrappingInt) {
-        if let Self::Uncolored(r) = self {
-            *self = Self::Colored(*r, color);
-        }
-    }
-}
-impl fmt::Debug for ColoredReg {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Uncolored(r) => write!(f, "{:?}", r),
-            Self::Colored(r, color) => write!(f, "({:?}, {})", r, color.int()),
-        }
-    }
-}
-
-pub struct ColorNode {
-    color: WrappingInt,
-    edges: Vec<ColoredReg>,
-}
-impl fmt::Debug for ColorNode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("ColorNode").field(&self.color.int()).field(&self.edges).finish()
-    }
+    graph.remove(best_idx).unwrap()
 }
 
 // PRINT HELPERS
