@@ -65,7 +65,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             #[rustfmt::skip]
             Some((
                 label,
-                func.blocks.iter().find(|b| b.label.starts_with(label.as_str()))?
+                func.blocks.iter().find(|b| b.label == label.as_str())?
             ))
         }) {
             let uni = universe.entry(label.clone()).or_default();
@@ -86,7 +86,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                     }
                     for (b, kdst) in use_map.get(t).unwrap_or(&vec![]) {
                         changed |= k_loc.insert(*kdst);
-                        if b.starts_with(label.as_str()) {
+                        if b.as_str() == label.as_str() {
                             dloc.remove(kdst);
                         }
                     }
@@ -402,7 +402,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             let Some(inst) = dst_map.get(&(succ.clone(), *r)) else {
                 continue;
             };
-            let Some(b) = func.blocks.iter().position(|b| b.label.starts_with(succ.as_str())) else {
+            let Some(b) = func.blocks.iter().position(|b| b.label == succ.as_str()) else {
                 unreachable!("{:?}", succ)
             };
             let Some(i) = func.blocks[b].instructions.iter().position(|i| i == inst) else {
@@ -430,7 +430,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         if domtree.cfg_succs_map.get(&pred).unwrap().len() == 1 {
             let Some(pred_blk) = func.blocks
                 .iter_mut()
-                .find(|b| b.label.starts_with(pred.as_str())) else { unreachable!() };
+                .find(|b| b.label == pred.as_str()) else { unreachable!() };
 
             let end_idx =
                 if pred_blk.instructions.last().map_or(false, |inst| inst.uses_label().is_some()) {
@@ -445,7 +445,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         } else if domtree.cfg_preds_map.get(&succ).unwrap().len() == 1 {
             let Some(succ_blk) = func.blocks
                 .iter_mut()
-                .find(|b| b.label.starts_with(succ.as_str())) else { unreachable!() };
+                .find(|b| b.label == succ.as_str()) else { unreachable!() };
 
             let start_idx = if succ_blk
                 .instructions
@@ -475,7 +475,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
 
             let Some(pred_idx) = func.blocks
                 .iter()
-                .position(|b| b.label.starts_with(pred.as_str())) else { unreachable!() };
+                .position(|b| b.label == pred.as_str()) else { unreachable!() };
 
             let pred_idx = if pred == succ { pred_idx } else { pred_idx + 1 };
 
@@ -489,7 +489,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 let Some(inst) = dst_map.get(&(label.clone(), del)) else {
                     unreachable!("{:?}", label)
                 };
-                let Some(b) = func.blocks.iter().position(|b| b.label.starts_with(label.as_str())) else {
+                let Some(b) = func.blocks.iter().position(|b| b.label == label.as_str()) else {
                     unreachable!("{:?}", label)
                 };
                 let Some(i) = func.blocks[b].instructions.iter().position(|i| i == inst) else {

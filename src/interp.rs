@@ -80,7 +80,7 @@ impl Interpreter {
                 for (idx, inst) in func.flatten_block_iter().enumerate() {
                     preamble_lines += 1;
                     if let Instruction::Label(s) = inst {
-                        label_map.insert(Loc(s.replace(':', "")), idx);
+                        label_map.insert(Loc(s.to_string()), idx);
                     }
                     instrs.push((preamble_lines, inst.clone()));
                 }

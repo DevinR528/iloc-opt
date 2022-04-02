@@ -182,11 +182,11 @@ pub fn dom_val_num(
     }
 
     let empty = BTreeSet::new();
-    let blk_label = blks[blk_idx].label.replace(':', "");
+    let blk_label = &blks[blk_idx].label;
 
     for blk in dtree.cfg_succs_map.get(blk_label.as_str()).unwrap_or(&empty) {
         // TODO: make block -> index map
-        let idx = blks.iter().position(|b| b.label.starts_with(blk.as_str())).unwrap();
+        let idx = blks.iter().position(|b| b.label == blk.as_str()).unwrap();
         let rng = phi_range(&blks[idx].instructions);
 
         for phi in &mut blks[idx].instructions[rng] {
@@ -209,7 +209,7 @@ pub fn dom_val_num(
     // This is what drives the rename algorithm
     for blk in dtree.dom_tree.get(blk_label.as_str()).unwrap_or(&empty) {
         // TODO: make block -> index map
-        let idx = blks.iter().position(|b| b.label.starts_with(blk.as_str())).unwrap();
+        let idx = blks.iter().position(|b| b.label == blk.as_str()).unwrap();
         dom_val_num(blks, idx, meta, dtree, expr_tree);
     }
 

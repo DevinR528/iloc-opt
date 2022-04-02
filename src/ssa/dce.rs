@@ -123,7 +123,7 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
         for blk in domtree.post_dom_frontier.get(b_label).unwrap_or(&empty) {
             let Some(block) = func.blocks.iter()
                 .find(|b| {
-                    b.label.starts_with(blk.as_str())
+                    b.label == blk.as_str()
                 }) else {
                     println!("oh shit {}", blk.as_str());
                     continue;
@@ -153,9 +153,7 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
                 if inst.is_cnd_jump() {
                     // post dominance
                     // Which blocks will for sure run next (so we can jump to it)
-                    if let Some(label) =
-                        domtree.post_idom_map.get(blk.label.replace(':', "").as_str())
-                    {
+                    if let Some(label) = domtree.post_idom_map.get(blk.label.as_str()) {
                         println!(
                             "rewrite branch {} jumpI -> {:?} {:#?} {:#?}",
                             inst, label, domtree.post_idom_map, domtree.post_dom_frontier
@@ -191,7 +189,7 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
         for blk in postorder(&cfg_map, start) {
             let Some((idx, block)) = func.blocks.iter()
                 .enumerate()
-                .find(|(_, b)| b.label.starts_with(blk.as_str()))
+                .find(|(_, b)| b.label == blk.as_str())
                 .map(|(i, b)| (i, b.clone()))
              else {
                 // We removed a forward block
@@ -212,7 +210,7 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
             // i (in "Engineering a Compiler" book pg. 548)
             if let Some(loc) = block.ends_with_jump() {
                 // j (in "Engineering a Compiler" book pg. 548)
-                let Some(jump_to) = func.blocks.iter().find(|b| b.label.starts_with(loc)).cloned() else {
+                let Some(jump_to) = func.blocks.iter().find(|b| b.label == loc).cloned() else {
                     // We removed a block (loc) this block (blk) has as an only child
                     continue;
                 };
@@ -248,14 +246,13 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
         let used: HashSet<_> = reverse_postorder(&cfg_map, start).cloned().collect();
         for unused in all.difference(&used) {
             changed = true;
-            let pos =
-                func.blocks.iter().position(|b| b.label.starts_with(unused.as_str())).unwrap();
+            let pos = func.blocks.iter().position(|b| b.label == unused.as_str()).unwrap();
             func.blocks.remove(pos);
         }
 
         if changed {
             cfg_map = build_stripped_cfg(func);
-            // for (i, l) in func.blocks.iter().map(|b| b.label.replace(':', "")).enumerate() {
+            // for (i, l) in func.blocks.iter().map(|b| b.label).enumerate() {
             //     *func.block_map.get_mut(&l).unwrap() = i;
             // }
         }
@@ -268,17 +265,17 @@ pub fn build_stripped_cfg(func: &Function) -> HashMap<OrdLabel, BTreeSet<OrdLabe
     let mut blocks = func.blocks.iter().enumerate().next().into_iter().collect::<VecDeque<_>>();
     'blk: while let Some((idx, block)) = blocks.pop_front() {
         let mut extend_blocks = vec![];
-        let b_label = block.label.replace(':', "");
+        let b_label = &block.label;
         for inst in &block.instructions {
             if inst.is_return() {
                 continue 'blk;
             }
 
             if let Some(label) = inst.uses_label() {
-                let pos = func.blocks.iter().position(|b| b.label.starts_with(label)).unwrap();
+                let pos = func.blocks.iter().position(|b| b.label == label).unwrap();
 
                 let unseen = cfg
-                    .entry(OrdLabel::from_known(&b_label))
+                    .entry(OrdLabel::from_known(b_label))
                     .or_default()
                     .insert(OrdLabel::from_known(label));
                 // Skip the implicit branch to the block below the current one
@@ -295,46 +292,15 @@ pub fn build_stripped_cfg(func: &Function) -> HashMap<OrdLabel, BTreeSet<OrdLabe
         }
 
         if let Some(next) = func.blocks.get(idx + 1) {
-            let next_label = next.label.replace(':', "");
-            cfg.entry(OrdLabel::from_known(&b_label))
+            let next_label = &next.label;
+            cfg.entry(OrdLabel::from_known(b_label))
                 .or_default()
-                .insert(OrdLabel::from_known(&next_label));
+                .insert(OrdLabel::from_known(next_label));
             extend_blocks.push((idx + 1, next));
             extend_blocks.reverse();
             blocks.extend(extend_blocks);
         }
     }
-
-    // 'block: for (idx, block) in func.blocks.iter().enumerate() {
-    //     let b_label = block.label.replace(':', "");
-    //     // TODO: only iter the branch instructions with labels
-    //     for inst in &block.instructions {
-    //         // TODO: can we make note of this for optimization...(if there are trailing
-    //         // unreachable instructions)
-    //         if inst.is_return() {
-    //             continue 'block;
-    //         }
-
-    //         if let Some(label) = inst.uses_label() {
-    //             cfg.entry(OrdLabel::from_known(&b_label))
-    //                 .or_default()
-    //                 .insert(OrdLabel::from_known(label));
-    //             // Skip the implicit branch to the block below the current one
-    //             // since we found an unconditional jump.
-    //             if inst.unconditional_jmp() {
-    //                 continue 'block;
-    //             }
-    //         }
-    //     }
-
-    //     if let Some(next) = func.blocks.get(idx + 1) {
-    //         let next_label = next.label.replace(':', "");
-
-    //         cfg.entry(OrdLabel::from_known(&b_label))
-    //             .or_default()
-    //             .insert(OrdLabel::from_known(&next_label));
-    //     }
-    // }
     cfg
 }
 
@@ -342,10 +308,10 @@ fn combine(func: &mut Function, from: &str, into: &str) {
     let mut fr = None;
     let mut to = None;
     for (idx, blk) in func.blocks.iter().enumerate() {
-        if blk.label.starts_with(from) {
+        if blk.label == from {
             fr = Some(idx);
         }
-        if blk.label.starts_with(into) {
+        if blk.label == into {
             to = Some(idx);
         }
     }
@@ -366,7 +332,7 @@ fn replace_transfer(func: &mut Function, to: &str, with: &str, idx: usize) {
             }
         }
     }
-    if func.blocks[idx].label.starts_with(to) {
+    if func.blocks[idx].label == to {
         func.blocks.remove(idx);
     }
 }

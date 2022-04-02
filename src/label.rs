@@ -14,7 +14,7 @@ impl OrdLabel {
     // Create a new `OrdLabel, removing the `:` and without the sorting filler in the front of the
     // label.
     pub fn new(label: &str) -> Self {
-        Self(111, label.replace(':', ""))
+        Self(111, label.to_string())
     }
     pub fn new_add(sort: isize, label: &str) -> Self {
         match LABEL_MAP.lock().unwrap().entry(label.to_string()) {
@@ -32,8 +32,6 @@ impl OrdLabel {
                 o.get_mut().0 = sort;
             }
             Entry::Vacant(_) => {
-                // let l = OrdLabel(sort, label.to_string());
-                // v.insert(l.clone());
                 unreachable!()
             }
         }
@@ -46,7 +44,7 @@ impl OrdLabel {
         LABEL_MAP.lock().unwrap().entry(format!(".F_{}", start)).or_insert(l).clone()
     }
     pub fn as_str(&self) -> &str {
-        self.1.trim_start_matches('!')
+        &self.1
     }
 }
 impl fmt::Display for OrdLabel {

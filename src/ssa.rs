@@ -34,7 +34,7 @@ impl ControlFlowGraph {
 pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
     let mut cfg = ControlFlowGraph::default();
     'block: for (idx, block) in func.blocks.iter().enumerate() {
-        let b_label = block.label.replace(':', "");
+        let b_label = &block.label;
 
         let mut sort = 1;
         let mut unreachable = false;
@@ -44,9 +44,9 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
             // unreachable instructions)
             if inst.is_return() {
                 cfg.exits.push(if idx == 0 {
-                    OrdLabel::new_add(0, &b_label)
+                    OrdLabel::new_add(0, b_label)
                 } else {
-                    OrdLabel::from_known(&b_label)
+                    OrdLabel::from_known(b_label)
                 });
                 unreachable = true;
                 continue 'inst;
@@ -56,7 +56,7 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
                 if unreachable {
                     let _save_the_label = OrdLabel::new_add(sort, label);
                 } else {
-                    cfg.add_edge(&b_label, label, sort);
+                    cfg.add_edge(b_label, label, sort);
                 }
 
                 sort += 1;
@@ -73,8 +73,8 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
         }
 
         if let Some(next) = func.blocks.get(idx + 1) {
-            let next_label = next.label.replace(':', "");
-            cfg.add_edge(&b_label, &next_label, 0);
+            let next_label = &next.label;
+            cfg.add_edge(b_label, next_label, 0);
         }
     }
 
@@ -397,7 +397,7 @@ pub fn insert_phi_functions(
         for inst in func
             .blocks
             .iter()
-            .find(|b| b.label.starts_with(blk.as_str()))
+            .find(|b| b.label == blk.as_str())
             .map_or(&[] as &[_], |b| &b.instructions)
         {
             let (a, b) = inst.operands();
@@ -447,7 +447,7 @@ pub fn insert_phi_functions(
     }
 
     for (label, set) in &phis {
-        let blk = func.blocks.iter_mut().find(|b| b.label.starts_with(label.as_str())).unwrap();
+        let blk = func.blocks.iter_mut().find(|b| b.label == label.as_str()).unwrap();
         // If the block starts with a frame and label skip it other wise just skip a label
         let index = if let Instruction::Frame { .. } = &blk.instructions[0] { 2 } else { 1 };
         for reg in set {
@@ -520,7 +520,7 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
 
         lazy_code_motion(func, &dtree, cfg.exits.last().unwrap());
 
-        func.blocks.retain(|b| !b.label.starts_with(".E_exit"));
+        func.blocks.retain(|b| b.label != ".E_exit");
     }
 }
 

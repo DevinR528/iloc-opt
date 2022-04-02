@@ -2386,22 +2386,9 @@ pub struct Function {
     pub stack_size: usize,
     pub params: Vec<Reg>,
     pub blocks: Vec<Block>,
-    // pub block_map: HashMap<String, usize>,
 }
 
 impl Function {
-    // pub fn block_instructions(&self, label: &OrdLabel) -> Option<&[Instruction]> {
-    //     self.block_map.get(label.as_str()).map(|idx| self.blocks[*idx].instructions.as_slice())
-    // }
-
-    // pub fn block(&self, label: &OrdLabel) -> Option<&Block> {
-    //     self.block_map.get(label.as_str()).map(|idx| &self.blocks[*idx])
-    // }
-
-    // pub fn block_mut(&mut self, label: &OrdLabel) -> Option<&mut Block> {
-    //     self.block_map.get_mut(label.as_str()).map(|idx| &mut self.blocks[*idx])
-    // }
-
     pub fn flatten_block_iter(&self) -> impl Iterator<Item = &Instruction> + '_ {
         struct Iter<'a> {
             iter: &'a [Block],
@@ -2454,7 +2441,7 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
     let mut blk_idx = 0;
     for inst in rest.iter() {
         if let Instruction::Frame { name, size, params } = inst {
-            let label = format!(".F_{}:", name);
+            let label = format!(".F_{}", name);
             functions.push(Function {
                 label: name.to_string(),
                 stack_size: *size,
@@ -2463,7 +2450,6 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
                     label: label.clone(),
                     instructions: vec![inst.clone(), Instruction::Label(label.clone())],
                 }],
-                // block_map: HashMap::from_iter([(label.replace(':', ""), 0)]),
             });
 
             fn_idx = functions.len().saturating_sub(1);
@@ -2475,7 +2461,6 @@ pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
             });
 
             blk_idx = functions[fn_idx].blocks.len().saturating_sub(1);
-            // functions[fn_idx].block_map.insert(label.replace(':', ""), blk_idx);
         } else {
             let x = &mut functions[fn_idx];
             x.blocks[blk_idx].instructions.push(inst.clone());
@@ -2493,24 +2478,19 @@ pub fn make_basic_blocks(iloc: &IlocProgram) -> IlocProgram {
         // let mut blk_idx = 0;
         for blk in &func.blocks {
             blocks.push(Block { label: blk.label.clone(), instructions: vec![] });
-            // block_map.insert(blk.label.replace(':', ""), blk_idx);
             for (idx, inst) in blk.instructions.iter().enumerate() {
                 // We always add the instruction even when it's a cbr/jmp with no block after
                 blocks.last_mut().unwrap().instructions.push(inst.clone());
 
                 if inst.is_cnd_jump() && !matches!(blk.instructions.get(idx + 1), None) {
-                    let label = format!(".{}{}", blocks.len(), blk.label.replace('.', ""));
+                    let label = format!(".{}{}", blocks.len(), blk.label);
 
                     blocks.push(Block {
                         label: label.clone(),
                         instructions: vec![Instruction::Label(label.clone())],
                     });
-
-                    // block_map.insert(label.replace(':', ""), blk_idx);
-                    // blk_idx += 1;
                 }
             }
-            // blk_idx += 1;
         }
 
         functions.push(Function {
@@ -2518,7 +2498,6 @@ pub fn make_basic_blocks(iloc: &IlocProgram) -> IlocProgram {
             stack_size: func.stack_size,
             params: func.params.clone(),
             blocks,
-            // block_map,
         });
     }
     IlocProgram { preamble: iloc.preamble.clone(), functions }
