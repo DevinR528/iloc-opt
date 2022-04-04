@@ -263,7 +263,7 @@ impl Reg {
         if let Reg::Var(curr) = self {
             *curr
         } else {
-            unreachable!("not just Reg::Var in hurr")
+            unreachable!("not just Reg::Var in hurr {:?}", self)
         }
     }
 
@@ -2063,6 +2063,89 @@ impl Instruction {
 
             Self::Call { args, .. } | Self::Frame { params: args, .. } => args.iter_mut().collect(),
             Self::ImmCall { args, ret, .. } => args.iter_mut().chain(Some(ret)).collect(),
+            Self::ImmRet(ret) => vec![ret],
+
+            Self::ImmLoad { dst, .. } => vec![dst],
+
+            _ => vec![],
+        }
+    }
+
+    pub(crate) fn registers_iter(&self) -> Vec<&Reg> {
+        match self {
+            Self::I2I { src, dst }
+            | Self::F2I { src, dst }
+            | Self::I2F { src, dst }
+            | Self::F2F { src, dst }
+            | Self::Not { src, dst }
+            | Self::FLoad { src, dst }
+            | Self::Load { src, dst } => vec![src, dst],
+
+            Self::Add { src_a, src_b, dst }
+            | Self::Sub { src_a, src_b, dst }
+            | Self::Mult { src_a, src_b, dst }
+            | Self::LShift { src_a, src_b, dst }
+            | Self::RShift { src_a, src_b, dst }
+            | Self::Mod { src_a, src_b, dst }
+            | Self::And { src_a, src_b, dst }
+            | Self::Or { src_a, src_b, dst }
+            | Self::FAdd { src_a, src_b, dst }
+            | Self::FSub { src_a, src_b, dst }
+            | Self::FMult { src_a, src_b, dst }
+            | Self::FDiv { src_a, src_b, dst }
+            | Self::FComp { src_a, src_b, dst } => vec![src_a, src_b, dst],
+
+            Self::ImmAdd { src, dst, .. }
+            | Self::ImmSub { src, dst, .. }
+            | Self::ImmMult { src, dst, .. }
+            | Self::ImmLShift { src, dst, .. }
+            | Self::ImmRShift { src, dst, .. }
+            | Self::LoadAddImm { src, dst, .. }
+            | Self::FLoadAddImm { src, dst, .. } => vec![src, dst],
+
+            Self::StoreAddImm { src, dst, .. } => vec![src, dst],
+            Self::StoreAdd { src, add, dst } => vec![src, add, dst],
+
+            // TODO: I think this is correct
+            // Self::ImmLoad { src, .. } => vec![],
+            Self::LoadAdd { src, add, dst } | Self::FLoadAdd { src, add, dst } => {
+                vec![src, add, dst]
+            }
+
+            Self::Store { src, dst } | Self::Load { src, dst } => vec![src, dst],
+
+            Self::IWrite(r)
+            | Self::FWrite(r)
+            | Self::SWrite(r)
+            | Self::IRead(r)
+            | Self::FRead(r) => vec![r],
+
+            Self::CmpLT { a, b, dst }
+            | Self::CmpLE { a, b, dst }
+            | Self::CmpGT { a, b, dst }
+            | Self::CmpGE { a, b, dst }
+            | Self::CmpEQ { a, b, dst }
+            | Self::CmpNE { a, b, dst }
+            | Self::Comp { a, b, dst } => vec![a, b, dst],
+
+            Self::CbrEQ { a, b, .. }
+            | Self::CbrNE { a, b, .. }
+            | Self::CbrGT { a, b, .. }
+            | Self::CbrGE { a, b, .. }
+            | Self::CbrLT { a, b, .. }
+            | Self::CbrLE { a, b, .. } => vec![a, b],
+
+            Self::CbrT { cond, .. } | Self::CbrF { cond, .. } => vec![cond],
+
+            Self::TestEQ { test, dst }
+            | Self::TestNE { test, dst }
+            | Self::TestGT { test, dst }
+            | Self::TestGE { test, dst }
+            | Self::TestLT { test, dst }
+            | Self::TestLE { test, dst } => vec![test, dst],
+
+            Self::Call { args, .. } | Self::Frame { params: args, .. } => args.iter().collect(),
+            Self::ImmCall { args, ret, .. } => args.iter().chain(Some(ret)).collect(),
             Self::ImmRet(ret) => vec![ret],
 
             Self::ImmLoad { dst, .. } => vec![dst],

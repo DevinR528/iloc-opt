@@ -467,7 +467,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             // maybe move to successor if this is a back edge successor may actually execute less???
             // todo!()
         } else {
-            let label = format!(".pre{}{}:", pred.as_str(), succ.as_str());
+            let label = format!(".pre{}{}", pred.as_str(), succ.as_str());
             let mut instructions = vec![Instruction::Label(label.clone())];
             instructions.extend(to_move);
             instructions.push(Instruction::ImmJump(Loc(succ.as_str().to_string())));
