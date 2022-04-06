@@ -1,7 +1,11 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
+    default::default,
+};
 
 use crate::{
-    iloc::{Block, IlocProgram, Instruction, Reg},
+    iloc::{Block, IlocProgram, Instruction, Reg, Val},
     lcm::LoopAnalysis,
     ssa::{
         build_cfg, dom_val_num, dominator_tree, find_loops, insert_phi_functions,
@@ -13,10 +17,29 @@ mod color;
 
 use color::ColorNode;
 
-pub const K_DEGREE: usize = 4;
+pub const K_DEGREE: usize = 2;
+
+pub enum Spill {
+    Store { stack_size: usize, reg: Reg, blk_idx: usize, inst_idx: usize },
+    Load { stack_size: usize, reg: Reg, blk_idx: usize, inst_idx: usize },
+}
+impl Spill {
+    pub fn blk_idx(&self) -> usize {
+        match self {
+            Self::Store { blk_idx, .. } => *blk_idx,
+            Self::Load { blk_idx, .. } => *blk_idx,
+        }
+    }
+    pub fn inst_idx(&self) -> usize {
+        match self {
+            Self::Store { inst_idx, .. } => *inst_idx,
+            Self::Load { inst_idx, .. } => *inst_idx,
+        }
+    }
+}
 
 pub fn allocate_registers(prog: &mut IlocProgram) {
-    for func in &mut prog.functions {
+    'func: for func in &mut prog.functions {
         let start = OrdLabel::new_start(&func.label);
 
         let cfg = build_cfg(func);
@@ -27,25 +50,73 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
         dom_val_num(&mut func.blocks, 0, &mut meta, &dtree, &mut stack);
 
         let loop_map = find_loops(func, &dtree);
-        // TODO: safe to move instructions around here for better live ranges??
+
+        let mut stack_size = func.stack_size;
+        // TODO: Move/copy coalesce instructions in `build_interference`
+        // TODO: Move/copy coalesce instructions in `build_interference`
         let (graph, interfere) = loop {
             let (defs, uses) = color::build_use_def_map(&dtree, &start, &func.blocks);
-            match color::build_ranges(&func.blocks, &dtree, &start, &defs, &uses, &loop_map) {
+            match color::build_interference(&func.blocks, &dtree, &start, &defs, &uses, &loop_map) {
                 Ok((colored_graph, interfere)) => break (colored_graph, interfere),
                 Err(insert_spills) => {
                     println!("{:?}", insert_spills);
+
+                    let mut count = 0;
+                    let mut spills = vec![];
                     for blk in &mut func.blocks {
                         for inst in &mut blk.instructions {
-                            if let Some(dst) = inst.target_reg() && insert_spills.contains(&dst.to_register()) {
-                                panic!("SPILL ME NOOOOO {:?}", dst)
+                            if let Some(dst) = inst.target_reg()
+                                && insert_spills.contains(&dst.to_register())
+                            {
+                                stack_size += (4 * count);
+                                count += 1;
+                                for &(blk_idx, inst_idx) in defs.get(dst).unwrap_or(&vec![]) {
+                                    spills.push(Spill::Store { stack_size, reg: *dst, blk_idx, inst_idx });
+                                }
+                                for &(blk_idx, inst_idx) in uses.get(dst).unwrap_or(&vec![]) {
+                                    spills.push(Spill::Load { stack_size, reg: *dst, blk_idx, inst_idx });
+                                }
                             }
                         }
                     }
+
+                    spills.sort_by(|a, b| match a.blk_idx().cmp(&b.blk_idx()) {
+                        Ordering::Equal => a.inst_idx().cmp(&b.inst_idx()),
+                        res => res,
+                    });
+
+                    for (add, spill) in spills.into_iter().enumerate() {
+                        match spill {
+                            Spill::Store { stack_size, reg, blk_idx, inst_idx } => {
+                                func.blocks[blk_idx].instructions.insert(
+                                    inst_idx + add + 1,
+                                    Instruction::StoreAddImm {
+                                        src: reg,
+                                        add: Val::Integer(-(stack_size as isize)),
+                                        dst: Reg::Phi(0, 0),
+                                    },
+                                )
+                            }
+                            Spill::Load { stack_size, reg, blk_idx, inst_idx } => {
+                                func.blocks[blk_idx].instructions.insert(
+                                    (inst_idx + add) - 1,
+                                    Instruction::LoadAddImm {
+                                        src: Reg::Phi(0, 0),
+                                        add: Val::Integer(-(stack_size as isize)),
+                                        dst: reg,
+                                    },
+                                )
+                            }
+                        }
+                    }
+
+                    break 'func;
                 }
             }
         };
+        func.stack_size = stack_size;
 
-        emit_cfg_viz(&dtree.cfg_succs_map, &start, &func.blocks, &graph, &interfere, "pre2");
+        // emit_cfg_viz(&dtree.cfg_succs_map, &start, &func.blocks, &graph, &interfere, "pre2");
 
         for blk in &mut func.blocks {
             for inst in &mut blk.instructions {
