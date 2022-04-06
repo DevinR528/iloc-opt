@@ -434,9 +434,7 @@ pub fn insert_phi_functions(
             for d in dom_front.get(blk).unwrap_or(&empty_set) {
                 // If we have seen this register or it isn't in the current block we are checking
                 // skip it
-                if !phis.get(d).map_or(false, |set| set.contains(global_reg))
-                    && blocks_map.get(global_reg).map_or(false, |blk_set| blk_set.contains(d))
-                {
+                if !phis.get(d).map_or(false, |set| set.contains(global_reg)) {
                     // insert phi func
                     phis.entry(d.clone()).or_default().insert(global_reg.clone());
                     // Add the dom frontier node to the `worklist`

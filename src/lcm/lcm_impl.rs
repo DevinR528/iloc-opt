@@ -180,9 +180,6 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     // The expression is used in all successors (this is inherited so as long as it is not
     // killed it could be a non direct successor)
     let mut anti_out: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
-    // for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
-    //     anti_out.insert(label.clone(), universe.get(label).cloned().unwrap_or_default());
-    // }
     let mut anti_in: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
