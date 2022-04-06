@@ -123,14 +123,16 @@ pub fn build_use_def_map(
     (def_map, use_map)
 }
 
-pub fn build_ranges(
+pub type InterfereResult =
+    Result<(BTreeMap<Reg, ColorNode>, BTreeMap<Reg, BTreeSet<Reg>>), BTreeSet<Reg>>;
+pub fn build_interference(
     blocks: &[Block],
     domtree: &DominatorTree,
     start: &OrdLabel,
     def_map: &BTreeMap<Reg, Vec<(usize, usize)>>,
     use_map: &BTreeMap<Reg, Vec<(usize, usize)>>,
     loop_map: &LoopAnalysis,
-) -> Result<(BTreeMap<Reg, ColorNode>, BTreeMap<Reg, BTreeSet<Reg>>), BTreeSet<Reg>> {
+) -> InterfereResult {
     let mut changed = true;
     let mut phi_defs: HashMap<_, HashSet<Reg>> = HashMap::new();
     let mut phi_uses: HashMap<_, HashSet<Reg>> = HashMap::new();
