@@ -185,6 +185,13 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
     let mut to_jump = vec![];
     let mut changed = true;
     while changed {
+        let mut cfg_preds: HashMap<_, BTreeSet<_>> = HashMap::new();
+        for (from, tos) in &cfg_map {
+            for to in tos {
+                cfg_preds.entry(to.as_str()).or_default().insert(from.as_str());
+            }
+        }
+
         changed = false;
         for blk in postorder(&cfg_map, start) {
             let Some((idx, block)) = func.blocks.iter()
@@ -222,9 +229,13 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
                     replace_transfer(func, blk.as_str(), loc, idx);
                     // TODO: also check the `jump_to` list for renamed labels
                 }
-                if cfg_map.get(loc).map_or(false, |set| set.len() == 1) {
+
+                // Since this block ends with a jumpI (blk) and the location (loc) only has one
+                // successor (so we aren't messing with any dominators) we remove
+                // the jump in blk and move `loc`'s instructions into `blk`
+                if cfg_preds.get(loc).map_or(false, |set| set.len() == 1) {
                     changed = true;
-                    println!("combine {loc} into {blk}");
+                    println!("combine {loc} into {blk} {:?}", cfg_map);
                     combine(func, loc, blk.as_str());
                 }
                 // The `all()` method defaults to true if no iteration happens!!
@@ -318,8 +329,17 @@ fn combine(func: &mut Function, from: &str, into: &str) {
     let Some(from) = fr else { return; };
     let Some(into) = to else { return; };
 
-    let from_blk = func.blocks.remove(from);
-    func.blocks[into].instructions.extend(from_blk.instructions);
+    let mut from_blk = func.blocks.remove(from);
+
+    if let Some(instruction) = func.blocks[into].instructions.last_mut() {
+        *instruction = Instruction::Skip(format!("{}", instruction));
+    }
+
+    func.blocks[into].instructions.extend(
+        from_blk
+            .instructions
+            .drain_filter(|i| !matches!(i, Instruction::Label(..) | Instruction::Frame { .. })),
+    );
 }
 
 fn replace_transfer(func: &mut Function, to: &str, with: &str, idx: usize) {
