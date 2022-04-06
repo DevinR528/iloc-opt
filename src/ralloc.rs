@@ -19,6 +19,7 @@ use color::ColorNode;
 
 pub const K_DEGREE: usize = 2;
 
+#[derive(Debug)]
 pub enum Spill {
     Store { stack_size: usize, reg: Reg, blk_idx: usize, inst_idx: usize },
     Load { stack_size: usize, reg: Reg, blk_idx: usize, inst_idx: usize },
@@ -99,7 +100,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                             }
                             Spill::Load { stack_size, reg, blk_idx, inst_idx } => {
                                 func.blocks[blk_idx].instructions.insert(
-                                    (inst_idx + add) - 1,
+                                    (inst_idx + add),
                                     Instruction::LoadAddImm {
                                         src: Reg::Phi(0, 0),
                                         add: Val::Integer(-(stack_size as isize)),
@@ -110,7 +111,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                         }
                     }
 
-                    break 'func;
+                    // break 'func;
                 }
             }
         };
