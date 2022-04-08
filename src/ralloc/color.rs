@@ -123,8 +123,11 @@ pub fn build_use_def_map(
     (def_map, use_map)
 }
 
+/// The `Ok` variant is the successfully colored graph and the original interference graph (this is
+/// debug mostly), The `Err` variant is The highest register count and a set of registers that
+/// failed to color. The highest register is used for the spills to break up live ranges.
 pub type InterfereResult =
-    Result<(BTreeMap<Reg, ColorNode>, BTreeMap<Reg, BTreeSet<Reg>>), BTreeSet<Reg>>;
+    Result<(BTreeMap<Reg, ColorNode>, BTreeMap<Reg, BTreeSet<Reg>>), (Reg, BTreeSet<Reg>)>;
 pub fn build_interference(
     blocks: &[Block],
     domtree: &DominatorTree,
@@ -182,10 +185,10 @@ pub fn build_interference(
         }
     }
 
-    // print_maps("phi_defs", phi_defs.iter());
-    // print_maps("phi_uses", phi_uses.iter());
-    // print_maps("defs", defs.iter());
-    // println!();
+    print_maps("phi_defs", phi_defs.iter());
+    print_maps("phi_uses", phi_uses.iter());
+    print_maps("defs", defs.iter());
+    println!();
 
     changed = true;
     let empty = HashSet::new();
@@ -249,10 +252,11 @@ pub fn build_interference(
         }
     }
 
-    // print_maps("live_in", live_in.iter());
-    // print_maps("live_out", live_out.iter());
-    // println!();
+    print_maps("live_in", live_in.iter());
+    print_maps("live_out", live_out.iter());
+    println!();
 
+    let mut highest_reg = Reg::Var(0);
     let mut interference: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     for curr in postorder(&domtree.cfg_succs_map, start) {
         let livenow = live_out.get_mut(curr).unwrap();
@@ -278,9 +282,13 @@ pub fn build_interference(
                 livenow.remove(dst);
             } else if let Instruction::ImmLoad { dst, .. } = inst {
                 interference.entry(dst.to_register()).or_default();
+                livenow.remove(&dst);
             }
 
             for operand in inst.operand_iter() {
+                if operand.to_register() > highest_reg {
+                    highest_reg = operand.to_register();
+                }
                 // Incase there is a register that has no overlapping live ranges
                 interference.entry(operand.to_register()).or_default();
                 livenow.insert(operand);
@@ -382,7 +390,7 @@ pub fn build_interference(
             insert_load_store.insert(spilled);
         }
 
-        Err(insert_load_store)
+        Err((highest_reg, insert_load_store))
     }
 }
 
@@ -400,6 +408,7 @@ fn find_cheap_spill(
     let empty_use = vec![];
     for (idx, (r, set)) in graph.iter().enumerate() {
         let degree = set.len() as isize;
+
         let defs = defs.get(r).unwrap_or(&empty_def);
         let r_defs = defs.iter().map(|(b, i)| &blocks[*b].instructions[*i]).collect::<Vec<_>>();
         let uses = uses.get(r).unwrap_or(&empty_use);
