@@ -272,15 +272,17 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                         .get(succ)
                         .unwrap_or(&empty)
                         .difference(avail_out.get(pred).unwrap_or(&empty))
+                        .copied()
                         .collect();
                     let transout: HashSet<_> = transparent
                         .get(pred)
                         .unwrap_or(&empty)
                         .intersection(anti_out.get(pred).unwrap_or(&empty))
+                        .copied()
                         .collect();
 
-                    for new in inout.union(&transout) {
-                        changed |= old.insert(**new);
+                    for new in inout.difference(&transout) {
+                        changed |= old.insert(*new);
                     }
                 }
             }
@@ -379,9 +381,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("insert", insert.iter());
-    // print_maps("delete", delete.iter());
-    // println!();
+    print_maps("insert", insert.iter());
+    print_maps("delete", delete.iter());
+    println!();
 
     let loop_analysis = find_loops(func, domtree);
 

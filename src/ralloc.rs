@@ -40,6 +40,7 @@ impl Spill {
 }
 
 pub fn allocate_registers(prog: &mut IlocProgram) {
+    return;
     'func: for func in &mut prog.functions {
         let start = OrdLabel::new_start(&func.label);
 
