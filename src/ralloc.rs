@@ -59,13 +59,13 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
             let (defs, uses) = color::build_use_def_map(&dtree, &start, &func.blocks);
             match color::build_interference(&func.blocks, &dtree, &start, &defs, &uses, &loop_map) {
                 Ok((colored_graph, interfere)) => break (colored_graph, interfere),
-                Err(insert_spills) => {
+                Err((mut last_reg, insert_spills)) => {
                     println!("{:?}", insert_spills);
 
-                    let mut count = 0;
                     let mut spills = vec![];
                     for blk in &mut func.blocks {
-                        for inst in &mut blk.instructions {
+                        let mut count = 0;
+                        for (i, inst) in blk.instructions.iter_mut().enumerate() {
                             if let Some(dst) = inst.target_reg()
                                 && insert_spills.contains(&dst.to_register())
                             {
@@ -86,9 +86,15 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                         res => res,
                     });
 
-                    for (add, spill) in spills.into_iter().enumerate() {
+                    let mut curr_blk_idx = 0;
+                    let mut add = 0;
+                    for spill in spills {
                         match spill {
                             Spill::Store { stack_size, reg, blk_idx, inst_idx } => {
+                                if blk_idx != curr_blk_idx {
+                                    curr_blk_idx = blk_idx;
+                                    add = 0;
+                                }
                                 func.blocks[blk_idx].instructions.insert(
                                     inst_idx + add + 1,
                                     Instruction::StoreAddImm {
@@ -96,22 +102,45 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                         add: Val::Integer(-(stack_size as isize)),
                                         dst: Reg::Phi(0, 0),
                                     },
-                                )
+                                );
+                                if blk_idx == curr_blk_idx {
+                                    add += 1;
+                                }
                             }
                             Spill::Load { stack_size, reg, blk_idx, inst_idx } => {
-                                func.blocks[blk_idx].instructions.insert(
+                                if blk_idx != curr_blk_idx {
+                                    curr_blk_idx = blk_idx;
+                                    add = 0;
+                                }
+                                // let Reg::Var(r) = last_reg else { unreachable!() };
+                                // last_reg = Reg::Var(r + 1);
+                                let inst = &mut func.blocks[blk_idx].instructions;
+                                // Make sure the use respects the new register number
+
+                                // match inst[inst_idx + add].operands_mut() {
+                                //     (Some(a), _) if *a == reg => {
+                                //         *a = last_reg;
+                                //     }
+                                //     (_, Some(b)) if *b == reg => {
+                                //         *b = last_reg;
+                                //     }
+                                //     // Any other register used in the instruction (DUH)
+                                //     _ => {}
+                                // }
+                                inst.insert(
                                     (inst_idx + add),
                                     Instruction::LoadAddImm {
                                         src: Reg::Phi(0, 0),
                                         add: Val::Integer(-(stack_size as isize)),
                                         dst: reg,
                                     },
-                                )
+                                );
+                                if blk_idx == curr_blk_idx {
+                                    add += 1;
+                                }
                             }
                         }
                     }
-
-                    // break 'func;
                 }
             }
         };
