@@ -1319,14 +1319,13 @@ impl Instruction {
 
             Self::StoreAddImm { src, dst, .. } => vec![*src, *dst],
             Self::StoreAdd { src, add, dst } => vec![*src, *add, *dst],
+            Self::Store { src, dst } => vec![*src, *dst],
 
             // TODO: I think this is correct
             // Self::ImmLoad { src, .. } => vec![],
             Self::LoadAdd { src, add, .. } | Self::FLoadAdd { src, add, .. } => {
                 vec![*src, *add]
             }
-
-            Self::Store { src, dst } => vec![*src, *dst],
 
             Self::IWrite(r)
             | Self::FWrite(r)

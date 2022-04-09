@@ -459,6 +459,10 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         // This is to guard against a move of instructions from succ into pred's edge  actually
         // being a move into a more nested loop
         } else {
+            println!(
+                "p {} s {}\ns: {:#?}\np: {:#?}",
+                pred, succ, domtree.cfg_succs_map, domtree.cfg_preds_map
+            );
             let label = format!(".pre{}{}", pred.as_str(), succ.as_str());
             let mut instructions = vec![Instruction::Label(label.clone())];
             instructions.extend(to_move);
