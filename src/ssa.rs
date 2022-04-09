@@ -445,6 +445,9 @@ pub fn insert_phi_functions(
     }
 
     for (label, set) in &phis {
+        if label.as_str() == ".E_exit" {
+            continue;
+        }
         let blk = func.blocks.iter_mut().find(|b| b.label == label.as_str()).unwrap();
         // If the block starts with a frame and label skip it other wise just skip a label
         let index = if let Instruction::Frame { .. } = &blk.instructions[0] { 2 } else { 1 };
@@ -462,8 +465,6 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
 
         let start = OrdLabel::new_start(&func.label);
         let dtree = dominator_tree(&cfg, &mut func.blocks, &start);
-
-        // println!("pdtree: {:#?}\npdftree: {:#?}", dtree.post_dom_tree, dtree.post_dom_frontier);
 
         // The `phis` used to fill the `meta` map
         let _phis =

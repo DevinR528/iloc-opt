@@ -112,7 +112,7 @@ fn main() {
 
             let mut path = PathBuf::from(&file);
             let file = path.file_stem().unwrap().to_string_lossy().to_string();
-            path.set_file_name(&format!("{}.lvn.dbre.dce.pre.ra.il", file));
+            path.set_file_name(&format!("{}.lvn.dbre.dce.pre.il", file));
             let mut fd =
                 fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
             fd.write_all(buf.as_bytes()).unwrap();
