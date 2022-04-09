@@ -625,6 +625,31 @@ fn ssa_cfg_trap() {
     // dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }
 
+#[test]
+fn lcm_simple() {
+    use std::fs;
+
+    use crate::iloc::{make_basic_blocks, make_blks, parse_text};
+
+    let input = "
+    .data
+    .text
+.frame main, 0
+    loadI 4 => %vr4
+    loadI 42 => %vr42
+    add %vr0, %vr4 => %vr5
+    store %vr42 => %vr5
+    ret
+";
+    let iloc = parse_text(input).unwrap();
+    let mut blocks = make_basic_blocks(&make_blks(iloc));
+
+    let cfg = build_cfg(&mut blocks.functions[0]);
+    let name = OrdLabel::new_start(&blocks.functions[0].label);
+    let dom = dominator_tree(&cfg, &mut blocks.functions[0].blocks, &name);
+
+    lazy_code_motion(&mut blocks.functions[0], &dom, cfg.exits.last().unwrap());
+}
 #[allow(unused)]
 fn emit_cfg_viz(cfg: &ControlFlowGraph, file: &str) {
     use std::{
