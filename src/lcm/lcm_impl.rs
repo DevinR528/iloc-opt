@@ -99,7 +99,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     }
 
     // print_maps("universe", universe.iter());
-    print_maps("dexpr", dexpr.iter());
+    // print_maps("dexpr", dexpr.iter());
     // print_maps("uexpr", uexpr.iter());
     // print_maps("trans", transparent.iter());
     // print_maps("kill", kill.iter());
@@ -168,8 +168,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    print_maps("avail_in", avail_in.iter());
-    print_maps("avail_out", avail_out.iter());
+    // print_maps("avail_in", avail_in.iter());
+    // print_maps("avail_out", avail_out.iter());
     println!();
 
     changed = true;
@@ -286,8 +286,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    print_maps("earliest", earliest.iter());
-    println!();
+    // print_maps("earliest", earliest.iter());
+    // println!();
 
     // LATEST
     changed = true;
@@ -378,9 +378,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    print_maps("insert", insert.iter());
-    print_maps("delete", delete.iter());
-    println!();
+    // print_maps("insert", insert.iter());
+    // print_maps("delete", delete.iter());
+    // println!();
 
     let loop_analysis = find_loops(func, domtree);
 
@@ -459,10 +459,10 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         // This is to guard against a move of instructions from succ into pred's edge  actually
         // being a move into a more nested loop
         } else {
-            println!(
-                "p {} s {}\ns: {:#?}\np: {:#?}",
-                pred, succ, domtree.cfg_succs_map, domtree.cfg_preds_map
-            );
+            // println!(
+            //     "p {} s {}\ns: {:#?}\np: {:#?}",
+            //     pred, succ, domtree.cfg_succs_map, domtree.cfg_preds_map
+            // );
             let label = format!(".pre{}{}", pred.as_str(), succ.as_str());
             let mut instructions = vec![Instruction::Label(label.clone())];
             instructions.extend(to_move);
@@ -473,7 +473,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 .iter()
                 .position(|b| b.label == pred.as_str()) else { unreachable!() };
 
-            // We need to fix the label in the predecessor and add a "fallthrough" `jumpI`
+            // We need to fix the label in the predecessor and add a "fallthrough" `jumpI` for the
+            // case when the same edge gets more than one insertion
             if let Some(cnd_br) = func.blocks[pred_idx].instructions.last_mut() && cnd_br.uses_label() == Some(succ.as_str()) {
                 *cnd_br.label_mut().unwrap() = Loc(label);
             } else {

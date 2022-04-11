@@ -2109,8 +2109,6 @@ impl Instruction {
             Self::StoreAddImm { src, dst, .. } => vec![src, dst],
             Self::StoreAdd { src, add, dst } => vec![src, add, dst],
 
-            // TODO: I think this is correct
-            // Self::ImmLoad { src, .. } => vec![],
             Self::LoadAdd { src, add, dst } | Self::FLoadAdd { src, add, dst } => {
                 vec![src, add, dst]
             }
@@ -2153,7 +2151,9 @@ impl Instruction {
 
             Self::ImmLoad { dst, .. } => vec![dst],
 
-            _ => vec![],
+            Self::Label(..) | Self::ImmJump(..) | Self::Ret => vec![],
+
+            what => todo!("{:?}", what),
         }
     }
 }
@@ -2518,7 +2518,7 @@ impl Block {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Function {
     pub label: String,
     pub stack_size: usize,
