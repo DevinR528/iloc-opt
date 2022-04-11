@@ -349,12 +349,16 @@ pub enum Instruction {
     /// %r => %r `load`
     Load { src: Reg, dst: Reg },
     /// (%r + c) => %r `loadAI`
+    ///
+    /// Where `add + src` is the location on the stack to load into `dst`.
     LoadAddImm { src: Reg, add: Val, dst: Reg },
     /// (%r + %r) => %r `loadAO`
     LoadAdd { src: Reg, add: Reg, dst: Reg },
     /// %r => %r `store`
     Store { src: Reg, dst: Reg },
     /// %r => (%r + c) `storeAI`
+    ///
+    /// Where `add + dst` is the location on the stack to store `src`.
     StoreAddImm { src: Reg, add: Val, dst: Reg },
     /// %r => (%r + %r) `storeAO`
     StoreAdd { src: Reg, add: Reg, dst: Reg },
@@ -1315,14 +1319,13 @@ impl Instruction {
 
             Self::StoreAddImm { src, dst, .. } => vec![*src, *dst],
             Self::StoreAdd { src, add, dst } => vec![*src, *add, *dst],
+            Self::Store { src, dst } => vec![*src, *dst],
 
             // TODO: I think this is correct
             // Self::ImmLoad { src, .. } => vec![],
             Self::LoadAdd { src, add, .. } | Self::FLoadAdd { src, add, .. } => {
                 vec![*src, *add]
             }
-
-            Self::Store { src, dst } => vec![*src, *dst],
 
             Self::IWrite(r)
             | Self::FWrite(r)
@@ -2106,8 +2109,6 @@ impl Instruction {
             Self::StoreAddImm { src, dst, .. } => vec![src, dst],
             Self::StoreAdd { src, add, dst } => vec![src, add, dst],
 
-            // TODO: I think this is correct
-            // Self::ImmLoad { src, .. } => vec![],
             Self::LoadAdd { src, add, dst } | Self::FLoadAdd { src, add, dst } => {
                 vec![src, add, dst]
             }
@@ -2150,7 +2151,9 @@ impl Instruction {
 
             Self::ImmLoad { dst, .. } => vec![dst],
 
-            _ => vec![],
+            Self::Label(..) | Self::ImmJump(..) | Self::Ret => vec![],
+
+            what => todo!("{:?}", what),
         }
     }
 }
@@ -2475,7 +2478,7 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             [label, "nop"] => instructions.push(Instruction::Label(label.replace(':', ""))),
             [first, ..] if first.starts_with('#') => {}
             [label] if label.starts_with('.') => {
-                instructions.push(Instruction::Label(label.to_string()))
+                instructions.push(Instruction::Label(label.replace(':', "")))
             }
             inst => todo!("{:?}", inst),
             // _ => {
@@ -2515,7 +2518,7 @@ impl Block {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Function {
     pub label: String,
     pub stack_size: usize,

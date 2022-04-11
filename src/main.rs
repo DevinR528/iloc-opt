@@ -1,4 +1,13 @@
-#![feature(let_else, map_first_last, once_cell, stmt_expr_attributes, let_chains, try_blocks)]
+#![feature(
+    let_else,
+    map_first_last,
+    once_cell,
+    stmt_expr_attributes,
+    let_chains,
+    try_blocks,
+    drain_filter,
+    default_free_fn
+)]
 #![allow(unused)]
 
 use std::{

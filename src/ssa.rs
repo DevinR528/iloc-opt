@@ -434,9 +434,7 @@ pub fn insert_phi_functions(
             for d in dom_front.get(blk).unwrap_or(&empty_set) {
                 // If we have seen this register or it isn't in the current block we are checking
                 // skip it
-                if !phis.get(d).map_or(false, |set| set.contains(global_reg))
-                    && blocks_map.get(global_reg).map_or(false, |blk_set| blk_set.contains(d))
-                {
+                if !phis.get(d).map_or(false, |set| set.contains(global_reg)) {
                     // insert phi func
                     phis.entry(d.clone()).or_default().insert(global_reg.clone());
                     // Add the dom frontier node to the `worklist`
@@ -447,6 +445,9 @@ pub fn insert_phi_functions(
     }
 
     for (label, set) in &phis {
+        if label.as_str() == ".E_exit" {
+            continue;
+        }
         let blk = func.blocks.iter_mut().find(|b| b.label == label.as_str()).unwrap();
         // If the block starts with a frame and label skip it other wise just skip a label
         let index = if let Instruction::Frame { .. } = &blk.instructions[0] { 2 } else { 1 };
@@ -464,8 +465,6 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
 
         let start = OrdLabel::new_start(&func.label);
         let dtree = dominator_tree(&cfg, &mut func.blocks, &start);
-
-        // println!("pdtree: {:#?}\npdftree: {:#?}", dtree.post_dom_tree, dtree.post_dom_frontier);
 
         // The `phis` used to fill the `meta` map
         let _phis =
@@ -626,6 +625,31 @@ fn ssa_cfg_trap() {
     // dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }
 
+#[test]
+fn lcm_simple() {
+    use std::fs;
+
+    use crate::iloc::{make_basic_blocks, make_blks, parse_text};
+
+    let input = "
+    .data
+    .text
+.frame main, 0
+    loadI 4 => %vr4
+    loadI 42 => %vr42
+    add %vr0, %vr4 => %vr5
+    store %vr42 => %vr5
+    ret
+";
+    let iloc = parse_text(input).unwrap();
+    let mut blocks = make_basic_blocks(&make_blks(iloc));
+
+    let cfg = build_cfg(&mut blocks.functions[0]);
+    let name = OrdLabel::new_start(&blocks.functions[0].label);
+    let dom = dominator_tree(&cfg, &mut blocks.functions[0].blocks, &name);
+
+    lazy_code_motion(&mut blocks.functions[0], &dom, cfg.exits.last().unwrap());
+}
 #[allow(unused)]
 fn emit_cfg_viz(cfg: &ControlFlowGraph, file: &str) {
     use std::{
