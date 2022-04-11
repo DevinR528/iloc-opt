@@ -7,7 +7,7 @@ use std::{
 use crate::{
     iloc::{Block, Function, Instruction, Operand, Reg},
     lcm::{print_maps, LoopAnalysis},
-    ralloc::K_DEGREE,
+    ralloc::{emit_good_ralloc_viz, emit_ralloc_viz, K_DEGREE},
     ssa::{postorder, reverse_postorder, DominatorTree, OrdLabel},
 };
 
@@ -105,12 +105,20 @@ pub fn build_use_def_map(
             if matches!(inst, Instruction::Skip(..)) {
                 continue;
             }
-            if let Instruction::Phi(reg, set, subs) = inst {
-                let subs = subs.unwrap();
-                let mut phi = *reg;
-                phi.as_phi(subs);
+            match inst {
+                Instruction::Phi(reg, set, subs) => {
+                    let subs = subs.unwrap();
+                    let mut phi = *reg;
+                    phi.as_phi(subs);
 
-                def_map.entry(phi).or_default().push((b, i));
+                    // def_map.entry(phi).or_default().push((b, i));
+                }
+                Instruction::Frame { params, .. } => {
+                    for p in params {
+                        def_map.entry(*p).or_default().push((b, i));
+                    }
+                }
+                _ => (),
             }
             if let Some(dst) = inst.target_reg() {
                 def_map.entry(*dst).or_default().push((b, i));
@@ -132,15 +140,15 @@ pub fn build_interference(
     blocks: &[Block],
     domtree: &DominatorTree,
     start: &OrdLabel,
-    def_map: &BTreeMap<Reg, Vec<(usize, usize)>>,
-    use_map: &BTreeMap<Reg, Vec<(usize, usize)>>,
+    def_map: &BTreeMap<Reg, BTreeSet<(usize, usize)>>,
+    use_map: &BTreeMap<Reg, BTreeSet<(usize, usize)>>,
     loop_map: &LoopAnalysis,
 ) -> InterfereResult {
     let mut changed = true;
-    let mut phi_defs: HashMap<_, HashSet<Reg>> = HashMap::new();
-    let mut phi_uses: HashMap<_, HashSet<Reg>> = HashMap::new();
-    let mut defs: HashMap<_, HashSet<Reg>> = HashMap::new();
-    let mut uexpr: HashMap<_, HashSet<Reg>> = HashMap::new();
+    let mut phi_defs: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
+    let mut phi_uses: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
+    let mut defs: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
+    let mut uexpr: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
     while changed {
         changed = false;
         for (label, blk) in reverse_postorder(&domtree.cfg_succs_map, start)
@@ -153,30 +161,41 @@ pub fn build_interference(
             let def_loc = defs.entry(label.clone()).or_default();
             let phi_def_loc = phi_defs.entry(label.clone()).or_default();
 
-            for inst in &blk.instructions {
+            for inst in blk.instructions.iter() {
                 if matches!(inst, Instruction::Skip(..)) {
                     continue;
                 }
-                if let Instruction::Phi(r, set, subs) = inst {
-                    let subs = subs.unwrap();
-                    let mut phi = *r;
-                    phi.as_phi(subs);
-                    phi_def_loc.insert(phi);
-
-                    for s in set.iter().filter(|s| **s != subs) {
+                match inst {
+                    Instruction::Phi(r, set, subs) => {
+                        let subs = subs.unwrap();
                         let mut phi = *r;
-                        phi.as_phi(*s);
-                        // TODO: this is really inefficient and ugly
-                        if let Some((l, _)) = ugh.iter().find(|(l, set)| set.contains(&phi)) {
-                            phi_uses.entry(l.clone()).or_default().insert(phi);
+                        phi.as_phi(subs);
+                        phi_def_loc.insert(phi);
+
+                        for s in set.iter().filter(|s| **s != subs) {
+                            let mut phi = *r;
+                            phi.as_phi(*s);
+                            // TODO: this is really inefficient and ugly
+                            if let Some((l, _)) = ugh.iter().find(|(l, set)| set.contains(&phi)) {
+                                phi_uses.entry(l.clone()).or_default().insert(phi);
+                            }
                         }
                     }
+                    Instruction::Frame { params, .. } => {
+                        for p in params {
+                            def_loc.insert(*p);
+                        }
+                    }
+                    _ => (),
                 }
 
                 if let Some(t) = inst.target_reg() {
                     def_loc.insert(*t);
                 }
                 for op in inst.operand_iter() {
+                    if matches!(op, Reg::Phi(0, _) | Reg::Var(0)) {
+                        continue;
+                    }
                     if !def_loc.contains(&op) {
                         changed |= uloc.insert(op);
                     }
@@ -185,15 +204,16 @@ pub fn build_interference(
         }
     }
 
-    print_maps("phi_defs", phi_defs.iter());
-    print_maps("phi_uses", phi_uses.iter());
-    print_maps("defs", defs.iter());
-    println!();
+    // print_maps("phi_defs", phi_defs.iter());
+    // print_maps("phi_uses", phi_uses.iter());
+    // print_maps("defs", def_map.iter());
+    // print_maps("upexpo", uexpr.iter());
+    // println!();
 
     changed = true;
-    let empty = HashSet::new();
-    let mut live_out: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
-    let mut live_in: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
+    let empty = BTreeSet::new();
+    let mut live_out: BTreeMap<OrdLabel, BTreeSet<Reg>> = BTreeMap::new();
+    let mut live_in: BTreeMap<OrdLabel, BTreeSet<Reg>> = BTreeMap::new();
     while changed {
         changed = false;
         for label in postorder(&domtree.cfg_succs_map, start) {
@@ -213,7 +233,7 @@ pub fn build_interference(
             let new = phi_def
                 .union(up_expr)
                 .copied()
-                .collect::<HashSet<_>>()
+                .collect::<BTreeSet<_>>()
                 .union(&live_def_diff)
                 .copied()
                 .collect();
@@ -237,9 +257,9 @@ pub fn build_interference(
                         .unwrap_or(&empty)
                         .difference(phi_defs.get(s).unwrap_or(&empty))
                         .copied()
-                        .collect::<HashSet<_>>()
+                        .collect::<BTreeSet<_>>()
                 })
-                .fold(HashSet::new(), |collect, next| collect.union(&next).copied().collect())
+                .fold(BTreeSet::new(), |collect, next| collect.union(&next).copied().collect())
                 .union(phi_uses.get(label).unwrap_or(&empty))
                 .copied()
                 .collect();
@@ -252,9 +272,9 @@ pub fn build_interference(
         }
     }
 
-    print_maps("live_in", live_in.iter());
-    print_maps("live_out", live_out.iter());
-    println!();
+    // print_maps("live_in", live_in.iter());
+    // print_maps("live_out", live_out.iter());
+    // println!();
 
     let mut highest_reg = Reg::Var(0);
     let mut interference: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
@@ -268,8 +288,9 @@ pub fn build_interference(
 
             if let Some(dst) = inst.target_reg() {
                 for reg in &*livenow {
-                    if dst == reg || matches!(dst, Reg::Phi(0, _)) || matches!(reg, Reg::Phi(0, _))
-                    {
+                    let dst = dst.to_register();
+                    let reg = reg.to_register();
+                    if dst == reg || matches!(dst, Reg::Var(0)) || matches!(reg, Reg::Var(0)) {
                         continue;
                     }
 
@@ -280,12 +301,12 @@ pub fn build_interference(
                 // Incase there is a register that has no overlapping live ranges
                 interference.entry(dst.to_register()).or_default();
                 livenow.remove(dst);
-            } else if let Instruction::ImmLoad { dst, .. } = inst {
-                interference.entry(dst.to_register()).or_default();
-                livenow.remove(&dst);
             }
 
             for operand in inst.operand_iter() {
+                if matches!(operand, Reg::Phi(0, _) | Reg::Var(0)) {
+                    continue;
+                }
                 if operand.to_register() > highest_reg {
                     highest_reg = operand.to_register();
                 }
@@ -299,7 +320,7 @@ pub fn build_interference(
     print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
     println!();
 
-    let mut insert_load_store = BTreeSet::new();
+    let mut still_good = true;
     let mut color_hard_first: VecDeque<(_, Vec<ColoredReg>)> = VecDeque::new();
     let mut graph_degree = interference.clone().into_iter().collect::<Vec<_>>();
     graph_degree.sort_by(|a, b| a.1.len().cmp(&b.1.len()));
@@ -308,7 +329,7 @@ pub fn build_interference(
         if matches!(register, Reg::Phi(0, _)) {
             continue;
         }
-        if edges.len() < K_DEGREE {
+        if edges.len() < K_DEGREE && still_good {
             let reg = register;
             for (_, es) in &mut graph_degree {
                 es.remove(&reg);
@@ -316,9 +337,11 @@ pub fn build_interference(
             color_hard_first
                 .push_front((reg, edges.into_iter().map(ColoredReg::Uncolored).collect()));
         } else {
+            still_good = false;
             graph_degree.push_front((register, edges));
             let (reg, edges) =
                 find_cheap_spill(&mut graph_degree, blocks, def_map, use_map, loop_map);
+
             for (_, es) in &mut graph_degree {
                 es.remove(&reg);
             }
@@ -376,16 +399,29 @@ pub fn build_interference(
         }
     }
 
+    emit_ralloc_viz(
+        &domtree.cfg_succs_map,
+        start,
+        blocks,
+        &graph,
+        &interference,
+        // &def_map
+        //     .iter()
+        //     .map(|(k, v)| (*k, v.iter().cloned().collect()))
+        //     .collect::<BTreeMap<_, Vec<_>>>(),
+        "boo",
+    );
+
     if need_to_spill.is_empty() {
         print!("{} ", start);
         print_maps("colored", graph.iter());
-        println!("{:?}", insert_load_store);
         println!();
 
         Ok((graph, interference))
     } else {
         print_maps("colored", graph.iter());
 
+        let mut insert_load_store = BTreeSet::new();
         for spilled in need_to_spill.drain(..) {
             insert_load_store.insert(spilled);
         }
@@ -397,40 +433,51 @@ pub fn build_interference(
 fn find_cheap_spill(
     graph: &mut VecDeque<(Reg, BTreeSet<Reg>)>,
     blocks: &[Block],
-    defs: &BTreeMap<Reg, Vec<(usize, usize)>>,
-    uses: &BTreeMap<Reg, Vec<(usize, usize)>>,
+    defs: &BTreeMap<Reg, BTreeSet<(usize, usize)>>,
+    uses: &BTreeMap<Reg, BTreeSet<(usize, usize)>>,
     loop_map: &LoopAnalysis,
 ) -> (Reg, BTreeSet<Reg>) {
     let mut best = INFINITY;
     let mut best_idx = 0;
 
-    let empty_def = vec![];
-    let empty_use = vec![];
+    let empty = BTreeSet::new();
     for (idx, (r, set)) in graph.iter().enumerate() {
-        let degree = set.len() as isize;
-
-        let defs = defs.get(r).unwrap_or(&empty_def);
+        let degree = usize::max(1, set.len()) as isize;
+        let defs: Vec<_> = defs.get(r).unwrap_or(&empty).iter().collect();
         let r_defs = defs.iter().map(|(b, i)| &blocks[*b].instructions[*i]).collect::<Vec<_>>();
-        let uses = uses.get(r).unwrap_or(&empty_use);
+        let uses: Vec<_> = uses.get(r).unwrap_or(&empty).iter().collect();
         let r_uses = uses.iter().map(|(b, i)| &blocks[*b].instructions[*i]).collect::<Vec<_>>();
 
-        let cost: isize =
-            if r_defs.iter().all(|i| i.is_load()) && r_uses.iter().all(|i| i.is_store()) {
-                -1
-            } else if let ([(def_block, def_inst)], [(use_block, use_inst)]) = (defs.as_slice(), uses.as_slice())
-                && (def_block == use_block && *def_inst == use_inst + 1) {
-                INFINITY
-            } else {
-                let loop_costs: usize =
-                    uses.iter().map(|(b, _)| 10_usize.pow(loop_map.level_of_nesting(&OrdLabel::from_known(&blocks[*b].label)))).sum();
+        let cost: isize = if (!r_defs.is_empty() && !r_uses.is_empty())
+            && (r_defs.iter().all(|i| i.is_load()) && r_uses.iter().all(|i| i.is_store()))
+        {
+            -1
+        } else {
+            match (defs.as_slice(), uses.as_slice()) {
+                ([(def_block, def_inst)], [(use_block, use_inst), ..])
+                    if (def_block == use_block && def_inst + 1 == *use_inst) =>
+                {
+                    INFINITY
+                }
+                _ => {
+                    let loop_costs: usize = uses
+                        .iter()
+                        .chain(defs.iter())
+                        .map(|(b, _)| {
+                            10_usize.pow(
+                                loop_map.level_of_nesting(&OrdLabel::from_known(&blocks[*b].label)),
+                            )
+                        })
+                        .sum();
+                    (loop_costs * 3) as isize
+                }
+            }
+        };
 
-                // TODO: this already is set.len() * loop_cost since we sum 10^nesting and get at
-                // least 1 for each use.
-                (set.len() * loop_costs) as isize
-            };
         // Just remove the fact that we multiplied by out degree
         let curr = cost / degree;
 
+        println!("{:?}", (curr, r, defs, uses, cost, degree));
         if curr < best {
             best_idx = idx;
             best = curr;
