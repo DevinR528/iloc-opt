@@ -75,7 +75,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
             }
             match color::build_interference(&func.blocks, &dtree, &start, &defs, &uses, &loop_map) {
                 Ok((colored_graph, interfere)) => break (colored_graph, interfere, defs),
-                Err((mut last_reg, insert_spills)) => {
+                Err(insert_spills) => {
                     println!("SPILLED {:?}", insert_spills);
 
                     let mut spills = vec![];
@@ -172,7 +172,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
         };
         func.stack_size = stack_size;
 
-        // return;
+        return;
 
         for blk in &mut func.blocks {
             for inst in &mut blk.instructions {
@@ -413,7 +413,7 @@ fn emit_ralloc_viz(
                     writeln!(buf, "<td></td>");
                 }
 
-                let mut set = BTreeSet::new();
+                let mut map = BTreeMap::<_, BTreeSet<_>>::new();
                 for reg in &registers {
                     if matches!(reg, Reg::Phi(0, _)) {
                         writeln!(buf, "<td>sp</td>");
@@ -426,22 +426,31 @@ fn emit_ralloc_viz(
                     writeln!(buf, "    <td bgcolor = \"{} 1 1\">{}</td>", hue, reg);
 
                     for node in interfere.get(&reg.to_register()).unwrap_or(&BTreeSet::new()) {
-                        set.insert(*node);
+                        map.entry(*node).or_default().insert(reg);
                     }
                 }
                 let mut start = 0;
-                for s in set {
-                    if !seen.contains(&s) {
-                        // continue;
+                for (live, because) in map {
+                    if !seen.contains(&live) {
+                        continue;
                     }
-                    let curr = s.as_usize();
+                    let curr = live.as_usize();
 
                     for _ in start..curr - 1 {
                         writeln!(buf, "<td></td>");
                     }
 
+                    let mut inner = String::new();
+                    writeln!(inner, "<table><tr>");
+                    for b in because {
+                        let num = b.as_usize();
+                        let hue = (num as f32) * (360.0 / interfere_portion as f32) / 360.0;
+                        writeln!(inner, "    <td bgcolor = \"{} 1 1\">{}</td>", hue, b);
+                    }
+                    writeln!(inner, "</tr></table>");
+
                     let hue = (curr as f32) * (360.0 / interfere_portion as f32) / 360.0;
-                    writeln!(buf, "    <td bgcolor = \"{} 1 1\">{}</td>", hue, s);
+                    writeln!(buf, "    <td  bgcolor = \"{} 1 1\">{}</td>", hue, inner);
                     start = curr;
                 }
                 for _ in start..interfere_portion {

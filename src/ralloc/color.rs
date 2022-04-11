@@ -111,7 +111,7 @@ pub fn build_use_def_map(
                     let mut phi = *reg;
                     phi.as_phi(subs);
 
-                    // def_map.entry(phi).or_default().push((b, i));
+                    def_map.entry(phi).or_default().push((b, i));
                 }
                 Instruction::Frame { params, .. } => {
                     for p in params {
@@ -132,10 +132,9 @@ pub fn build_use_def_map(
 }
 
 /// The `Ok` variant is the successfully colored graph and the original interference graph (this is
-/// debug mostly), The `Err` variant is The highest register count and a set of registers that
-/// failed to color. The highest register is used for the spills to break up live ranges.
+/// debug mostly), The `Err` variant is the set of registers that failed to color.
 pub type InterfereResult =
-    Result<(BTreeMap<Reg, ColorNode>, BTreeMap<Reg, BTreeSet<Reg>>), (Reg, BTreeSet<Reg>)>;
+    Result<(BTreeMap<Reg, ColorNode>, BTreeMap<Reg, BTreeSet<Reg>>), BTreeSet<Reg>>;
 pub fn build_interference(
     blocks: &[Block],
     domtree: &DominatorTree,
@@ -204,10 +203,10 @@ pub fn build_interference(
         }
     }
 
-    // print_maps("phi_defs", phi_defs.iter());
-    // print_maps("phi_uses", phi_uses.iter());
+    print_maps("phi_defs", phi_defs.iter());
+    print_maps("phi_uses", phi_uses.iter());
     // print_maps("defs", def_map.iter());
-    // print_maps("upexpo", uexpr.iter());
+    print_maps("upexpo", uexpr.iter());
     // println!();
 
     changed = true;
@@ -272,21 +271,32 @@ pub fn build_interference(
         }
     }
 
-    // print_maps("live_in", live_in.iter());
-    // print_maps("live_out", live_out.iter());
-    // println!();
+    print_maps("live_in", live_in.iter());
+    print_maps("live_out", live_out.iter());
+    println!();
 
-    let mut highest_reg = Reg::Var(0);
     let mut interference: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
-    for curr in postorder(&domtree.cfg_succs_map, start) {
-        let livenow = live_out.get_mut(curr).unwrap();
-        let blk_idx = blocks.iter().position(|b| b.label == curr.as_str()).unwrap();
+    for block in postorder(&domtree.cfg_succs_map, start) {
+        let livenow = live_out.get_mut(block).unwrap();
+        let blk_idx = blocks.iter().position(|b| b.label == block.as_str()).unwrap();
         for inst in blocks[blk_idx].instructions.iter().rev() {
             if matches!(inst, Instruction::Skip(..)) {
                 continue;
             }
 
+            for operand in inst.operand_iter() {
+                if matches!(operand, Reg::Phi(0, _) | Reg::Var(0)) {
+                    continue;
+                }
+
+                // Incase there is a register that has no overlapping live ranges
+                interference.entry(operand.to_register()).or_default();
+                livenow.insert(operand);
+            }
+
             if let Some(dst) = inst.target_reg() {
+                livenow.remove(dst);
+
                 for reg in &*livenow {
                     let dst = dst.to_register();
                     let reg = reg.to_register();
@@ -300,19 +310,6 @@ pub fn build_interference(
 
                 // Incase there is a register that has no overlapping live ranges
                 interference.entry(dst.to_register()).or_default();
-                livenow.remove(dst);
-            }
-
-            for operand in inst.operand_iter() {
-                if matches!(operand, Reg::Phi(0, _) | Reg::Var(0)) {
-                    continue;
-                }
-                if operand.to_register() > highest_reg {
-                    highest_reg = operand.to_register();
-                }
-                // Incase there is a register that has no overlapping live ranges
-                interference.entry(operand.to_register()).or_default();
-                livenow.insert(operand);
             }
         }
     }
@@ -329,6 +326,7 @@ pub fn build_interference(
         if matches!(register, Reg::Phi(0, _)) {
             continue;
         }
+        // TODO: is `still_good` how it works
         if edges.len() < K_DEGREE && still_good {
             let reg = register;
             for (_, es) in &mut graph_degree {
@@ -426,7 +424,7 @@ pub fn build_interference(
             insert_load_store.insert(spilled);
         }
 
-        Err((highest_reg, insert_load_store))
+        Err(insert_load_store)
     }
 }
 
