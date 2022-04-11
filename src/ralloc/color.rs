@@ -196,6 +196,7 @@ pub fn build_interference(
                         continue;
                     }
                     if !def_loc.contains(&op) {
+                        // We found a use without a definition above it
                         changed |= uloc.insert(op);
                     }
                 }
@@ -317,7 +318,7 @@ pub fn build_interference(
     print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
     println!();
 
-    let mut still_good = true;
+    // let mut still_good = true;
     let mut color_hard_first: VecDeque<(_, Vec<ColoredReg>)> = VecDeque::new();
     let mut graph_degree = interference.clone().into_iter().collect::<Vec<_>>();
     graph_degree.sort_by(|a, b| a.1.len().cmp(&b.1.len()));
@@ -326,26 +327,24 @@ pub fn build_interference(
         if matches!(register, Reg::Phi(0, _)) {
             continue;
         }
-        // TODO: is `still_good` how it works
-        if edges.len() < K_DEGREE && still_good {
-            let reg = register;
-            for (_, es) in &mut graph_degree {
-                es.remove(&reg);
-            }
-            color_hard_first
-                .push_front((reg, edges.into_iter().map(ColoredReg::Uncolored).collect()));
-        } else {
-            still_good = false;
-            graph_degree.push_front((register, edges));
-            let (reg, edges) =
-                find_cheap_spill(&mut graph_degree, blocks, def_map, use_map, loop_map);
+        // // TODO: is `still_good` how it works
+        // if edges.len() < K_DEGREE && still_good {
+        //     let reg = register;
+        //     for (_, es) in &mut graph_degree {
+        //         es.remove(&reg);
+        //     }
+        //     color_hard_first
+        //         .push_front((reg, edges.into_iter().map(ColoredReg::Uncolored).collect()));
+        // } else {
+        // still_good = false;
+        graph_degree.push_front((register, edges));
+        let (reg, edges) = find_cheap_spill(&mut graph_degree, blocks, def_map, use_map, loop_map);
 
-            for (_, es) in &mut graph_degree {
-                es.remove(&reg);
-            }
-            color_hard_first
-                .push_front((reg, edges.into_iter().map(ColoredReg::Uncolored).collect()));
+        for (_, es) in &mut graph_degree {
+            es.remove(&reg);
         }
+        color_hard_first.push_front((reg, edges.into_iter().map(ColoredReg::Uncolored).collect()));
+        // }
     }
 
     print_maps("hard first", color_hard_first.iter().cloned());
@@ -475,7 +474,6 @@ fn find_cheap_spill(
         // Just remove the fact that we multiplied by out degree
         let curr = cost / degree;
 
-        println!("{:?}", (curr, r, defs, uses, cost, degree));
         if curr < best {
             best_idx = idx;
             best = curr;
