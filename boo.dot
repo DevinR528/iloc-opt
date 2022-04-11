@@ -1,5 +1,5 @@
 digraph cfg {
-_F_pre_example [shape = none, label = <
+_F_main [shape = none, label = <
 <table border="0" cellborder="1" cellspacing="0" cellpadding="4">
 <tr><td>instruction</td><td colspan="3">operands</td>
 <td>%vr1</td>
@@ -13,29 +13,21 @@ _F_pre_example [shape = none, label = <
 <td>%vr9</td>
 <td>%vr10</td>
 <td>%vr11</td>
+<td>%vr12</td>
+<td>%vr13</td>
+<td>%vr14</td>
+<td>%vr15</td>
 </tr>
-<tr><td>.frame pre_example, 4, vr1, vr2, vr3</td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-    <td bgcolor = "0.18181817 1 1">%vr2</td>
-    <td bgcolor = "0.27272728 1 1">%vr3</td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-<td></td>
-    <td bgcolor = "0.27272728 1 1">%vr3</td>
-    <td bgcolor = "0.36363634 1 1">%vr4</td>
-    <td bgcolor = "0.45454544 1 1">%vr5</td>
-    <td bgcolor = "0.54545456 1 1">%vr6</td>
+<tr><td>loadI 0 = vr1</td>
 <td></td>
 <td></td>
-    <td bgcolor = "0.81818175 1 1">%vr9</td>
-<td></td>
-    <td bgcolor = "1 1 1">%vr11</td>
-</tr>
-<tr><td>loadI 4 = vr4</td>
+    <td bgcolor = "0.06666667 1 1">%vr1</td>
 <td></td>
 <td></td>
-    <td bgcolor = "0.36363634 1 1">%vr4</td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-    <td bgcolor = "0.18181817 1 1">%vr2</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
 <td></td>
 <td></td>
 <td></td>
@@ -46,58 +38,275 @@ _F_pre_example [shape = none, label = <
 <td></td>
 <td></td>
 </tr>
-<tr><td>i2i vr4 = vr5</td>
+<tr><td>i2i vr1 = vr3</td>
 <td></td>
-    <td bgcolor = "0.36363634 1 1">%vr4</td>
-    <td bgcolor = "0.45454544 1 1">%vr5</td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-    <td bgcolor = "0.18181817 1 1">%vr2</td>
+    <td bgcolor = "0.06666667 1 1">%vr1</td>
+    <td bgcolor = "0.2 1 1">%vr3</td>
+    <td  bgcolor = "0.06666667 1 1"><table><tr>
+    <td bgcolor = "0.2 1 1">%vr3</td>
+</tr></table>
+</td>
+<td></td>
+    <td  bgcolor = "0.2 1 1"><table><tr>
+    <td bgcolor = "0.06666667 1 1">%vr1</td>
+</tr></table>
+</td>
 <td></td>
 <td></td>
 <td></td>
-    <td bgcolor = "0.54545456 1 1">%vr6</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
 <td></td>
 <td></td>
 <td></td>
 <td></td>
 <td></td>
 </tr>
-<tr><td>loadI 5 = vr6</td>
+<tr><td>i2i vr0 = vr5</td>
+<td></td>
+<td>sp</td>
+    <td bgcolor = "0.33333334 1 1">%vr5</td>
 <td></td>
 <td></td>
-    <td bgcolor = "0.54545456 1 1">%vr6</td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-    <td bgcolor = "0.18181817 1 1">%vr2</td>
-    <td bgcolor = "0.27272728 1 1">%vr3</td>
-<td></td>
-    <td bgcolor = "0.45454544 1 1">%vr5</td>
+    <td  bgcolor = "0.2 1 1"><table><tr>
+    <td bgcolor = "0.33333334 1 1">%vr5</td>
+</tr></table>
+</td>
 <td></td>
 <td></td>
 <td></td>
 <td></td>
 <td></td>
-    <td bgcolor = "1 1 1">%vr11</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
 </tr>
-<tr><td>cbr_GE vr1, vr6 - .L1</td>
+<tr><td>subI vr5, 4 = vr6</td>
 <td></td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-    <td bgcolor = "0.54545456 1 1">%vr6</td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-    <td bgcolor = "0.18181817 1 1">%vr2</td>
-    <td bgcolor = "0.27272728 1 1">%vr3</td>
-    <td bgcolor = "0.36363634 1 1">%vr4</td>
-    <td bgcolor = "0.45454544 1 1">%vr5</td>
-    <td bgcolor = "0.54545456 1 1">%vr6</td>
+    <td bgcolor = "0.33333334 1 1">%vr5</td>
+    <td bgcolor = "0.4 1 1">%vr6</td>
 <td></td>
 <td></td>
-    <td bgcolor = "0.81818175 1 1">%vr9</td>
+    <td  bgcolor = "0.2 1 1"><table><tr>
+    <td bgcolor = "0.33333334 1 1">%vr5</td>
+    <td bgcolor = "0.4 1 1">%vr6</td>
+</tr></table>
+</td>
 <td></td>
-    <td bgcolor = "1 1 1">%vr11</td>
+    <td  bgcolor = "0.33333334 1 1"><table><tr>
+    <td bgcolor = "0.4 1 1">%vr6</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.4 1 1"><table><tr>
+    <td bgcolor = "0.33333334 1 1">%vr5</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr><td>storeAI vr3 = vr5, -4</td>
+<td></td>
+    <td bgcolor = "0.2 1 1">%vr3</td>
+    <td bgcolor = "0.33333334 1 1">%vr5</td>
+    <td  bgcolor = "0.06666667 1 1"><table><tr>
+    <td bgcolor = "0.2 1 1">%vr3</td>
+</tr></table>
+</td>
+<td></td>
+    <td  bgcolor = "0.2 1 1"><table><tr>
+    <td bgcolor = "0.33333334 1 1">%vr5</td>
+</tr></table>
+</td>
+<td></td>
+    <td  bgcolor = "0.33333334 1 1"><table><tr>
+    <td bgcolor = "0.2 1 1">%vr3</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.4 1 1"><table><tr>
+    <td bgcolor = "0.2 1 1">%vr3</td>
+    <td bgcolor = "0.33333334 1 1">%vr5</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr><td>iread vr6</td>
+<td></td>
+<td></td>
+    <td bgcolor = "0.4 1 1">%vr6</td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.2 1 1"><table><tr>
+    <td bgcolor = "0.4 1 1">%vr6</td>
+</tr></table>
+</td>
+<td></td>
+    <td  bgcolor = "0.33333334 1 1"><table><tr>
+    <td bgcolor = "0.4 1 1">%vr6</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr><td>loadI 3 = vr7</td>
+<td></td>
+<td></td>
+    <td bgcolor = "0.46666667 1 1">%vr7</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.4 1 1"><table><tr>
+    <td bgcolor = "0.46666667 1 1">%vr7</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr><td>i2i vr7 = vr8</td>
+<td></td>
+    <td bgcolor = "0.46666667 1 1">%vr7</td>
+    <td bgcolor = "0.53333336 1 1">%vr8</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.4 1 1"><table><tr>
+    <td bgcolor = "0.46666667 1 1">%vr7</td>
+    <td bgcolor = "0.53333336 1 1">%vr8</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.46666667 1 1"><table><tr>
+    <td bgcolor = "0.53333336 1 1">%vr8</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.53333336 1 1"><table><tr>
+    <td bgcolor = "0.46666667 1 1">%vr7</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr><td>load vr6 = vr9</td>
+<td></td>
+    <td bgcolor = "0.4 1 1">%vr6</td>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.2 1 1"><table><tr>
+    <td bgcolor = "0.4 1 1">%vr6</td>
+</tr></table>
+</td>
+<td></td>
+    <td  bgcolor = "0.33333334 1 1"><table><tr>
+    <td bgcolor = "0.4 1 1">%vr6</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.4 1 1"><table><tr>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.46666667 1 1"><table><tr>
+    <td bgcolor = "0.4 1 1">%vr6</td>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.53333336 1 1"><table><tr>
+    <td bgcolor = "0.4 1 1">%vr6</td>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.6 1 1"><table><tr>
+    <td bgcolor = "0.4 1 1">%vr6</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr><td>cbr_LE vr9, vr7 - .L0</td>
+<td></td>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+    <td bgcolor = "0.46666667 1 1">%vr7</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.4 1 1"><table><tr>
+    <td bgcolor = "0.46666667 1 1">%vr7</td>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.46666667 1 1"><table><tr>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.53333336 1 1"><table><tr>
+    <td bgcolor = "0.46666667 1 1">%vr7</td>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.6 1 1"><table><tr>
+    <td bgcolor = "0.46666667 1 1">%vr7</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
 </tr>
 </table>>]
-_F_pre_example -> _pre_F_pre_example_L0
-_F_pre_example -> _L1
-_pre_F_pre_example_L0 [shape = none, label = <
+_F_main -> _L0
+_F_main -> _1_F_main
+_1_F_main [shape = none, label = <
 <table border="0" cellborder="1" cellspacing="0" cellpadding="4">
 <tr><td>instruction</td><td colspan="3">operands</td>
 <td>%vr1</td>
@@ -111,25 +320,167 @@ _pre_F_pre_example_L0 [shape = none, label = <
 <td>%vr9</td>
 <td>%vr10</td>
 <td>%vr11</td>
+<td>%vr12</td>
+<td>%vr13</td>
+<td>%vr14</td>
+<td>%vr15</td>
 </tr>
-<tr><td>add vr2, vr5 = vr9</td>
-    <td bgcolor = "0.18181817 1 1">%vr2</td>
-    <td bgcolor = "0.45454544 1 1">%vr5</td>
-    <td bgcolor = "0.81818175 1 1">%vr9</td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-    <td bgcolor = "0.18181817 1 1">%vr2</td>
-<td></td>
-    <td bgcolor = "0.36363634 1 1">%vr4</td>
-    <td bgcolor = "0.45454544 1 1">%vr5</td>
-    <td bgcolor = "0.54545456 1 1">%vr6</td>
+<tr><td>add vr9, vr9 = vr12</td>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+    <td bgcolor = "0.8 1 1">%vr12</td>
 <td></td>
 <td></td>
 <td></td>
 <td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.6 1 1"><table><tr>
+    <td bgcolor = "0.8 1 1">%vr12</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.8 1 1"><table><tr>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr><td>i2i vr12 = vr13</td>
+<td></td>
+    <td bgcolor = "0.8 1 1">%vr12</td>
+    <td bgcolor = "0.8666667 1 1">%vr13</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.6 1 1"><table><tr>
+    <td bgcolor = "0.8 1 1">%vr12</td>
+    <td bgcolor = "0.8666667 1 1">%vr13</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.8 1 1"><table><tr>
+    <td bgcolor = "0.8666667 1 1">%vr13</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.8666667 1 1"><table><tr>
+    <td bgcolor = "0.8 1 1">%vr12</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+</tr>
+<tr><td>addI vr9, 3 = vr14</td>
+<td></td>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.6 1 1"><table><tr>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.8 1 1"><table><tr>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.8666667 1 1"><table><tr>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.93333334 1 1"><table><tr>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+</tr></table>
+</td>
+<td></td>
+</tr>
+<tr><td>i2i vr14 = vr2</td>
+<td></td>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
+    <td bgcolor = "0.13333334 1 1">%vr2</td>
+<td></td>
+    <td  bgcolor = "0.13333334 1 1"><table><tr>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.6 1 1"><table><tr>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.8666667 1 1"><table><tr>
+    <td bgcolor = "0.13333334 1 1">%vr2</td>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.93333334 1 1"><table><tr>
+    <td bgcolor = "0.13333334 1 1">%vr2</td>
+</tr></table>
+</td>
+<td></td>
+</tr>
+<tr><td>iwrite vr13</td>
+<td></td>
+<td></td>
+    <td bgcolor = "0.8666667 1 1">%vr13</td>
+<td></td>
+    <td  bgcolor = "0.13333334 1 1"><table><tr>
+    <td bgcolor = "0.8666667 1 1">%vr13</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.6 1 1"><table><tr>
+    <td bgcolor = "0.8666667 1 1">%vr13</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.8 1 1"><table><tr>
+    <td bgcolor = "0.8666667 1 1">%vr13</td>
+</tr></table>
+</td>
+<td></td>
+    <td  bgcolor = "0.93333334 1 1"><table><tr>
+    <td bgcolor = "0.8666667 1 1">%vr13</td>
+</tr></table>
+</td>
 <td></td>
 </tr>
 </table>>]
-_pre_F_pre_example_L0 -> _L0
+_1_F_main -> _L1
 _L0 [shape = none, label = <
 <table border="0" cellborder="1" cellspacing="0" cellpadding="4">
 <tr><td>instruction</td><td colspan="3">operands</td>
@@ -144,73 +495,122 @@ _L0 [shape = none, label = <
 <td>%vr9</td>
 <td>%vr10</td>
 <td>%vr11</td>
+<td>%vr12</td>
+<td>%vr13</td>
+<td>%vr14</td>
+<td>%vr15</td>
 </tr>
-<tr><td>i2i vr9 = vr3</td>
-<td></td>
-    <td bgcolor = "0.81818175 1 1">%vr9</td>
-    <td bgcolor = "0.27272728 1 1">%vr3</td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-    <td bgcolor = "0.54545456 1 1">%vr6</td>
+<tr><td>add vr9, vr8 = vr14</td>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+    <td bgcolor = "0.53333336 1 1">%vr8</td>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
 <td></td>
 <td></td>
 <td></td>
 <td></td>
-    <td bgcolor = "1 1 1">%vr11</td>
+<td></td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.53333336 1 1"><table><tr>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.6 1 1"><table><tr>
+    <td bgcolor = "0.53333336 1 1">%vr8</td>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.93333334 1 1"><table><tr>
+    <td bgcolor = "0.53333336 1 1">%vr8</td>
+    <td bgcolor = "0.6 1 1">%vr9</td>
+</tr></table>
+</td>
+<td></td>
 </tr>
-<tr><td>addI vr1, 1 = vr11</td>
+<tr><td>i2i vr14 = vr2</td>
 <td></td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-    <td bgcolor = "1 1 1">%vr11</td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
+    <td bgcolor = "0.13333334 1 1">%vr2</td>
 <td></td>
-    <td bgcolor = "0.27272728 1 1">%vr3</td>
-    <td bgcolor = "0.36363634 1 1">%vr4</td>
-    <td bgcolor = "0.45454544 1 1">%vr5</td>
-    <td bgcolor = "0.54545456 1 1">%vr6</td>
+    <td  bgcolor = "0.13333334 1 1"><table><tr>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
+</tr></table>
+</td>
 <td></td>
 <td></td>
-    <td bgcolor = "0.81818175 1 1">%vr9</td>
 <td></td>
-    <td bgcolor = "1 1 1">%vr11</td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.53333336 1 1"><table><tr>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
+</tr></table>
+</td>
+    <td  bgcolor = "0.6 1 1"><table><tr>
+    <td bgcolor = "0.93333334 1 1">%vr14</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+    <td  bgcolor = "0.93333334 1 1"><table><tr>
+    <td bgcolor = "0.13333334 1 1">%vr2</td>
+</tr></table>
+</td>
+<td></td>
 </tr>
-<tr><td>i2i vr11 = vr1</td>
-<td></td>
-    <td bgcolor = "1 1 1">%vr11</td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-<td></td>
-    <td bgcolor = "0.27272728 1 1">%vr3</td>
-    <td bgcolor = "0.36363634 1 1">%vr4</td>
-    <td bgcolor = "0.45454544 1 1">%vr5</td>
-    <td bgcolor = "0.54545456 1 1">%vr6</td>
+<tr><td>loadI .str_const_0 = vr15</td>
 <td></td>
 <td></td>
-    <td bgcolor = "0.81818175 1 1">%vr9</td>
+    <td bgcolor = "1 1 1">%vr15</td>
 <td></td>
-    <td bgcolor = "1 1 1">%vr11</td>
+    <td  bgcolor = "0.13333334 1 1"><table><tr>
+    <td bgcolor = "1 1 1">%vr15</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
 </tr>
-<tr><td>cbr_LT vr1, vr6 - .L0</td>
-<td></td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-    <td bgcolor = "0.54545456 1 1">%vr6</td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-    <td bgcolor = "0.18181817 1 1">%vr2</td>
-    <td bgcolor = "0.27272728 1 1">%vr3</td>
-    <td bgcolor = "0.36363634 1 1">%vr4</td>
-    <td bgcolor = "0.45454544 1 1">%vr5</td>
-    <td bgcolor = "0.54545456 1 1">%vr6</td>
+<tr><td>swrite vr15</td>
 <td></td>
 <td></td>
-    <td bgcolor = "0.81818175 1 1">%vr9</td>
+    <td bgcolor = "1 1 1">%vr15</td>
 <td></td>
-    <td bgcolor = "1 1 1">%vr11</td>
+    <td  bgcolor = "0.13333334 1 1"><table><tr>
+    <td bgcolor = "1 1 1">%vr15</td>
+</tr></table>
+</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
 </tr>
 </table>>]
-_L0 -> _L0
 _L0 -> _L1
 _L1 [shape = none, label = <
 <table border="0" cellborder="1" cellspacing="0" cellpadding="4">
@@ -226,22 +626,30 @@ _L1 [shape = none, label = <
 <td>%vr9</td>
 <td>%vr10</td>
 <td>%vr11</td>
+<td>%vr12</td>
+<td>%vr13</td>
+<td>%vr14</td>
+<td>%vr15</td>
 </tr>
-<tr><td>iwrite vr3</td>
+<tr><td>iwrite vr2</td>
 <td></td>
 <td></td>
-    <td bgcolor = "0.27272728 1 1">%vr3</td>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-    <td bgcolor = "0.54545456 1 1">%vr6</td>
+    <td bgcolor = "0.13333334 1 1">%vr2</td>
 <td></td>
 <td></td>
 <td></td>
 <td></td>
-    <td bgcolor = "1 1 1">%vr11</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
 </tr>
 </table>>]
 }
