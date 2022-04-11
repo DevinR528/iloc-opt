@@ -432,7 +432,7 @@ fn emit_ralloc_viz(
                 let mut start = 0;
                 for (live, because) in map {
                     if !seen.contains(&live) {
-                        continue;
+                        // continue;
                     }
                     let curr = live.as_usize();
 
