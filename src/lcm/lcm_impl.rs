@@ -9,7 +9,10 @@ use crate::{
     ssa::{postorder, reverse_postorder, DominatorTree, OrdLabel},
 };
 
-pub fn print_maps<K: fmt::Debug, V: fmt::Debug>(name: &str, map: impl Iterator<Item = (K, V)>) {
+pub fn print_maps<K: fmt::Debug, V: fmt::Debug>(
+    name: &str,
+    map: impl Iterator<Item = (K, V)>,
+) {
     println!("{} {{", name);
     for (k, v) in map {
         println!("    {:?}: {:?},", k, v);
@@ -58,13 +61,15 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     let mut kill: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for (label, blk) in reverse_postorder(&domtree.cfg_succs_map, &start).filter_map(|label| {
-            #[rustfmt::skip]
+        for (label, blk) in
+            reverse_postorder(&domtree.cfg_succs_map, &start).filter_map(|label| {
+                #[rustfmt::skip]
             Some((
                 label,
                 func.blocks.iter().find(|b| b.label == label.as_str())?
             ))
-        }) {
+            })
+        {
             let uni = universe.entry(label.clone()).or_default();
 
             let dloc = dexpr.entry(label.clone()).or_default();
@@ -108,8 +113,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     let empty = BTreeSet::new();
 
     // AVAILABLE
-    // The expression is used in every predecessor (this is inherited so as long as it is not
-    // killed it could be a non direct predecessor)
+    // The expression is used in every predecessor (this is inherited so as long as it is
+    // not killed it could be a non direct predecessor)
     changed = true;
     let mut avail_out: HashMap<OrdLabel, BTreeSet<_>> = HashMap::new();
     let mut avail_in: HashMap<OrdLabel, BTreeSet<_>> = HashMap::new();
@@ -122,8 +127,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             if label == &start {
                 avail_in.insert(label.clone(), BTreeSet::new());
             } else {
-                // Available In is all predecessors of `label`s available-out sets intersected
-                // (elements common in all parents/predecessors)
+                // Available In is all predecessors of `label`s available-out sets
+                // intersected (elements common in all
+                // parents/predecessors)
                 let mut sets = domtree
                     .cfg_preds_map
                     .get(label)
@@ -209,8 +215,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             if label == exit {
                 anti_out.insert(label.clone(), BTreeSet::new());
             } else {
-                // anticipated-out is all successors of `label`s anticipated-in sets intersected
-                // (elements common in all `label`s successors siblings)
+                // anticipated-out is all successors of `label`s anticipated-in sets
+                // intersected (elements common in all `label`s successors
+                // siblings)
                 let mut sets = domtree
                     .cfg_succs_map
                     .get(label) // TODO: filter exit node out
@@ -237,9 +244,10 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     // println!();
 
     // EARLIEST
-    // Based on availability (is it above me) and anticipation (is it below me) we compute the
-    // furthest point this expression can be moved up to. Available is our upper limit and
-    // anticipated is our lower limit so earliest gets us as close to the upper limit as we can.
+    // Based on availability (is it above me) and anticipation (is it below me) we compute
+    // the furthest point this expression can be moved up to. Available is our upper
+    // limit and anticipated is our lower limit so earliest gets us as close to the
+    // upper limit as we can.
     changed = true;
     let mut earliest: HashMap<(OrdLabel, OrdLabel), BTreeSet<Reg>> = HashMap::new();
     while changed {
@@ -311,7 +319,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                     .difference(uexpr.get(pred).unwrap_or(&empty))
                     .copied()
                     .collect();
-                let early = earliest.get(&(pred.clone(), b_label.clone())).unwrap_or(&empty);
+                let early =
+                    earliest.get(&(pred.clone(), b_label.clone())).unwrap_or(&empty);
                 for new in early.union(&inloc) {
                     changed |= old.insert(*new);
                 }
@@ -321,8 +330,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             if b_label == &start {
                 later_in.entry(b_label.clone()).or_default();
             } else {
-                // Available In is all predecessors of `label`s available-out sets intersected
-                // (elements common in all parents/predecessors)
+                // Available In is all predecessors of `label`s available-out sets
+                // intersected (elements common in all
+                // parents/predecessors)
                 let mut sets =
                     preds.iter().filter_map(|l| later.get(&(l.clone(), b_label.clone())));
 
@@ -387,7 +397,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     // print_maps("loops", loop_analysis.loop_map().iter());
 
     let mut deleted = BTreeSet::new();
-    for ((pred, succ), registers) in insert.into_iter().filter(|(_, regs)| !regs.is_empty()) {
+    for ((pred, succ), registers) in
+        insert.into_iter().filter(|(_, regs)| !regs.is_empty())
+    {
         let mut to_move = vec![];
         for r in &registers {
             if delete.get(&pred).map_or(false, |dset| dset.contains(r)) {
@@ -408,8 +420,10 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             to_move.push(if can_delete {
                 deleted.insert((succ.clone(), *r));
                 let inst = func.blocks[b].instructions[i].clone();
-                func.blocks[b].instructions[i] =
-                    Instruction::Skip(format!("[pre deleted] {}", func.blocks[b].instructions[i]));
+                func.blocks[b].instructions[i] = Instruction::Skip(format!(
+                    "[pre deleted] {}",
+                    func.blocks[b].instructions[i]
+                ));
                 inst
             } else {
                 func.blocks[b].instructions[i].clone()
@@ -428,12 +442,15 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 .iter_mut()
                 .find(|b| b.label == pred.as_str()) else { unreachable!() };
 
-            let end_idx =
-                if pred_blk.instructions.last().map_or(false, |inst| inst.uses_label().is_some()) {
-                    pred_blk.instructions.len() - 2
-                } else {
-                    pred_blk.instructions.len() - 1
-                };
+            let end_idx = if pred_blk
+                .instructions
+                .last()
+                .map_or(false, |inst| inst.uses_label().is_some())
+            {
+                pred_blk.instructions.len() - 2
+            } else {
+                pred_blk.instructions.len() - 1
+            };
 
             for inst in to_move.into_iter().rev() {
                 pred_blk.instructions.insert(end_idx, inst);
@@ -456,8 +473,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             for inst in to_move.into_iter().rev() {
                 succ_blk.instructions.insert(start_idx, inst);
             }
-        // This is to guard against a move of instructions from succ into pred's edge  actually
-        // being a move into a more nested loop
+        // This is to guard against a move of instructions from succ into pred's edge
+        // actually being a move into a more nested loop
         } else {
             // println!(
             //     "p {} s {}\ns: {:#?}\np: {:#?}",
@@ -473,8 +490,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 .iter()
                 .position(|b| b.label == pred.as_str()) else { unreachable!() };
 
-            // We need to fix the label in the predecessor and add a "fallthrough" `jumpI` for the
-            // case when the same edge gets more than one insertion
+            // We need to fix the label in the predecessor and add a "fallthrough" `jumpI`
+            // for the case when the same edge gets more than one insertion
             if let Some(cnd_br) = func.blocks[pred_idx].instructions.last_mut() && cnd_br.uses_label() == Some(succ.as_str()) {
                 *cnd_br.label_mut().unwrap() = Loc(label);
             } else {
@@ -498,8 +515,10 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 let Some(i) = func.blocks[b].instructions.iter().position(|i| i == inst) else {
                     unreachable!("{:?}", (label, &func.blocks[b]))
                 };
-                func.blocks[b].instructions[i] =
-                    Instruction::Skip(format!("[pre deleted] {}", func.blocks[b].instructions[i]));
+                func.blocks[b].instructions[i] = Instruction::Skip(format!(
+                    "[pre deleted] {}",
+                    func.blocks[b].instructions[i]
+                ));
             }
         }
     }

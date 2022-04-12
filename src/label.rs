@@ -11,8 +11,8 @@ static LABEL_MAP: std::lazy::SyncLazy<Mutex<HashMap<String, OrdLabel>>> =
 #[derive(Clone)]
 pub struct OrdLabel(isize, String);
 impl OrdLabel {
-    // Create a new `OrdLabel, removing the `:` and without the sorting filler in the front of the
-    // label.
+    // Create a new `OrdLabel, removing the `:` and without the sorting filler in the
+    // front of the label.
     pub fn new(label: &str) -> Self {
         Self(111, label.to_string())
     }

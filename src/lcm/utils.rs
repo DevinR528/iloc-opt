@@ -2,8 +2,8 @@ use std::collections::{hash_map::RandomState, BTreeSet, HashMap, HashSet, VecDeq
 
 use crate::ssa::OrdLabel;
 
-/// This is parent -> children, where children is fall through then jump (ssa val numbering needs
-/// this)
+/// This is parent -> children, where children is fall through then jump (ssa val
+/// numbering needs this)
 pub fn reverse_postorder<'a>(
     succs: &'a HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     start: &'a OrdLabel,
@@ -25,7 +25,8 @@ pub fn postorder<'a>(
         // Protects against loops
         seen.insert(root);
         if let Some(set) = succs.get(root) {
-            // This is fall through then jump or in traversal language left then right child
+            // This is fall through then jump or in traversal language left then right
+            // child
             for child in set.iter() {
                 if seen.contains(child) {
                     continue;

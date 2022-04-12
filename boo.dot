@@ -46,7 +46,6 @@ _F_pre_example [shape = none, label = <
 <td></td>
 <td></td>
     <td  bgcolor = "0.81818175 1 1"><table><tr>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
     <td bgcolor = "0.18181817 1 1">%vr2</td>
     <td bgcolor = "0.27272728 1 1">%vr3</td>
 </tr></table>
@@ -182,10 +181,7 @@ _F_pre_example [shape = none, label = <
 </td>
 <td></td>
 <td></td>
-    <td  bgcolor = "0.81818175 1 1"><table><tr>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-</tr></table>
-</td>
+<td></td>
 <td></td>
     <td  bgcolor = "1 1 1"><table><tr>
     <td bgcolor = "0.090909086 1 1">%vr1</td>
@@ -217,7 +213,6 @@ _pre_F_pre_example_L0 [shape = none, label = <
     <td bgcolor = "0.81818175 1 1">%vr9</td>
     <td  bgcolor = "0.090909086 1 1"><table><tr>
     <td bgcolor = "0.45454544 1 1">%vr5</td>
-    <td bgcolor = "0.81818175 1 1">%vr9</td>
 </tr></table>
 </td>
     <td  bgcolor = "0.18181817 1 1"><table><tr>
@@ -277,7 +272,6 @@ _L0 [shape = none, label = <
     <td bgcolor = "0.27272728 1 1">%vr3</td>
     <td  bgcolor = "0.090909086 1 1"><table><tr>
     <td bgcolor = "0.27272728 1 1">%vr3</td>
-    <td bgcolor = "0.81818175 1 1">%vr9</td>
 </tr></table>
 </td>
     <td  bgcolor = "0.18181817 1 1"><table><tr>
@@ -338,10 +332,7 @@ _L0 [shape = none, label = <
 </td>
 <td></td>
 <td></td>
-    <td  bgcolor = "0.81818175 1 1"><table><tr>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-</tr></table>
-</td>
+<td></td>
 <td></td>
     <td  bgcolor = "1 1 1"><table><tr>
     <td bgcolor = "0.090909086 1 1">%vr1</td>
@@ -377,10 +368,7 @@ _L0 [shape = none, label = <
 </td>
 <td></td>
 <td></td>
-    <td  bgcolor = "0.81818175 1 1"><table><tr>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-</tr></table>
-</td>
+<td></td>
 <td></td>
     <td  bgcolor = "1 1 1"><table><tr>
     <td bgcolor = "0.090909086 1 1">%vr1</td>
@@ -419,10 +407,7 @@ _L0 [shape = none, label = <
 </td>
 <td></td>
 <td></td>
-    <td  bgcolor = "0.81818175 1 1"><table><tr>
-    <td bgcolor = "0.090909086 1 1">%vr1</td>
-</tr></table>
-</td>
+<td></td>
 <td></td>
     <td  bgcolor = "1 1 1"><table><tr>
     <td bgcolor = "0.090909086 1 1">%vr1</td>

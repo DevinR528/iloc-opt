@@ -28,16 +28,18 @@ pub struct Interpreter {
     functions: HashMap<Loc, Vec<(usize, Instruction)>>,
     /// A map of function names to stack size and parameter list.
     fn_decl: HashMap<Loc, (usize, Vec<Reg>)>,
-    /// A mapping of labels names to the index of the first instruction to execute after the label.
+    /// A mapping of labels names to the index of the first instruction to execute after
+    /// the label.
     label_map: HashMap<Loc, usize>,
     /// The index of which instruction we are on within a block.
     inst_idx: usize,
     /// The function call stack.
     ///
-    /// A tuple of function name and any smashed registers that will need to be restored on return.
+    /// A tuple of function name and any smashed registers that will need to be restored
+    /// on return.
     call_stack: Vec<CallStackEntry>,
-    /// The program stack, this includes the `.data` segment so we can refer to labels like
-    /// pointers.
+    /// The program stack, this includes the `.data` segment so we can refer to labels
+    /// like pointers.
     stack: Vec<Val>,
     /// The index of the instruction to return to after a call returns.
     ret_idx: Vec<usize>,
@@ -86,14 +88,17 @@ impl Interpreter {
                 }
 
                 if func.label == "main" {
-                    // This is the data stack pointer, in a real program it would be a pointer to
-                    // the memory address of the beginning of the program
-                    // itself, since our stack is separate it's just the end
-                    // index of the stack since it grows towards index 0 from index (length)
-                    registers.insert(Reg::Var(0), Val::Integer((STACK_SIZE - 1) as isize));
+                    // This is the data stack pointer, in a real program it would be a
+                    // pointer to the memory address of the beginning
+                    // of the program itself, since our stack is
+                    // separate it's just the end index of the stack
+                    // since it grows towards index 0 from index (length)
+                    registers
+                        .insert(Reg::Var(0), Val::Integer((STACK_SIZE - 1) as isize));
                 }
 
-                fn_decl_map.insert(Loc(func.label.clone()), (func.stack_size, func.params));
+                fn_decl_map
+                    .insert(Loc(func.label.clone()), (func.stack_size, func.params));
                 (Loc(func.label), instrs)
             })
             .collect();
@@ -129,8 +134,9 @@ impl Interpreter {
         let instrs = self.functions.get(func)?;
 
         // Skip these instructions
-        while let Instruction::Skip(..) | Instruction::Label(..) | Instruction::Frame { .. } =
-            instrs[self.inst_idx].1
+        while let Instruction::Skip(..)
+        | Instruction::Label(..)
+        | Instruction::Frame { .. } = instrs[self.inst_idx].1
         {
             self.inst_idx += 1;
             if self.inst_idx == (instrs.len() - 1) {
@@ -203,7 +209,10 @@ impl Interpreter {
                 let a = self.registers().get(src)?;
 
                 if let Val::Integer(int) = a.clone() {
-                    self.call_stack.last_mut()?.registers.insert(*dst, Val::Integer(!int));
+                    self.call_stack
+                        .last_mut()?
+                        .registers
+                        .insert(*dst, Val::Integer(!int));
                 }
             }
             Instruction::ImmAdd { src, konst, dst } => {
@@ -544,11 +553,12 @@ impl Interpreter {
                 }
             }
             Instruction::F2I { src, dst } => {
-                let int_from_float = if let Val::Float(f) = self.registers().get(src).cloned()? {
-                    unsafe { f.to_int_unchecked::<isize>() }
-                } else {
-                    todo!("float error {:?}", self.registers().get(src).cloned())
-                };
+                let int_from_float =
+                    if let Val::Float(f) = self.registers().get(src).cloned()? {
+                        unsafe { f.to_int_unchecked::<isize>() }
+                    } else {
+                        todo!("float error {:?}", self.registers().get(src).cloned())
+                    };
                 self.call_stack
                     .last_mut()
                     .unwrap()
@@ -556,11 +566,12 @@ impl Interpreter {
                     .insert(*dst, Val::Integer(int_from_float));
             }
             Instruction::I2F { src, dst } => {
-                let float_from_int = if let Val::Integer(i) = self.registers().get(src).cloned()? {
-                    i as f64
-                } else {
-                    todo!("integer error")
-                };
+                let float_from_int =
+                    if let Val::Integer(i) = self.registers().get(src).cloned()? {
+                        i as f64
+                    } else {
+                        todo!("integer error")
+                    };
                 self.call_stack
                     .last_mut()
                     .unwrap()
@@ -634,10 +645,17 @@ impl Interpreter {
                 stack[stack_idx.to_int().unwrap() as usize] =
                     Val::Integer(buf.trim().parse().unwrap());
             }
-            Instruction::FWrite(r) => println!("{:?}", self.registers().get(r)?.to_float()?),
-            Instruction::IWrite(r) => println!("{:?}", self.registers().get(r)?.to_int()?),
+            Instruction::FWrite(r) => {
+                println!("{:?}", self.registers().get(r)?.to_float()?)
+            }
+            Instruction::IWrite(r) => {
+                println!("{:?}", self.registers().get(r)?.to_int()?)
+            }
             Instruction::SWrite(r) => {
-                println!("{}", stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize])
+                println!(
+                    "{}",
+                    stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize]
+                )
             }
             _ => todo!("{:?}", instrs[self.inst_idx]),
         }
@@ -698,10 +716,15 @@ fn debug_loop(
                 println!("{:?}", interpreter.stack[idx.parse::<usize>().unwrap()]);
             }
             ["print" | "p", reg] => {
-                let reg =
-                    if !reg.starts_with("%vr") { format!("%vr{}", reg) } else { reg.to_string() };
+                let reg = if !reg.starts_with("%vr") {
+                    format!("%vr{}", reg)
+                } else {
+                    reg.to_string()
+                };
                 if let Ok(r) = Reg::from_str(&reg) {
-                    if let Some(v) = interpreter.call_stack.last().unwrap().registers.get(&r) {
+                    if let Some(v) =
+                        interpreter.call_stack.last().unwrap().registers.get(&r)
+                    {
                         println!("{:?}", v)
                     }
                 }
