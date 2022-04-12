@@ -37,7 +37,8 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
 
     let mut copied_blocks = vec![];
     for blk in &func.blocks {
-        copied_blocks.push((OrdLabel::new(&blk.label), blk.instructions().collect::<Vec<_>>()));
+        copied_blocks
+            .push((OrdLabel::new(&blk.label), blk.instructions().collect::<Vec<_>>()));
     }
     for (b_label, blk) in &copied_blocks {
         for &inst in blk {
@@ -73,12 +74,16 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
     let empty = BTreeSet::new();
     while let Some((inst, b_label)) = stack.pop_front() {
         let (a, b) = inst.operands();
-        if let Some((a_inst, a_blk)) = a.and_then(|a| a.opt_reg()).and_then(|a| def_map.get(&a)) {
+        if let Some((a_inst, a_blk)) =
+            a.and_then(|a| a.opt_reg()).and_then(|a| def_map.get(&a))
+        {
             if critical_map.insert(a_inst) {
                 stack.push_back((a_inst, a_blk));
             }
         }
-        if let Some((b_inst, b_blk)) = b.and_then(|b| b.opt_reg()).and_then(|b| def_map.get(&b)) {
+        if let Some((b_inst, b_blk)) =
+            b.and_then(|b| b.opt_reg()).and_then(|b| def_map.get(&b))
+        {
             if critical_map.insert(b_inst) {
                 stack.push_back((b_inst, b_blk));
             }
@@ -146,8 +151,11 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
     let mut jumps = vec![];
     let mut remove = vec![];
     for (b, blk) in func.blocks.iter().enumerate() {
-        for (i, inst) in
-            blk.instructions.iter().enumerate().filter(|(_, i)| !matches!(i, Instruction::Skip(..)))
+        for (i, inst) in blk
+            .instructions
+            .iter()
+            .enumerate()
+            .filter(|(_, i)| !matches!(i, Instruction::Skip(..)))
         {
             if !critical_map.contains(&inst) {
                 if inst.is_cnd_jump() {
@@ -161,7 +169,10 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
 
                         jumps.push((b, i, Instruction::ImmJump(Loc(label.to_string()))));
                     }
-                } else if !matches!(inst, Instruction::ImmJump(..) | Instruction::Label(..)) {
+                } else if !matches!(
+                    inst,
+                    Instruction::ImmJump(..) | Instruction::Label(..)
+                ) {
                     remove.push((b, i));
                 }
             }
@@ -230,16 +241,18 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
                     // TODO: also check the `jump_to` list for renamed labels
                 }
 
-                // Since this block ends with a jumpI (blk) and the location (loc) only has one
-                // successor (so we aren't messing with any dominators) we remove
-                // the jump in blk and move `loc`'s instructions into `blk`
+                // Since this block ends with a jumpI (blk) and the location (loc) only
+                // has one successor (so we aren't messing with any
+                // dominators) we remove the jump in blk and move `loc`'s
+                // instructions into `blk`
                 if cfg_preds.get(loc).map_or(false, |set| set.len() == 1) {
                     changed = true;
                     println!("combine {loc} into {blk} {:?}", cfg_map);
                     combine(func, loc, blk.as_str());
                 }
                 // The `all()` method defaults to true if no iteration happens!!
-                if jump_to.instructions.iter().all(|i| matches!(i, Instruction::Skip(..))) {
+                if jump_to.instructions.iter().all(|i| matches!(i, Instruction::Skip(..)))
+                {
                     changed = true;
                     println!("overwrite {blk} to {loc}");
                 }
@@ -253,11 +266,13 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
             }
         }
 
-        let all: HashSet<_> = func.blocks.iter().map(|b| OrdLabel::new(&b.label)).collect();
+        let all: HashSet<_> =
+            func.blocks.iter().map(|b| OrdLabel::new(&b.label)).collect();
         let used: HashSet<_> = reverse_postorder(&cfg_map, start).cloned().collect();
         for unused in all.difference(&used) {
             changed = true;
-            let pos = func.blocks.iter().position(|b| b.label == unused.as_str()).unwrap();
+            let pos =
+                func.blocks.iter().position(|b| b.label == unused.as_str()).unwrap();
             func.blocks.remove(pos);
         }
 
@@ -273,7 +288,8 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
 pub fn build_stripped_cfg(func: &Function) -> HashMap<OrdLabel, BTreeSet<OrdLabel>> {
     let mut cfg: HashMap<_, BTreeSet<_>> = HashMap::default();
 
-    let mut blocks = func.blocks.iter().enumerate().next().into_iter().collect::<VecDeque<_>>();
+    let mut blocks =
+        func.blocks.iter().enumerate().next().into_iter().collect::<VecDeque<_>>();
     'blk: while let Some((idx, block)) = blocks.pop_front() {
         let mut extend_blocks = vec![];
         let b_label = &block.label;
@@ -335,11 +351,9 @@ fn combine(func: &mut Function, from: &str, into: &str) {
         *instruction = Instruction::Skip(format!("{}", instruction));
     }
 
-    func.blocks[into].instructions.extend(
-        from_blk
-            .instructions
-            .drain_filter(|i| !matches!(i, Instruction::Label(..) | Instruction::Frame { .. })),
-    );
+    func.blocks[into].instructions.extend(from_blk.instructions.drain_filter(|i| {
+        !matches!(i, Instruction::Label(..) | Instruction::Frame { .. })
+    }));
 }
 
 fn replace_transfer(func: &mut Function, to: &str, with: &str, idx: usize) {

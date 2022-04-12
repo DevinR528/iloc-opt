@@ -96,12 +96,14 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) -> LoopAnalysis 
     }
 
     let empty = BTreeSet::default();
-    let mut loop_map =
-        loops.iter().map(|(k, v)| (k.clone(), LoopInfo::new(v))).collect::<BTreeMap<_, _>>();
+    let mut loop_map = loops
+        .iter()
+        .map(|(k, v)| (k.clone(), LoopInfo::new(v)))
+        .collect::<BTreeMap<_, _>>();
     let mut stack = vec![];
     let mut seen = BTreeSet::new();
-    // Iterate over the known loops to find the blocks they "own" as part of their loop, this also
-    // determines which loops are nested in in other loops
+    // Iterate over the known loops to find the blocks they "own" as part of their loop,
+    // this also determines which loops are nested in in other loops
     for lp in loop_ord.into_iter().rev() {
         for pred in domtree.cfg_preds_map.get(lp).unwrap_or(&empty) {
             // Add the back edges to the stack/worklist
@@ -138,7 +140,9 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) -> LoopAnalysis 
                             let key = node_loop.to_string();
                             match loop_map.entry(key) {
                                 Entry::Occupied(mut o) => match o.get_mut() {
-                                    LoopInfo::Loop { parent, .. } => *parent = Some(lp.to_string()),
+                                    LoopInfo::Loop { parent, .. } => {
+                                        *parent = Some(lp.to_string())
+                                    }
                                     it => panic!("{} {:?}", node_loop, it),
                                 },
                                 it => panic!("{} {:?}", node_loop, it),

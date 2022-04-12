@@ -6,7 +6,8 @@
     let_chains,
     try_blocks,
     drain_filter,
-    default_free_fn
+    default_free_fn,
+    if_let_guard
 )]
 #![allow(unused)]
 
@@ -38,8 +39,8 @@ mod lcm;
 mod ssa;
 
 /// ## Register Allocation
-/// Using live ranges, an interference graph, and coloring of that graph we allocate registers
-/// for our currently infinite set.
+/// Using live ranges, an interference graph, and coloring of that graph we allocate
+/// registers for our currently infinite set.
 mod ralloc;
 
 use iloc::{make_blks, parse_text};
@@ -113,8 +114,12 @@ fn main() {
             let mut path = PathBuf::from(&file);
             let file = path.file_stem().unwrap().to_string_lossy().to_string();
             path.set_file_name(&format!("{}.lvn.dbre.dce.pre.ra.il", file));
-            let mut fd =
-                fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
+            let mut fd = fs::OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(&path)
+                .unwrap();
             fd.write_all(buf.as_bytes()).unwrap();
 
             fs::read_to_string(&path).unwrap()
@@ -138,7 +143,9 @@ fn main() {
 
                 let mut meta = HashMap::new();
                 for (_blk_label, register_set) in phis {
-                    meta.extend(register_set.iter().map(|op| (op.clone(), RenameMeta::default())));
+                    meta.extend(
+                        register_set.iter().map(|op| (op.clone(), RenameMeta::default())),
+                    );
                 }
                 let mut stack = VecDeque::new();
                 // Label but don't remove any with the `SSA` flag on
@@ -153,8 +160,12 @@ fn main() {
             let mut path = PathBuf::from(&file);
             let file = path.file_stem().unwrap().to_string_lossy().to_string();
             path.set_file_name(&format!("{}.ssa.il", file));
-            let mut fd =
-                fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
+            let mut fd = fs::OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(&path)
+                .unwrap();
             fd.write_all(buf.as_bytes()).unwrap();
 
             fs::read_to_string(&path).unwrap()
