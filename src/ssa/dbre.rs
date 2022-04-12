@@ -67,7 +67,7 @@ pub fn dom_val_num(
             } else {
                 dst.replace(0);
                 m.stack.push_back(0);
-                set.insert(0);
+                // set.insert(0);
             }
         }
     }
@@ -91,8 +91,8 @@ pub fn dom_val_num(
         }
     }
 
-    // We need to iter all instructions (the frame instruction was being skipped) so don't use the
-    // phi range end as a start
+    // We need to iter all instructions (the frame instruction was being skipped) so don't
+    // use the phi range end as a start
     for op in &mut blks[blk_idx].instructions {
         if let Instruction::Phi(..) = op {
             continue;
@@ -120,19 +120,11 @@ pub fn dom_val_num(
                     rewrite_name(arg, m);
                 }
             }
-            Instruction::ImmCall { args, ret, .. } | Instruction::ImmRCall { args, ret, .. } => {
+            Instruction::ImmCall { args, ret, .. }
+            | Instruction::ImmRCall { args, ret, .. } => {
                 for arg in args {
                     let m = meta.entry(Operand::Register(*arg)).or_default();
                     rewrite_name(arg, m);
-                }
-                let m = meta.entry(Operand::Register(*ret)).or_default();
-                if let Some(i) = m.stack.back() {
-                    let new_val = *i + 1;
-                    m.stack.push_back(new_val);
-                    ret.as_phi(new_val);
-                } else {
-                    m.stack.push_back(0);
-                    ret.as_phi(0);
                 }
             }
             Instruction::Store { dst, .. }
@@ -144,37 +136,38 @@ pub fn dom_val_num(
             _ => {}
         }
 
-        if let (Some(a), b) = op.operands() {
-            // This needs to run before we bail out for calls/stores, stuff like that...
-            if let Some(dst) = op.target_reg_mut() {
-                // When we see a new definition of a register we increment it's phi value
-                let m = meta.entry(Operand::Register(*dst)).or_default();
-                if let Some(i) = m.stack.back() {
-                    let new_val = *i + 1;
-                    m.stack.push_back(new_val);
-                    dst.as_phi(new_val);
-                } else {
-                    m.stack.push_back(0);
-                    dst.as_phi(0);
-                }
+        // This needs to run before we bail out for calls/stores, stuff like that...
+        if let Some(dst) = op.target_reg_mut() {
+            // When we see a new definition of a register we increment it's phi value
+            let m = meta.entry(Operand::Register(*dst)).or_default();
+            if let Some(i) = m.stack.back() {
+                let new_val = *i + 1;
+                m.stack.push_back(new_val);
+                dst.as_phi(new_val);
+            } else {
+                m.stack.push_back(0);
+                dst.as_phi(0);
             }
-
+        }
+        if let (Some(a), b) = op.operands() {
             let expr = (a.clone(), b.clone(), op.inst_name().to_string());
-            // TODO: if expr can be simplified to expr' then replace assign with `x <- expr'`
+            // TODO: if expr can be simplified to expr' then replace assign with `x <-
+            // expr'`
             if let Some(prev_reg) = expr_tree.iter().find_map(|map| map.get(&expr)) {
                 if !op.is_tmp_expr() || op.is_call_instruction() || ssa {
                     continue;
                 }
 
-                println!("{:?} {:?}", expr, prev_reg);
+                println!("{:?} {:?}", op, prev_reg);
 
-                if let Some(dst) = op.target_reg() {
+                if let Some(dst) = op.target_reg_mut() {
                     if dst == prev_reg {
                         *op = Instruction::Skip(format!("[ssadbre] {op}"));
                     } else {
-                        op.as_new_move_instruction(*prev_reg, *dst);
+                        *dst = *prev_reg;
                     }
                 }
+                println!("{:?}", op);
             } else if let Some(dst) = op.target_reg() && op.is_tmp_expr() {
                 expr_tree.back_mut().unwrap().insert(expr, *dst);
             }
@@ -188,13 +181,13 @@ pub fn dom_val_num(
         // TODO: make block -> index map
         let idx = blks.iter().position(|b| b.label == blk.as_str()).unwrap();
         let rng = phi_range(&blks[idx].instructions);
-
         for phi in &mut blks[idx].instructions[rng] {
             if let Instruction::Phi(r, set, _dst) = phi {
                 // When looking forward into successor blocks we transfer the current phi
                 // number since we know this is the correct number to cross the block
                 //
-                // We are adding the number to the set of incoming subscripts that makes up the phi
+                // We are adding the number to the set of incoming subscripts that makes
+                // up the phi
                 let m = meta.entry(Operand::Register(*r)).or_default();
                 if let Some(&i) = m.stack.back() {
                     set.insert(i);
@@ -215,8 +208,8 @@ pub fn dom_val_num(
 
     for op in &blks[blk_idx].instructions {
         if let Some(dst) = op.target_reg() {
-            if let Some(meta) = meta.get_mut(&Operand::Register(*dst)) {
-                meta.stack.pop_back();
+            if let Some(meta) = meta.get_mut(&Operand::Register(dst.to_register())) {
+                // meta.stack.pop_back();
             }
         }
     }
