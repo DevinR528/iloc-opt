@@ -29,16 +29,12 @@ pub fn print_maps<K: fmt::Debug, V: fmt::Debug>(name: &str, map: impl Iterator<I
 
 pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &OrdLabel) {
     let start = OrdLabel::new_start(&func.label);
-
     let mut use_map: HashMap<_, Vec<_>> = HashMap::new();
     let mut dst_map: HashMap<_, _> = HashMap::new();
     for blk in &func.blocks {
         for inst in &blk.instructions {
             if let Some(dst) = inst.target_reg() {
-                dst_map.insert(
-                    (OrdLabel::from_known(&blk.label.replace(':', "")), *dst),
-                    inst.clone(),
-                );
+                dst_map.insert((OrdLabel::from_known(&blk.label), *dst), inst.clone());
             }
             for operand in inst.operand_iter() {
                 let Some(dst) = inst.target_reg() else { continue; };
@@ -52,8 +48,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     let mut changed = true;
 
     // Build:
-    //  - down-exposed = variables that are eval'ed in `b` and no operand is defined between
-    //      the last eval and the end of the block
+    //  - down-exposed = variables that are eval'ed in `b` and no operand is defined between the
+    //    last eval and the end of the block
     //  - upward-exposed = variables that are used in `b` before any redefinition
     //  - transparent =
     let mut universe: HashMap<_, BTreeSet<Reg>> = HashMap::new();
@@ -74,7 +70,6 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
 
             let dloc = dexpr.entry(label.clone()).or_default();
             let uloc = uexpr.entry(label.clone()).or_default();
-
             let k_loc = kill.entry(label.clone()).or_default();
             for inst in &blk.instructions {
                 let dst = inst.target_reg();
@@ -103,10 +98,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("universe", universe.iter());
+    print_maps("universe", universe.iter());
     print_maps("dexpr", dexpr.iter());
     print_maps("uexpr", uexpr.iter());
-    // print_maps("trans", transparent.iter());
     print_maps("kill", kill.iter());
     println!();
 
@@ -174,7 +168,49 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    print_maps("avail_in", avail_in.iter());
+    // let mut avail_out: HashMap<OrdLabel, BTreeSet<_>> = HashMap::new();
+    // for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
+    //     avail_out.insert(label.clone(), universe.get(label).cloned().unwrap());
+    // }
+    // while changed {
+    //     changed = false;
+    //     for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
+    //         let empty_bset = BTreeSet::new();
+
+    //         // Available In is all predecessors of `label`s available-out sets
+    //         // intersected (elements common in all
+    //         // parents/predecessors)
+    //         let mut sets = vec![];
+    //         for pred in domtree.cfg_preds_map.get(label).unwrap_or(&empty_bset) {
+    //             let new: BTreeSet<_> = dexpr
+    //                 .get(pred)
+    //                 .unwrap_or(&empty)
+    //                 .union(
+    //                     &avail_out
+    //                         .get(pred)
+    //                         .unwrap_or(&empty)
+    //                         .difference(kill.get(pred).unwrap_or(&empty))
+    //                         .cloned()
+    //                         .collect(),
+    //                 )
+    //                 .cloned()
+    //                 .collect();
+    //             sets.push(new);
+    //         }
+    //         let mut merge_iter = sets.into_iter();
+    //         let Some(mut merge) = merge_iter.next() else { continue; };
+    //         for n in merge_iter {
+    //             merge = merge.intersection(&n).cloned().collect();
+    //         }
+
+    //         let old = avail_out.entry(label.clone()).or_default();
+    //         if *old != merge {
+    //             *old = merge;
+    //             changed = true;
+    //         }
+    //     }
+    // }
+
     print_maps("avail_out", avail_out.iter());
     println!();
 
@@ -272,7 +308,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 } else {
                     // Ant_in(s) ∩ !Av_out(p) ∩ (!Trans(p) ∪ !Ant_out(p))
                     // Is equivalent to
-                    // Ant_in(s) - Av_out(p) ∪ (Trans(p) ∩ Ant_out(p))
+                    // Ant_in(s) - Av_out(p) - (Trans(p) ∩ Ant_out(p))
                     let inout: BTreeSet<_> = anti_in
                         .get(succ)
                         .unwrap_or(&empty)
