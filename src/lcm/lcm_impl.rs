@@ -168,49 +168,6 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // let mut avail_out: HashMap<OrdLabel, BTreeSet<_>> = HashMap::new();
-    // for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
-    //     avail_out.insert(label.clone(), universe.get(label).cloned().unwrap());
-    // }
-    // while changed {
-    //     changed = false;
-    //     for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
-    //         let empty_bset = BTreeSet::new();
-
-    //         // Available In is all predecessors of `label`s available-out sets
-    //         // intersected (elements common in all
-    //         // parents/predecessors)
-    //         let mut sets = vec![];
-    //         for pred in domtree.cfg_preds_map.get(label).unwrap_or(&empty_bset) {
-    //             let new: BTreeSet<_> = dexpr
-    //                 .get(pred)
-    //                 .unwrap_or(&empty)
-    //                 .union(
-    //                     &avail_out
-    //                         .get(pred)
-    //                         .unwrap_or(&empty)
-    //                         .difference(kill.get(pred).unwrap_or(&empty))
-    //                         .cloned()
-    //                         .collect(),
-    //                 )
-    //                 .cloned()
-    //                 .collect();
-    //             sets.push(new);
-    //         }
-    //         let mut merge_iter = sets.into_iter();
-    //         let Some(mut merge) = merge_iter.next() else { continue; };
-    //         for n in merge_iter {
-    //             merge = merge.intersection(&n).cloned().collect();
-    //         }
-
-    //         let old = avail_out.entry(label.clone()).or_default();
-    //         if *old != merge {
-    //             *old = merge;
-    //             changed = true;
-    //         }
-    //     }
-    // }
-
     print_maps("avail_out", avail_out.iter());
     println!();
 
