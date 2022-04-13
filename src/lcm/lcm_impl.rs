@@ -51,6 +51,11 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
 
     let mut changed = true;
 
+    // Build:
+    //  - down-exposed = variables that are eval'ed in `b` and no operand is defined between
+    //      the last eval and the end of the block
+    //  - upward-exposed = variables that are used in `b` before any redefinition
+    //  - transparent =
     let mut universe: HashMap<_, BTreeSet<Reg>> = HashMap::new();
     let mut dexpr: HashMap<_, BTreeSet<Reg>> = HashMap::new();
     let mut uexpr: HashMap<_, BTreeSet<Reg>> = HashMap::new();
@@ -99,11 +104,11 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     }
 
     // print_maps("universe", universe.iter());
-    // print_maps("dexpr", dexpr.iter());
-    // print_maps("uexpr", uexpr.iter());
+    print_maps("dexpr", dexpr.iter());
+    print_maps("uexpr", uexpr.iter());
     // print_maps("trans", transparent.iter());
-    // print_maps("kill", kill.iter());
-    // println!();
+    print_maps("kill", kill.iter());
+    println!();
 
     let empty = BTreeSet::new();
 
@@ -169,8 +174,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("avail_in", avail_in.iter());
-    // print_maps("avail_out", avail_out.iter());
+    print_maps("avail_in", avail_in.iter());
+    print_maps("avail_out", avail_out.iter());
     println!();
 
     changed = true;
@@ -234,9 +239,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("ant_in", anti_in.iter());
-    // print_maps("ant_out", anti_out.iter());
-    // println!();
+    print_maps("ant_in", anti_in.iter());
+    print_maps("ant_out", anti_out.iter());
+    println!();
 
     // EARLIEST
     // Based on availability (is it above me) and anticipation (is it below me) we compute
@@ -289,8 +294,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("earliest", earliest.iter());
-    // println!();
+    print_maps("earliest", earliest.iter());
+    println!();
 
     // LATEST
     changed = true;
@@ -343,9 +348,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("later_in", later_in.iter());
-    // print_maps("later", later.iter());
-    // println!();
+    print_maps("later_in", later_in.iter());
+    print_maps("later", later.iter());
+    println!();
 
     // INSERT and DELETE
     changed = true;
@@ -382,9 +387,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("insert", insert.iter());
-    // print_maps("delete", delete.iter());
-    // println!();
+    print_maps("insert", insert.iter());
+    print_maps("delete", delete.iter());
+    println!();
 
     let loop_analysis = find_loops(func, domtree);
 
