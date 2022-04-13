@@ -8,8 +8,9 @@ use crate::{
     iloc::{Block, IlocProgram, Instruction, Reg, Val},
     lcm::{print_maps, LoopAnalysis},
     ssa::{
-        build_cfg, dom_val_num, dominator_tree, find_loops, insert_phi_functions,
-        reverse_postorder, OrdLabel,
+        build_cfg,
+        dce::{build_stripped_cfg, dead_code},
+        dom_val_num, dominator_tree, find_loops, insert_phi_functions, reverse_postorder, OrdLabel,
     },
 };
 
@@ -44,11 +45,18 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
         let start = OrdLabel::new_start(&func.label);
 
         let cfg = build_cfg(func);
-        let dtree = dominator_tree(&cfg, &mut func.blocks, &start);
+        let mut dtree = dominator_tree(&cfg, &mut func.blocks, &start);
         insert_phi_functions(func, &dtree.cfg_succs_map, &start, &dtree.dom_frontier_map);
         let mut meta = HashMap::new();
         let mut stack = VecDeque::new();
         dom_val_num(&mut func.blocks, 0, &mut meta, &dtree, &mut stack);
+
+        // WARNING THIS IS EXPENSIVISH
+        // Sneaky sneaky
+        //
+        // This removes dead phi nodes that otherwise complicate the interference graph
+        dead_code(func, &dtree, &start);
+        dtree.cfg_succs_map = build_stripped_cfg(func);
 
         let loop_map = find_loops(func, &dtree);
 
@@ -121,7 +129,8 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                     for spill in spills {
                         match spill {
                             Spill::Store { stack_size, reg, blk_idx, inst_idx } => {
-                                // We don't need to store the phi again this was already taken care
+                                // We don't need to store the phi again this was already
+                                // taken care
                                 // of on all paths above us
                                 if matches!(
                                     &func.blocks[blk_idx].instructions[inst_idx],
@@ -197,7 +206,7 @@ fn dump_to(prog: &IlocProgram) {
     let x: bool;
     unsafe {
         x = crate::SSA;
-        // crate::SSA = true;
+        crate::SSA = true;
     }
     for inst in prog.functions.iter().flat_map(|f| f.flatten_block_iter()) {
         if matches!(inst, Instruction::Skip(..)) {
