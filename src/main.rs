@@ -114,12 +114,8 @@ fn main() {
             let mut path = PathBuf::from(&file);
             let file = path.file_stem().unwrap().to_string_lossy().to_string();
             path.set_file_name(&format!("{}.lvn.dbre.dce.pre.ra.il", file));
-            let mut fd = fs::OpenOptions::new()
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .open(&path)
-                .unwrap();
+            let mut fd =
+                fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
             fd.write_all(buf.as_bytes()).unwrap();
 
             fs::read_to_string(&path).unwrap()
@@ -143,9 +139,7 @@ fn main() {
 
                 let mut meta = HashMap::new();
                 for (_blk_label, register_set) in phis {
-                    meta.extend(
-                        register_set.iter().map(|op| (op.clone(), RenameMeta::default())),
-                    );
+                    meta.extend(register_set.iter().map(|op| (op.clone(), RenameMeta::default())));
                 }
                 let mut stack = VecDeque::new();
                 // Label but don't remove any with the `SSA` flag on
@@ -160,12 +154,8 @@ fn main() {
             let mut path = PathBuf::from(&file);
             let file = path.file_stem().unwrap().to_string_lossy().to_string();
             path.set_file_name(&format!("{}.ssa.il", file));
-            let mut fd = fs::OpenOptions::new()
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .open(&path)
-                .unwrap();
+            let mut fd =
+                fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
             fd.write_all(buf.as_bytes()).unwrap();
 
             fs::read_to_string(&path).unwrap()

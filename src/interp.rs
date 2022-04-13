@@ -93,12 +93,10 @@ impl Interpreter {
                     // of the program itself, since our stack is
                     // separate it's just the end index of the stack
                     // since it grows towards index 0 from index (length)
-                    registers
-                        .insert(Reg::Var(0), Val::Integer((STACK_SIZE - 1) as isize));
+                    registers.insert(Reg::Var(0), Val::Integer((STACK_SIZE - 1) as isize));
                 }
 
-                fn_decl_map
-                    .insert(Loc(func.label.clone()), (func.stack_size, func.params));
+                fn_decl_map.insert(Loc(func.label.clone()), (func.stack_size, func.params));
                 (Loc(func.label), instrs)
             })
             .collect();
@@ -120,9 +118,7 @@ impl Interpreter {
         self.fn_decl.get(&Loc(name.to_string())).unwrap().0 as isize
     }
 
-    fn registers(&self) -> &HashMap<Reg, Val> {
-        &self.call_stack.last().unwrap().registers
-    }
+    fn registers(&self) -> &HashMap<Reg, Val> { &self.call_stack.last().unwrap().registers }
 
     pub fn run_next_instruction(&mut self) -> Option<bool> {
         if self.call_stack.is_empty() {
@@ -134,9 +130,8 @@ impl Interpreter {
         let instrs = self.functions.get(func)?;
 
         // Skip these instructions
-        while let Instruction::Skip(..)
-        | Instruction::Label(..)
-        | Instruction::Frame { .. } = instrs[self.inst_idx].1
+        while let Instruction::Skip(..) | Instruction::Label(..) | Instruction::Frame { .. } =
+            instrs[self.inst_idx].1
         {
             self.inst_idx += 1;
             if self.inst_idx == (instrs.len() - 1) {
@@ -209,10 +204,7 @@ impl Interpreter {
                 let a = self.registers().get(src)?;
 
                 if let Val::Integer(int) = a.clone() {
-                    self.call_stack
-                        .last_mut()?
-                        .registers
-                        .insert(*dst, Val::Integer(!int));
+                    self.call_stack.last_mut()?.registers.insert(*dst, Val::Integer(!int));
                 }
             }
             Instruction::ImmAdd { src, konst, dst } => {
@@ -553,12 +545,11 @@ impl Interpreter {
                 }
             }
             Instruction::F2I { src, dst } => {
-                let int_from_float =
-                    if let Val::Float(f) = self.registers().get(src).cloned()? {
-                        unsafe { f.to_int_unchecked::<isize>() }
-                    } else {
-                        todo!("float error {:?}", self.registers().get(src).cloned())
-                    };
+                let int_from_float = if let Val::Float(f) = self.registers().get(src).cloned()? {
+                    unsafe { f.to_int_unchecked::<isize>() }
+                } else {
+                    todo!("float error {:?}", self.registers().get(src).cloned())
+                };
                 self.call_stack
                     .last_mut()
                     .unwrap()
@@ -567,7 +558,7 @@ impl Interpreter {
             }
             Instruction::I2F { src, dst } => {
                 let float_from_int =
-                    if let Val::Integer(i) = self.registers().get(src).cloned()? {
+                    if let Val::Integer(i) = self.registers().get(src).cloned().unwrap() {
                         i as f64
                     } else {
                         todo!("integer error")
@@ -652,10 +643,7 @@ impl Interpreter {
                 println!("{:?}", self.registers().get(r)?.to_int()?)
             }
             Instruction::SWrite(r) => {
-                println!(
-                    "{}",
-                    stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize]
-                )
+                println!("{}", stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize])
             }
             _ => todo!("{:?}", instrs[self.inst_idx]),
         }
@@ -716,15 +704,10 @@ fn debug_loop(
                 println!("{:?}", interpreter.stack[idx.parse::<usize>().unwrap()]);
             }
             ["print" | "p", reg] => {
-                let reg = if !reg.starts_with("%vr") {
-                    format!("%vr{}", reg)
-                } else {
-                    reg.to_string()
-                };
+                let reg =
+                    if !reg.starts_with("%vr") { format!("%vr{}", reg) } else { reg.to_string() };
                 if let Ok(r) = Reg::from_str(&reg) {
-                    if let Some(v) =
-                        interpreter.call_stack.last().unwrap().registers.get(&r)
-                    {
+                    if let Some(v) = interpreter.call_stack.last().unwrap().registers.get(&r) {
                         println!("{:?}", v)
                     }
                 }

@@ -13,9 +13,7 @@ pub struct OrdLabel(isize, String);
 impl OrdLabel {
     // Create a new `OrdLabel, removing the `:` and without the sorting filler in the
     // front of the label.
-    pub fn new(label: &str) -> Self {
-        Self(111, label.to_string())
-    }
+    pub fn new(label: &str) -> Self { Self(111, label.to_string()) }
     pub fn new_add(sort: isize, label: &str) -> Self {
         match LABEL_MAP.lock().unwrap().entry(label.to_string()) {
             Entry::Occupied(o) => o.get().clone(),
@@ -36,21 +34,15 @@ impl OrdLabel {
             }
         }
     }
-    pub fn from_known(label: &str) -> Self {
-        LABEL_MAP.lock().unwrap().get(label).unwrap().clone()
-    }
+    pub fn from_known(label: &str) -> Self { LABEL_MAP.lock().unwrap().get(label).unwrap().clone() }
     pub fn new_start(start: &str) -> Self {
         let l = Self(-1, format!(".F_{}", start));
         LABEL_MAP.lock().unwrap().entry(format!(".F_{}", start)).or_insert(l).clone()
     }
-    pub fn as_str(&self) -> &str {
-        &self.1
-    }
+    pub fn as_str(&self) -> &str { &self.1 }
 }
 impl fmt::Display for OrdLabel {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.as_str().fmt(f)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.as_str().fmt(f) }
 }
 impl fmt::Debug for OrdLabel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -59,15 +51,11 @@ impl fmt::Debug for OrdLabel {
     }
 }
 impl PartialEq for OrdLabel {
-    fn eq(&self, other: &Self) -> bool {
-        self.as_str().eq(other.as_str())
-    }
+    fn eq(&self, other: &Self) -> bool { self.as_str().eq(other.as_str()) }
 }
 impl Eq for OrdLabel {}
 impl hash::Hash for OrdLabel {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.1.hash(state);
-    }
+    fn hash<H: hash::Hasher>(&self, state: &mut H) { self.1.hash(state); }
 }
 impl PartialOrd for OrdLabel {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -86,17 +74,11 @@ impl Ord for OrdLabel {
     }
 }
 impl PartialEq<str> for OrdLabel {
-    fn eq(&self, other: &str) -> bool {
-        self.as_str().eq(other)
-    }
+    fn eq(&self, other: &str) -> bool { self.as_str().eq(other) }
 }
 impl PartialEq<String> for OrdLabel {
-    fn eq(&self, other: &String) -> bool {
-        self.as_str().eq(other)
-    }
+    fn eq(&self, other: &String) -> bool { self.as_str().eq(other) }
 }
 impl Borrow<str> for OrdLabel {
-    fn borrow(&self) -> &str {
-        self.as_str()
-    }
+    fn borrow(&self) -> &str { self.as_str() }
 }

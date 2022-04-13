@@ -79,9 +79,7 @@ impl Val {
         Some(Self::Float(self.to_float()? / other.to_float()?))
     }
 
-    pub fn negate(&self) -> Option<Self> {
-        Some(Self::Integer(-self.to_int()?))
-    }
+    pub fn negate(&self) -> Option<Self> { Some(Self::Integer(-self.to_int()?)) }
 
     pub fn is_zero(&self) -> bool {
         match self {
@@ -116,12 +114,8 @@ impl Val {
     }
     pub fn cmp_eq(&self, other: &Self) -> Option<Self> {
         Some(match (self, other) {
-            (Self::Integer(a), Self::Integer(b)) => {
-                Self::Integer(if a == b { 1 } else { 0 })
-            }
-            (Self::Float(a), Self::Float(b)) => {
-                Self::Float(if a == b { 1.0 } else { 0.0 })
-            }
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a == b { 1 } else { 0 }),
+            (Self::Float(a), Self::Float(b)) => Self::Float(if a == b { 1.0 } else { 0.0 }),
             _ => {
                 return None;
             }
@@ -129,12 +123,8 @@ impl Val {
     }
     pub fn cmp_ne(&self, other: &Self) -> Option<Self> {
         Some(match (self, other) {
-            (Self::Integer(a), Self::Integer(b)) => {
-                Self::Integer(if a != b { 1 } else { 0 })
-            }
-            (Self::Float(a), Self::Float(b)) => {
-                Self::Float(if a != b { 1.0 } else { 0.0 })
-            }
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a != b { 1 } else { 0 }),
+            (Self::Float(a), Self::Float(b)) => Self::Float(if a != b { 1.0 } else { 0.0 }),
             _ => {
                 return None;
             }
@@ -142,12 +132,8 @@ impl Val {
     }
     pub fn cmp_lt(&self, other: &Self) -> Option<Self> {
         Some(match (self, other) {
-            (Self::Integer(a), Self::Integer(b)) => {
-                Self::Integer(if a < b { 1 } else { 0 })
-            }
-            (Self::Float(a), Self::Float(b)) => {
-                Self::Float(if a < b { 1.0 } else { 0.0 })
-            }
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a < b { 1 } else { 0 }),
+            (Self::Float(a), Self::Float(b)) => Self::Float(if a < b { 1.0 } else { 0.0 }),
             _ => {
                 return None;
             }
@@ -155,12 +141,8 @@ impl Val {
     }
     pub fn cmp_le(&self, other: &Self) -> Option<Self> {
         Some(match (self, other) {
-            (Self::Integer(a), Self::Integer(b)) => {
-                Self::Integer(if a <= b { 1 } else { 0 })
-            }
-            (Self::Float(a), Self::Float(b)) => {
-                Self::Float(if a <= b { 1.0 } else { 0.0 })
-            }
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a <= b { 1 } else { 0 }),
+            (Self::Float(a), Self::Float(b)) => Self::Float(if a <= b { 1.0 } else { 0.0 }),
             _ => {
                 return None;
             }
@@ -168,12 +150,8 @@ impl Val {
     }
     pub fn cmp_gt(&self, other: &Self) -> Option<Self> {
         Some(match (self, other) {
-            (Self::Integer(a), Self::Integer(b)) => {
-                Self::Integer(if a > b { 1 } else { 0 })
-            }
-            (Self::Float(a), Self::Float(b)) => {
-                Self::Float(if a > b { 1.0 } else { 0.0 })
-            }
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a > b { 1 } else { 0 }),
+            (Self::Float(a), Self::Float(b)) => Self::Float(if a > b { 1.0 } else { 0.0 }),
             _ => {
                 return None;
             }
@@ -181,12 +159,8 @@ impl Val {
     }
     pub fn cmp_ge(&self, other: &Self) -> Option<Self> {
         Some(match (self, other) {
-            (Self::Integer(a), Self::Integer(b)) => {
-                Self::Integer(if a >= b { 1 } else { 0 })
-            }
-            (Self::Float(a), Self::Float(b)) => {
-                Self::Float(if a >= b { 1.0 } else { 0.0 })
-            }
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a >= b { 1 } else { 0 }),
+            (Self::Float(a), Self::Float(b)) => Self::Float(if a >= b { 1.0 } else { 0.0 }),
             _ => {
                 return None;
             }
@@ -311,21 +285,15 @@ impl Reg {
 pub struct Loc(pub String);
 
 impl Loc {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
+    pub fn as_str(&self) -> &str { self.0.as_str() }
 }
 impl FromStr for Loc {
     type Err = &'static str;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.to_string()))
-    }
+    fn from_str(s: &str) -> Result<Self, Self::Err> { Ok(Self(s.to_string())) }
 }
 impl fmt::Display for Loc {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 #[rustfmt::skip]
@@ -518,26 +486,19 @@ impl Hash for Instruction {
             | Instruction::RShift { src_a, src_b, dst }
             | Instruction::Mod { src_a, src_b, dst }
             | Instruction::And { src_a, src_b, dst }
-            | Instruction::Or { src_a, src_b, dst } => {
-                (src_a, src_b, dst, variant).hash(state)
-            }
+            | Instruction::Or { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
 
             Instruction::ImmAdd { src, konst, dst }
             | Instruction::ImmSub { src, konst, dst }
             | Instruction::ImmMult { src, konst, dst }
             | Instruction::ImmLShift { src, konst, dst }
-            | Instruction::ImmRShift { src, konst, dst } => {
-                (src, konst, dst, variant).hash(state)
-            }
+            | Instruction::ImmRShift { src, konst, dst } => (src, konst, dst, variant).hash(state),
 
             Instruction::ImmLoad { src, dst } => (src, dst, variant).hash(state),
 
             Instruction::LoadAddImm { src, add, dst }
-            | Instruction::StoreAddImm { src, add, dst } => {
-                (src, add, dst, variant).hash(state)
-            }
-            Instruction::LoadAdd { src, add, dst }
-            | Instruction::StoreAdd { src, add, dst } => {
+            | Instruction::StoreAddImm { src, add, dst } => (src, add, dst, variant).hash(state),
+            Instruction::LoadAdd { src, add, dst } | Instruction::StoreAdd { src, add, dst } => {
                 (src, add, dst, variant).hash(state)
             }
             Instruction::CmpLT { a, b, dst }
@@ -556,12 +517,8 @@ impl Hash for Instruction {
             Instruction::ImmJump(s) => (s, variant).hash(state),
             Instruction::Jump(s) => (s, variant).hash(state),
             Instruction::Call { name, args } => (name, args, variant).hash(state),
-            Instruction::ImmCall { name, args, ret } => {
-                (name, args, ret, variant).hash(state)
-            }
-            Instruction::ImmRCall { reg, args, ret } => {
-                (reg, args, ret, variant).hash(state)
-            }
+            Instruction::ImmCall { name, args, ret } => (name, args, ret, variant).hash(state),
+            Instruction::ImmRCall { reg, args, ret } => (reg, args, ret, variant).hash(state),
             Instruction::ImmRet(s) => (s, variant).hash(state),
             Instruction::CbrT { cond, loc } | Instruction::CbrF { cond, loc } => {
                 (cond, loc, variant).hash(state)
@@ -577,15 +534,9 @@ impl Hash for Instruction {
             | Instruction::FSub { src_a, src_b, dst }
             | Instruction::FMult { src_a, src_b, dst }
             | Instruction::FDiv { src_a, src_b, dst }
-            | Instruction::FComp { src_a, src_b, dst } => {
-                (src_a, src_b, dst, variant).hash(state)
-            }
-            Instruction::FLoadAddImm { src, add, dst } => {
-                (src, add, dst, variant).hash(state)
-            }
-            Instruction::FLoadAdd { src, add, dst } => {
-                (src, add, dst, variant).hash(state)
-            }
+            | Instruction::FComp { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::FLoadAddImm { src, add, dst } => (src, add, dst, variant).hash(state),
+            Instruction::FLoadAdd { src, add, dst } => (src, add, dst, variant).hash(state),
             Instruction::FRead(s)
             | Instruction::IRead(s)
             | Instruction::FWrite(s)
@@ -593,16 +544,10 @@ impl Hash for Instruction {
             | Instruction::SWrite(s) => (s, variant).hash(state),
             Instruction::Push(s) => (s, variant).hash(state),
             Instruction::PushR(s) => (s, variant).hash(state),
-            Instruction::Frame { name, size, params } => {
-                (name, size, params, variant).hash(state)
-            }
-            Instruction::Global { name, size, align } => {
-                (name, size, align, variant).hash(state)
-            }
+            Instruction::Frame { name, size, params } => (name, size, params, variant).hash(state),
+            Instruction::Global { name, size, align } => (name, size, align, variant).hash(state),
             Instruction::String { name, content } => (name, content, variant).hash(state),
-            Instruction::Float { name, content } => {
-                (name, content.to_bits(), variant).hash(state)
-            }
+            Instruction::Float { name, content } => (name, content.to_bits(), variant).hash(state),
             Instruction::Label(s) => (variant, s).hash(state),
             Instruction::Phi(r, set, subs) => (r, set, subs, variant).hash(state),
             Instruction::Ret => variant.hash(state),
@@ -616,10 +561,9 @@ impl Hash for Instruction {
 impl PartialEq for Instruction {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (
-                Self::I2I { src: l_src, dst: l_dst },
-                Self::I2I { src: r_src, dst: r_dst },
-            ) => l_src == r_src && l_dst == r_dst,
+            (Self::I2I { src: l_src, dst: l_dst }, Self::I2I { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
             (
                 Self::Add { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
                 Self::Add { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
@@ -652,10 +596,9 @@ impl PartialEq for Instruction {
                 Self::Or { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
                 Self::Or { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
             ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
-            (
-                Self::Not { src: l_src, dst: l_dst },
-                Self::Not { src: r_src, dst: r_dst },
-            ) => l_src == r_src && l_dst == r_dst,
+            (Self::Not { src: l_src, dst: l_dst }, Self::Not { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
             (
                 Self::ImmAdd { src: l_src, konst: l_konst, dst: l_dst },
                 Self::ImmAdd { src: r_src, konst: r_konst, dst: r_dst },
@@ -680,10 +623,9 @@ impl PartialEq for Instruction {
                 Self::ImmLoad { src: l_src, dst: l_dst },
                 Self::ImmLoad { src: r_src, dst: r_dst },
             ) => l_src == r_src && l_dst == r_dst,
-            (
-                Self::Load { src: l_src, dst: l_dst },
-                Self::Load { src: r_src, dst: r_dst },
-            ) => l_src == r_src && l_dst == r_dst,
+            (Self::Load { src: l_src, dst: l_dst }, Self::Load { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
             (
                 Self::LoadAddImm { src: l_src, add: l_add, dst: l_dst },
                 Self::LoadAddImm { src: r_src, add: r_add, dst: r_dst },
@@ -692,10 +634,9 @@ impl PartialEq for Instruction {
                 Self::LoadAdd { src: l_src, add: l_add, dst: l_dst },
                 Self::LoadAdd { src: r_src, add: r_add, dst: r_dst },
             ) => l_src == r_src && l_add == r_add && l_dst == r_dst,
-            (
-                Self::Store { src: l_src, dst: l_dst },
-                Self::Store { src: r_src, dst: r_dst },
-            ) => l_src == r_src && l_dst == r_dst,
+            (Self::Store { src: l_src, dst: l_dst }, Self::Store { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
             (
                 Self::StoreAddImm { src: l_src, add: l_add, dst: l_dst },
                 Self::StoreAddImm { src: r_src, add: r_add, dst: r_dst },
@@ -771,14 +712,12 @@ impl PartialEq for Instruction {
                 Self::ImmRCall { reg: r_reg, args: r_args, ret: r_ret },
             ) => l_reg == r_reg && l_args == r_args && l_ret == r_ret,
             (Self::ImmRet(l0), Self::ImmRet(r0)) => l0 == r0,
-            (
-                Self::CbrT { cond: l_cond, loc: l_loc },
-                Self::CbrT { cond: r_cond, loc: r_loc },
-            ) => l_cond == r_cond && l_loc == r_loc,
-            (
-                Self::CbrF { cond: l_cond, loc: l_loc },
-                Self::CbrF { cond: r_cond, loc: r_loc },
-            ) => l_cond == r_cond && l_loc == r_loc,
+            (Self::CbrT { cond: l_cond, loc: l_loc }, Self::CbrT { cond: r_cond, loc: r_loc }) => {
+                l_cond == r_cond && l_loc == r_loc
+            }
+            (Self::CbrF { cond: l_cond, loc: l_loc }, Self::CbrF { cond: r_cond, loc: r_loc }) => {
+                l_cond == r_cond && l_loc == r_loc
+            }
             (
                 Self::CbrLT { a: l_a, b: l_b, loc: l_loc },
                 Self::CbrLT { a: r_a, b: r_b, loc: r_loc },
@@ -803,18 +742,15 @@ impl PartialEq for Instruction {
                 Self::CbrNE { a: l_a, b: l_b, loc: l_loc },
                 Self::CbrNE { a: r_a, b: r_b, loc: r_loc },
             ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
-            (
-                Self::F2I { src: l_src, dst: l_dst },
-                Self::F2I { src: r_src, dst: r_dst },
-            ) => l_src == r_src && l_dst == r_dst,
-            (
-                Self::I2F { src: l_src, dst: l_dst },
-                Self::I2F { src: r_src, dst: r_dst },
-            ) => l_src == r_src && l_dst == r_dst,
-            (
-                Self::F2F { src: l_src, dst: l_dst },
-                Self::F2F { src: r_src, dst: r_dst },
-            ) => l_src == r_src && l_dst == r_dst,
+            (Self::F2I { src: l_src, dst: l_dst }, Self::F2I { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
+            (Self::I2F { src: l_src, dst: l_dst }, Self::I2F { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
+            (Self::F2F { src: l_src, dst: l_dst }, Self::F2F { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
             (
                 Self::FAdd { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
                 Self::FAdd { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
@@ -835,10 +771,9 @@ impl PartialEq for Instruction {
                 Self::FComp { src_a: l_src_a, src_b: l_src_b, dst: l_dst },
                 Self::FComp { src_a: r_src_a, src_b: r_src_b, dst: r_dst },
             ) => l_src_a == r_src_a && l_src_b == r_src_b && l_dst == r_dst,
-            (
-                Self::FLoad { src: l_src, dst: l_dst },
-                Self::FLoad { src: r_src, dst: r_dst },
-            ) => l_src == r_src && l_dst == r_dst,
+            (Self::FLoad { src: l_src, dst: l_dst }, Self::FLoad { src: r_src, dst: r_dst }) => {
+                l_src == r_src && l_dst == r_dst
+            }
             (
                 Self::FLoadAddImm { src: l_src, add: l_add, dst: l_dst },
                 Self::FLoadAddImm { src: r_src, add: r_add, dst: r_dst },
@@ -1073,9 +1008,7 @@ impl Operand {
 }
 
 impl Instruction {
-    pub fn new_phi(reg: Reg) -> Self {
-        Self::Phi(reg, BTreeSet::default(), None)
-    }
+    pub fn new_phi(reg: Reg) -> Self { Self::Phi(reg, BTreeSet::default(), None) }
     pub fn remove_phis(&mut self) {
         match self {
             Self::FLoad { src, dst }
@@ -1475,9 +1408,7 @@ impl Instruction {
             | Self::CmpGE { a, b, .. }
             | Self::CmpEQ { a, b, .. }
             | Self::CmpNE { a, b, .. }
-            | Self::Comp { a, b, .. } => {
-                (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
-            }
+            | Self::Comp { a, b, .. } => (Some(Operand::Register(*a)), Some(Operand::Register(*b))),
             Self::CbrT { cond, .. } | Self::CbrF { cond, .. } => {
                 (Some(Operand::Register(*cond)), None)
             }
@@ -1713,13 +1644,9 @@ impl Instruction {
         )
     }
 
-    pub fn unconditional_jmp(&self) -> bool {
-        matches!(self, Self::ImmJump(..))
-    }
+    pub fn unconditional_jmp(&self) -> bool { matches!(self, Self::ImmJump(..)) }
 
-    pub fn is_return(&self) -> bool {
-        matches!(self, Self::Ret | Self::ImmRet(_))
-    }
+    pub fn is_return(&self) -> bool { matches!(self, Self::Ret | Self::ImmRet(_)) }
 
     /// Turn any instruction that would be more efficient as a move. This will not move
     /// around existing `i2i` and `f2f` instructions since there is no gain.
@@ -1753,10 +1680,7 @@ impl Instruction {
             | Self::FLoad { .. }
             | Self::FLoadAddImm { .. }
             | Self::FLoadAdd { .. } => Some(Self::F2F { src, dst }),
-            Self::Store { .. }
-            | Self::StoreAddImm { .. }
-            | Self::IRead(_)
-            | Self::FRead(_) => {
+            Self::Store { .. } | Self::StoreAddImm { .. } | Self::IRead(_) | Self::FRead(_) => {
                 unreachable!("cannot simplify store instruction")
             }
             Self::I2I { .. } | Self::F2F { .. } => None,
@@ -1770,30 +1694,16 @@ impl Instruction {
     pub fn fold(&self, a: &Val, b: &Val) -> Option<Self> {
         Some(match (a, b) {
             (Val::Integer(a), Val::Integer(b)) => match self {
-                Self::Add { dst, .. } => {
-                    Self::ImmLoad { src: Val::Integer(a + b), dst: *dst }
-                }
-                Self::Sub { dst, .. } => {
-                    Self::ImmLoad { src: Val::Integer(a - b), dst: *dst }
-                }
-                Self::Mult { dst, .. } => {
-                    Self::ImmLoad { src: Val::Integer(a * b), dst: *dst }
-                }
-                Self::LShift { dst, .. } => {
-                    Self::ImmLoad { src: Val::Integer(a << b), dst: *dst }
-                }
-                Self::RShift { dst, .. } => {
-                    Self::ImmLoad { src: Val::Integer(a >> b), dst: *dst }
-                }
+                Self::Add { dst, .. } => Self::ImmLoad { src: Val::Integer(a + b), dst: *dst },
+                Self::Sub { dst, .. } => Self::ImmLoad { src: Val::Integer(a - b), dst: *dst },
+                Self::Mult { dst, .. } => Self::ImmLoad { src: Val::Integer(a * b), dst: *dst },
+                Self::LShift { dst, .. } => Self::ImmLoad { src: Val::Integer(a << b), dst: *dst },
+                Self::RShift { dst, .. } => Self::ImmLoad { src: Val::Integer(a >> b), dst: *dst },
                 Self::Mod { dst, .. } if *b != 0 => {
                     Self::ImmLoad { src: Val::Integer(a % b), dst: *dst }
                 }
-                Self::And { dst, .. } => {
-                    Self::ImmLoad { src: Val::Integer(a & b), dst: *dst }
-                }
-                Self::Or { dst, .. } => {
-                    Self::ImmLoad { src: Val::Integer(a | b), dst: *dst }
-                }
+                Self::And { dst, .. } => Self::ImmLoad { src: Val::Integer(a & b), dst: *dst },
+                Self::Or { dst, .. } => Self::ImmLoad { src: Val::Integer(a | b), dst: *dst },
                 _ => {
                     return None;
                 }
@@ -1847,11 +1757,7 @@ impl Instruction {
                 }
             },
             Self::Sub { .. } | Self::FSub { .. } => match self.operands() {
-                (Some(Operand::Register(reg)), Some(Operand::Value(val)))
-                    if val.is_zero() =>
-                {
-                    reg
-                }
+                (Some(Operand::Register(reg)), Some(Operand::Value(val))) if val.is_zero() => reg,
                 (Some(Operand::Register(a)), Some(Operand::Register(b))) if a == b => {
                     todo!("this is sub id 0")
                 }
@@ -1871,11 +1777,7 @@ impl Instruction {
                 }
             },
             Self::FDiv { .. } => match self.operands() {
-                (Some(Operand::Register(reg)), Some(Operand::Value(val)))
-                    if val.is_one() =>
-                {
-                    reg
-                }
+                (Some(Operand::Register(reg)), Some(Operand::Value(val))) if val.is_one() => reg,
                 (Some(Operand::Register(a)), Some(Operand::Register(b))) if a == b => {
                     todo!("this is div id 1")
                 }
@@ -2000,12 +1902,8 @@ impl Instruction {
             Self::Mult { src_b, dst, .. } => {
                 Self::ImmMult { src: *src_b, konst: a.clone(), dst: *dst }
             }
-            Self::ImmAdd { konst, dst, .. } => {
-                Self::ImmLoad { src: a.add(konst)?, dst: *dst }
-            }
-            Self::ImmMult { konst, dst, .. } => {
-                Self::ImmLoad { src: a.mult(konst)?, dst: *dst }
-            }
+            Self::ImmAdd { konst, dst, .. } => Self::ImmLoad { src: a.add(konst)?, dst: *dst },
+            Self::ImmMult { konst, dst, .. } => Self::ImmLoad { src: a.mult(konst)?, dst: *dst },
             Self::RShift { src_a, dst, .. } => {
                 Self::ImmRShift { src: *src_a, konst: a.clone(), dst: *dst }
             }
@@ -2025,10 +1923,7 @@ impl Instruction {
     pub fn is_store(&self) -> bool {
         matches!(
             self,
-            Self::Store { .. }
-                | Self::StoreAddImm { .. }
-                | Self::IRead(_)
-                | Self::FRead(_)
+            Self::Store { .. } | Self::StoreAddImm { .. } | Self::IRead(_) | Self::FRead(_)
         )
     }
 
@@ -2054,16 +1949,11 @@ impl Instruction {
     pub fn is_commutative(&self) -> bool {
         matches!(
             self,
-            Self::Add { .. }
-                | Self::ImmAdd { .. }
-                | Self::Mult { .. }
-                | Self::ImmMult { .. }
+            Self::Add { .. } | Self::ImmAdd { .. } | Self::Mult { .. } | Self::ImmMult { .. }
         )
     }
 
-    pub fn is_phi(&self) -> bool {
-        matches!(self, Self::Phi(..))
-    }
+    pub fn is_phi(&self) -> bool { matches!(self, Self::Phi(..)) }
 
     pub fn is_tmp_expr(&self) -> bool {
         matches!(
@@ -2162,9 +2052,7 @@ impl Instruction {
             | Self::TestLT { test, dst }
             | Self::TestLE { test, dst } => vec![test, dst],
 
-            Self::Call { args, .. } | Self::Frame { params: args, .. } => {
-                args.iter_mut().collect()
-            }
+            Self::Call { args, .. } | Self::Frame { params: args, .. } => args.iter_mut().collect(),
             Self::ImmCall { args, ret, .. } => args.iter_mut().chain(Some(ret)).collect(),
             Self::ImmRet(ret) => vec![ret],
 
@@ -2245,9 +2133,7 @@ impl Instruction {
             | Self::TestLT { test, dst }
             | Self::TestLE { test, dst } => vec![test, dst],
 
-            Self::Call { args, .. } | Self::Frame { params: args, .. } => {
-                args.iter().collect()
-            }
+            Self::Call { args, .. } | Self::Frame { params: args, .. } => args.iter().collect(),
             Self::ImmCall { args, ret, .. } => args.iter().chain(Some(ret)).collect(),
             Self::ImmRet(ret) => vec![ret],
 
@@ -2264,18 +2150,15 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
     let mut instructions = vec![];
 
     for line in input.lines() {
-        let comp =
-            line.split_ascii_whitespace().map(|s| s.replace(',', "")).collect::<Vec<_>>();
+        let comp = line.split_ascii_whitespace().map(|s| s.replace(',', "")).collect::<Vec<_>>();
         if comp.is_empty() {
             continue;
         }
 
         match comp.iter().map(|s| s.as_str()).collect::<Vec<_>>().as_slice() {
             // Integer operations
-            ["i2i", src, "=>", dst] => instructions.push(Instruction::I2I {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["i2i", src, "=>", dst] => instructions
+                .push(Instruction::I2I { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
             ["add", a, b, "=>", dst] => instructions.push(Instruction::Add {
                 src_a: Reg::from_str(a)?,
                 src_b: Reg::from_str(b)?,
@@ -2316,10 +2199,8 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 src_b: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
-            ["not", src, "=>", dst] => instructions.push(Instruction::Not {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["not", src, "=>", dst] => instructions
+                .push(Instruction::Not { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
             ["addI", a, b, "=>", dst] => instructions.push(Instruction::ImmAdd {
                 src: Reg::from_str(a)?,
                 konst: Val::from_str(b)?,
@@ -2347,14 +2228,10 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             }),
 
             // Memory operations
-            ["loadI", src, "=>", dst] => instructions.push(Instruction::ImmLoad {
-                src: Val::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["load", src, "=>", dst] => instructions.push(Instruction::Load {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["loadI", src, "=>", dst] => instructions
+                .push(Instruction::ImmLoad { src: Val::from_str(src)?, dst: Reg::from_str(dst)? }),
+            ["load", src, "=>", dst] => instructions
+                .push(Instruction::Load { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
             ["loadAI", a, b, "=>", dst] => instructions.push(Instruction::LoadAddImm {
                 src: Reg::from_str(a)?,
                 add: Val::from_str(b)?,
@@ -2365,17 +2242,13 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 add: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
-            ["store", src, "=>", dst] => instructions.push(Instruction::Store {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
+            ["store", src, "=>", dst] => instructions
+                .push(Instruction::Store { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
+            ["storeAI", a, "=>", b, konst] => instructions.push(Instruction::StoreAddImm {
+                src: Reg::from_str(a)?,
+                add: Val::from_str(konst)?,
+                dst: Reg::from_str(b)?,
             }),
-            ["storeAI", a, "=>", b, konst] => {
-                instructions.push(Instruction::StoreAddImm {
-                    src: Reg::from_str(a)?,
-                    add: Val::from_str(konst)?,
-                    dst: Reg::from_str(b)?,
-                })
-            }
             ["storeAO", a, "=>", b, add] => instructions.push(Instruction::StoreAdd {
                 src: Reg::from_str(a)?,
                 add: Reg::from_str(add)?,
@@ -2417,44 +2290,26 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 b: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
-            ["testeq", a, "=>", dst] => instructions.push(Instruction::TestEQ {
-                test: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["testne", a, "=>", dst] => instructions.push(Instruction::TestNE {
-                test: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["testgt", a, "=>", dst] => instructions.push(Instruction::TestGT {
-                test: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["testge", a, "=>", dst] => instructions.push(Instruction::TestGE {
-                test: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["testlt", a, "=>", dst] => instructions.push(Instruction::TestLT {
-                test: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["testle", a, "=>", dst] => instructions.push(Instruction::TestLE {
-                test: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["testeq", a, "=>", dst] => instructions
+                .push(Instruction::TestEQ { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            ["testne", a, "=>", dst] => instructions
+                .push(Instruction::TestNE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            ["testgt", a, "=>", dst] => instructions
+                .push(Instruction::TestGT { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            ["testge", a, "=>", dst] => instructions
+                .push(Instruction::TestGE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            ["testlt", a, "=>", dst] => instructions
+                .push(Instruction::TestLT { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            ["testle", a, "=>", dst] => instructions
+                .push(Instruction::TestLE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
 
             // Float operations
-            ["f2i", src, "=>", dst] => instructions.push(Instruction::F2I {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["i2f", src, "=>", dst] => instructions.push(Instruction::I2F {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
-            ["f2f", src, "=>", dst] => instructions.push(Instruction::F2F {
-                src: Reg::from_str(src)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["f2i", src, "=>", dst] => instructions
+                .push(Instruction::F2I { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
+            ["i2f", src, "=>", dst] => instructions
+                .push(Instruction::I2F { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
+            ["f2f", src, "=>", dst] => instructions
+                .push(Instruction::F2F { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
             ["fadd", a, b, "=>", dst] => instructions.push(Instruction::FAdd {
                 src_a: Reg::from_str(a)?,
                 src_b: Reg::from_str(b)?,
@@ -2480,10 +2335,8 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 src_b: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
-            ["fload", a, "=>", dst] => instructions.push(Instruction::FLoad {
-                src: Reg::from_str(a)?,
-                dst: Reg::from_str(dst)?,
-            }),
+            ["fload", a, "=>", dst] => instructions
+                .push(Instruction::FLoad { src: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
             ["floadAI", a, b, "=>", dst] => instructions.push(Instruction::FLoadAddImm {
                 src: Reg::from_str(a)?,
                 add: Val::from_str(b)?,
@@ -2496,29 +2349,17 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             }),
 
             // I/O operations
-            ["fread", target] => {
-                instructions.push(Instruction::FRead(Reg::from_str(target)?))
-            }
-            ["iread", target] => {
-                instructions.push(Instruction::IRead(Reg::from_str(target)?))
-            }
-            ["fwrite", src] => {
-                instructions.push(Instruction::FWrite(Reg::from_str(src)?))
-            }
-            ["iwrite", src] => {
-                instructions.push(Instruction::IWrite(Reg::from_str(src)?))
-            }
-            ["swrite", src] => {
-                instructions.push(Instruction::SWrite(Reg::from_str(src)?))
-            }
+            ["fread", target] => instructions.push(Instruction::FRead(Reg::from_str(target)?)),
+            ["iread", target] => instructions.push(Instruction::IRead(Reg::from_str(target)?)),
+            ["fwrite", src] => instructions.push(Instruction::FWrite(Reg::from_str(src)?)),
+            ["iwrite", src] => instructions.push(Instruction::IWrite(Reg::from_str(src)?)),
+            ["swrite", src] => instructions.push(Instruction::SWrite(Reg::from_str(src)?)),
 
             // Branch operations
             ["jumpI", "->", label] => {
                 instructions.push(Instruction::ImmJump(Loc::from_str(label)?))
             }
-            ["jump", "->", target] => {
-                instructions.push(Instruction::Jump(Reg::from_str(target)?))
-            }
+            ["jump", "->", target] => instructions.push(Instruction::Jump(Reg::from_str(target)?)),
             ["call", name, args @ ..] => {
                 let args = args
                     .iter()
@@ -2551,14 +2392,10 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             }
             ["ret"] => instructions.push(Instruction::Ret),
             ["iret", res] => instructions.push(Instruction::ImmRet(Reg::from_str(res)?)),
-            ["cbr", src, "->", label] => instructions.push(Instruction::CbrT {
-                cond: Reg::from_str(src)?,
-                loc: Loc::from_str(label)?,
-            }),
-            ["cbrne", src, "->", label] => instructions.push(Instruction::CbrF {
-                cond: Reg::from_str(src)?,
-                loc: Loc::from_str(label)?,
-            }),
+            ["cbr", src, "->", label] => instructions
+                .push(Instruction::CbrT { cond: Reg::from_str(src)?, loc: Loc::from_str(label)? }),
+            ["cbrne", src, "->", label] => instructions
+                .push(Instruction::CbrF { cond: Reg::from_str(src)?, loc: Loc::from_str(label)? }),
             ["cbr_LT", a, b, "->", label] => instructions.push(Instruction::CbrLT {
                 a: Reg::from_str(a)?,
                 b: Reg::from_str(b)?,
@@ -2605,11 +2442,10 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             [".data"] => instructions.push(Instruction::Data),
             [".text"] => instructions.push(Instruction::Text),
             [".frame", name, size, params @ ..] => {
-                let params = params.iter().map(|s| Reg::from_str(s)).collect::<Result<
-                    Vec<_>,
-                    &'static str,
-                >>(
-                )?;
+                let params = params
+                    .iter()
+                    .map(|s| Reg::from_str(s))
+                    .collect::<Result<Vec<_>, &'static str>>()?;
                 instructions.push(Instruction::Frame {
                     name: name.to_string(),
                     size: size.parse().map_err(|_| "failed to parse .frame size")?,
@@ -2621,17 +2457,13 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 size: size.parse().map_err(|_| "failed to parse .global size")?,
                 align: align.parse().map_err(|_| "failed to parse .global align")?,
             }),
-            [".string", name, str_lit] => instructions.push(Instruction::String {
-                name: name.to_string(),
-                content: str_lit.to_string(),
-            }),
+            [".string", name, str_lit] => instructions
+                .push(Instruction::String { name: name.to_string(), content: str_lit.to_string() }),
             [".float", name, val] => instructions.push(Instruction::Float {
                 name: name.to_string(),
                 content: val.parse().map_err(|_| "failed to parse .float value")?,
             }),
-            [label, "nop"] => {
-                instructions.push(Instruction::Label(label.replace(':', "")))
-            }
+            [label, "nop"] => instructions.push(Instruction::Label(label.replace(':', ""))),
             [first, ..] if first.starts_with('#') => {}
             [label] if label.starts_with('.') => {
                 instructions.push(Instruction::Label(label.replace(':', "")))
@@ -2652,9 +2484,7 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn exit() -> Self {
-        Self { label: ".E_exit".to_string(), instructions: vec![] }
-    }
+    pub fn exit() -> Self { Self { label: ".E_exit".to_string(), instructions: vec![] } }
     /// All `Instruction`s with `Instruction::Skip` filtered out.
     pub fn instructions(&self) -> impl Iterator<Item = &Instruction> + '_ {
         self.instructions.iter().filter(|i| !matches!(i, Instruction::Skip(..)))
@@ -2663,9 +2493,7 @@ impl Block {
     /// Returns the optional name of the block the conditional branch jumps to, the caller
     /// must find the fall through block name.
     pub fn ends_with_cond_branch(&self) -> Option<&str> {
-        self.instructions
-            .last()
-            .and_then(|i| i.is_cnd_jump().then(|| i.uses_label()).flatten())
+        self.instructions.last().and_then(|i| i.is_cnd_jump().then(|| i.uses_label()).flatten())
     }
     /// Returns the name of the block if `Instruction` is jump immediate.
     pub fn ends_with_jump(&self) -> Option<&str> {
@@ -2723,17 +2551,13 @@ pub struct IlocProgram {
 
 impl IlocProgram {
     pub fn instruction_iter(&self) -> impl Iterator<Item = &Instruction> {
-        self.preamble
-            .iter()
-            .chain(self.functions.iter().flat_map(|f| f.flatten_block_iter()))
+        self.preamble.iter().chain(self.functions.iter().flat_map(|f| f.flatten_block_iter()))
     }
 }
 
 pub fn make_blks(iloc: Vec<Instruction>) -> IlocProgram {
-    let fn_start = iloc
-        .iter()
-        .position(|inst| matches!(inst, Instruction::Frame { .. }))
-        .unwrap_or_default();
+    let fn_start =
+        iloc.iter().position(|inst| matches!(inst, Instruction::Frame { .. })).unwrap_or_default();
     let (preamble, rest) = iloc.split_at(fn_start);
 
     let mut functions = vec![];

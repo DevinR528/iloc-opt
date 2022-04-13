@@ -27,10 +27,7 @@ pub struct ControlFlowGraph {
 impl ControlFlowGraph {
     /// Adds an edge to our control flow graph.
     pub fn add_edge(&mut self, from: &str, to: &str, sort: isize) {
-        self.paths
-            .entry(from.to_string())
-            .or_default()
-            .insert(OrdLabel::new_add(sort, to));
+        self.paths.entry(from.to_string()).or_default().insert(OrdLabel::new_add(sort, to));
     }
 }
 
@@ -120,10 +117,7 @@ pub fn dominator_tree(
     start: &OrdLabel,
 ) -> DominatorTree {
     for (ord, n) in reverse_postorder(
-        &cfg.paths
-            .iter()
-            .map(|(k, v)| (OrdLabel::new(k), v.clone()))
-            .collect::<HashMap<_, _>>(),
+        &cfg.paths.iter().map(|(k, v)| (OrdLabel::new(k), v.clone())).collect::<HashMap<_, _>>(),
         start,
     )
     .enumerate()
@@ -141,10 +135,7 @@ pub fn dominator_tree(
         .paths
         .iter()
         .map(|(k, v)| {
-            (
-                OrdLabel::from_known(k),
-                v.iter().map(|l| OrdLabel::from_known(l.as_str())).collect(),
-            )
+            (OrdLabel::from_known(k), v.iter().map(|l| OrdLabel::from_known(l.as_str())).collect())
         })
         .collect();
 
@@ -203,10 +194,7 @@ pub fn dominator_tree(
     let mut dom_tree_pred = HashMap::with_capacity(all_nodes.len());
     for (to, set) in &dom_tree {
         for from in set {
-            dom_tree_pred
-                .entry(from.clone())
-                .or_insert_with(BTreeSet::new)
-                .insert(to.clone());
+            dom_tree_pred.entry(from.clone()).or_insert_with(BTreeSet::new).insert(to.clone());
         }
     }
 
@@ -264,9 +252,7 @@ pub fn dominator_tree(
 
     let mut post_dom = HashMap::<_, BTreeSet<_>>::with_capacity(all_nodes.len());
     // Stick all the exit block in with empty post dom sets
-    post_dom.extend(
-        cfg.exits.iter().map(|e| (OrdLabel::from_known(e.as_str()), BTreeSet::new())),
-    );
+    post_dom.extend(cfg.exits.iter().map(|e| (OrdLabel::from_known(e.as_str()), BTreeSet::new())));
     for n in all_nodes.iter().skip(1) {
         post_dom.insert(n.clone(), all_nodes.iter().cloned().collect());
     }
@@ -308,8 +294,7 @@ pub fn dominator_tree(
         }
     }
 
-    let mut post_dom_tree_preds =
-        HashMap::<_, BTreeSet<_>>::with_capacity(all_nodes.len());
+    let mut post_dom_tree_preds = HashMap::<_, BTreeSet<_>>::with_capacity(all_nodes.len());
     for (f, pd) in &post_dom_tree {
         for t in pd {
             post_dom_tree_preds.entry(t.clone()).or_default().insert(f.clone());
@@ -318,9 +303,7 @@ pub fn dominator_tree(
     let mut post_idom_map = HashMap::with_capacity(all_nodes.len());
     for node in &all_nodes {
         let mut labels = VecDeque::from([node]);
-        while let Some(pdfset) =
-            labels.pop_front().and_then(|l| post_dom_tree_preds.get(l))
-        {
+        while let Some(pdfset) = labels.pop_front().and_then(|l| post_dom_tree_preds.get(l)) {
             if pdfset.len() == 1 {
                 post_idom_map.insert(node.clone(), (*pdfset.first().unwrap()).clone());
                 break;
@@ -335,8 +318,7 @@ pub fn dominator_tree(
 
     let empty = BTreeSet::new();
     // This is control dependence
-    let mut post_dom_frontier =
-        HashMap::<_, BTreeSet<OrdLabel>>::with_capacity(all_nodes.len());
+    let mut post_dom_frontier = HashMap::<_, BTreeSet<OrdLabel>>::with_capacity(all_nodes.len());
     for node in &all_nodes {
         // This is post dominator frontier
         // This includes 1 -> 2 __and__ 1 -> 5 (the graph from his notes
@@ -350,10 +332,7 @@ pub fn dominator_tree(
                 let mut run = &r;
                 while Some(run) != post_idom_map.get(node) {
                     // This is node_a -> node_b (that controls execution of `node_a`)
-                    post_dom_frontier
-                        .entry(run.clone())
-                        .or_default()
-                        .insert(node.clone());
+                    post_dom_frontier.entry(run.clone()).or_default().insert(node.clone());
                     if let Some(idom) = post_idom_map.get(run) {
                         run = idom;
                     }
@@ -442,10 +421,7 @@ pub fn insert_phi_functions(
             }
             if let Some(dst) = dst {
                 varkil.insert(Operand::Register(*dst));
-                blocks_map
-                    .entry(Operand::Register(*dst))
-                    .or_insert_with(HashSet::new)
-                    .insert(blk);
+                blocks_map.entry(Operand::Register(*dst)).or_insert_with(HashSet::new).insert(blk);
             }
         }
     }
@@ -454,12 +430,8 @@ pub fn insert_phi_functions(
     let empty_set = BTreeSet::new();
     let mut phis: HashMap<_, HashSet<_>> = HashMap::new();
     for global_reg in &globals {
-        let mut worklist = blocks_map
-            .get(global_reg)
-            .unwrap_or(&empty)
-            .iter()
-            .copied()
-            .collect::<VecDeque<_>>();
+        let mut worklist =
+            blocks_map.get(global_reg).unwrap_or(&empty).iter().copied().collect::<VecDeque<_>>();
         // For every block that this variable is live in
         while let Some(blk) = worklist.pop_front() {
             // The dominance frontier (join point) is the block that needs
@@ -485,8 +457,7 @@ pub fn insert_phi_functions(
         }
         let blk = func.blocks.iter_mut().find(|b| b.label == label.as_str()).unwrap();
         // If the block starts with a frame and label skip it other wise just skip a label
-        let index =
-            if let Instruction::Frame { .. } = &blk.instructions[0] { 2 } else { 1 };
+        let index = if let Instruction::Frame { .. } = &blk.instructions[0] { 2 } else { 1 };
         for reg in set {
             blk.instructions.insert(index, Instruction::new_phi(reg.copy_to_register()));
         }
@@ -505,12 +476,8 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         print_maps("cfg_succs", dtree.cfg_succs_map.iter());
         print_maps("dom_tree", dtree.dom_tree.iter());
         // The `phis` used to fill the `meta` map
-        let _phis = insert_phi_functions(
-            func,
-            &dtree.cfg_succs_map,
-            &start,
-            &dtree.dom_frontier_map,
-        );
+        let _phis =
+            insert_phi_functions(func, &dtree.cfg_succs_map, &start, &dtree.dom_frontier_map);
 
         let mut meta = HashMap::new();
         let mut stack = VecDeque::new();
@@ -524,8 +491,7 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
             for (i, inst) in block.instructions.iter().enumerate() {
                 if let Some(dst) = inst.target_reg() {
                     if inst.is_load_imm() {
-                        let latice =
-                            ValueKind::Known(inst.operands().0.unwrap().clone_to_value());
+                        let latice = ValueKind::Known(inst.operands().0.unwrap().clone_to_value());
                         const_vals.add_def(*dst, latice.clone(), (b, i));
                         worklist.push_back(WorkStuff::new(*dst, b, i));
                     } else if inst.is_store()
@@ -542,8 +508,7 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
                         const_vals.add_use(a_reg, b, i);
                         const_vals.add_use(b_reg, b, i);
                     }
-                    (Some(Operand::Register(a)), None)
-                    | (None, Some(Operand::Register(a))) => {
+                    (Some(Operand::Register(a)), None) | (None, Some(Operand::Register(a))) => {
                         const_vals.add_use(a, b, i);
                     }
                     _ => {}
@@ -598,12 +563,8 @@ fn lcm_pre() {
     let mut path = PathBuf::from(input_file);
     let file = path.file_stem().unwrap().to_string_lossy().to_string();
     path.set_file_name(&format!("{}.pre.il", file));
-    let mut fd = fs::OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(&path)
-        .unwrap();
+    let mut fd =
+        fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
     fd.write_all(buf.as_bytes()).unwrap();
 }
 
@@ -721,13 +682,8 @@ fn emit_cfg_viz(cfg: &ControlFlowGraph, file: &str) {
         seen.insert(n.as_str());
         for e in map {
             if !seen.contains(e.as_str()) {
-                writeln!(
-                    buf,
-                    "{} [ label = \"{}\", shape = square]",
-                    str_id(e.as_str()),
-                    e
-                )
-                .unwrap();
+                writeln!(buf, "{} [ label = \"{}\", shape = square]", str_id(e.as_str()), e)
+                    .unwrap();
                 seen.insert(e.as_str());
             }
             writeln!(buf, "{} -> {}", str_id(n), str_id(e.as_str())).unwrap();
