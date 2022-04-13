@@ -9,10 +9,7 @@ use crate::{
     ssa::{postorder, reverse_postorder, DominatorTree, OrdLabel},
 };
 
-pub fn print_maps<K: fmt::Debug, V: fmt::Debug>(
-    name: &str,
-    map: impl Iterator<Item = (K, V)>,
-) {
+pub fn print_maps<K: fmt::Debug, V: fmt::Debug>(name: &str, map: impl Iterator<Item = (K, V)>) {
     println!("{} {{", name);
     for (k, v) in map {
         println!("    {:?}: {:?},", k, v);
@@ -61,15 +58,13 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     let mut kill: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for (label, blk) in
-            reverse_postorder(&domtree.cfg_succs_map, &start).filter_map(|label| {
-                #[rustfmt::skip]
+        for (label, blk) in reverse_postorder(&domtree.cfg_succs_map, &start).filter_map(|label| {
+            #[rustfmt::skip]
             Some((
                 label,
                 func.blocks.iter().find(|b| b.label == label.as_str())?
             ))
-            })
-        {
+        }) {
             let uni = universe.entry(label.clone()).or_default();
 
             let dloc = dexpr.entry(label.clone()).or_default();
@@ -319,8 +314,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                     .difference(uexpr.get(pred).unwrap_or(&empty))
                     .copied()
                     .collect();
-                let early =
-                    earliest.get(&(pred.clone(), b_label.clone())).unwrap_or(&empty);
+                let early = earliest.get(&(pred.clone(), b_label.clone())).unwrap_or(&empty);
                 for new in early.union(&inloc) {
                     changed |= old.insert(*new);
                 }
@@ -397,9 +391,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     // print_maps("loops", loop_analysis.loop_map().iter());
 
     let mut deleted = BTreeSet::new();
-    for ((pred, succ), registers) in
-        insert.into_iter().filter(|(_, regs)| !regs.is_empty())
-    {
+    for ((pred, succ), registers) in insert.into_iter().filter(|(_, regs)| !regs.is_empty()) {
         let mut to_move = vec![];
         for r in &registers {
             if delete.get(&pred).map_or(false, |dset| dset.contains(r)) {
@@ -410,6 +402,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             let Some(inst) = dst_map.get(&(succ.clone(), *r)) else {
                 continue;
             };
+
+            // if matches!(inst, Instruction::I2F { .. }) { continue; }
+
             let Some(b) = func.blocks.iter().position(|b| b.label == succ.as_str()) else {
                 unreachable!("{:?}", succ)
             };
@@ -420,10 +415,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             to_move.push(if can_delete {
                 deleted.insert((succ.clone(), *r));
                 let inst = func.blocks[b].instructions[i].clone();
-                func.blocks[b].instructions[i] = Instruction::Skip(format!(
-                    "[pre deleted] {}",
-                    func.blocks[b].instructions[i]
-                ));
+                func.blocks[b].instructions[i] =
+                    Instruction::Skip(format!("[pre deleted] {}", func.blocks[b].instructions[i]));
                 inst
             } else {
                 func.blocks[b].instructions[i].clone()
@@ -442,15 +435,12 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 .iter_mut()
                 .find(|b| b.label == pred.as_str()) else { unreachable!() };
 
-            let end_idx = if pred_blk
-                .instructions
-                .last()
-                .map_or(false, |inst| inst.uses_label().is_some())
-            {
-                pred_blk.instructions.len() - 2
-            } else {
-                pred_blk.instructions.len() - 1
-            };
+            let end_idx =
+                if pred_blk.instructions.last().map_or(false, |inst| inst.uses_label().is_some()) {
+                    pred_blk.instructions.len() - 2
+                } else {
+                    pred_blk.instructions.len() - 1
+                };
 
             for inst in to_move.into_iter().rev() {
                 pred_blk.instructions.insert(end_idx, inst);
@@ -509,16 +499,17 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 let Some(inst) = dst_map.get(&(label.clone(), del)) else {
                     unreachable!("{:?}", label)
                 };
+
+                // if matches!(inst, Instruction::I2F { .. }) { continue; }
+
                 let Some(b) = func.blocks.iter().position(|b| b.label == label.as_str()) else {
                     unreachable!("{:?}", label)
                 };
                 let Some(i) = func.blocks[b].instructions.iter().position(|i| i == inst) else {
                     unreachable!("{:?}", (label, &func.blocks[b]))
                 };
-                func.blocks[b].instructions[i] = Instruction::Skip(format!(
-                    "[pre deleted] {}",
-                    func.blocks[b].instructions[i]
-                ));
+                func.blocks[b].instructions[i] =
+                    Instruction::Skip(format!("[pre deleted] {}", func.blocks[b].instructions[i]));
             }
         }
     }

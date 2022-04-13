@@ -33,8 +33,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                             transformed_block = true;
                             new_instr[idx] = folded;
 
-                            let val =
-                                new_instr[idx].operands().0.unwrap().clone_to_value();
+                            let val = new_instr[idx].operands().0.unwrap().clone_to_value();
                             const_map.insert(Operand::Register(*dst), val.clone());
                             back_const_map.entry(val).or_insert(Operand::Register(*dst));
 
@@ -58,8 +57,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                             transformed_block = true;
                             new_instr[idx] =
                                 Instruction::ImmLoad { src: Val::Integer(0), dst: *dst };
-                        } else if let Some(op_imm) = expr.as_immediate_instruction_left(c)
-                        {
+                        } else if let Some(op_imm) = expr.as_immediate_instruction_left(c) {
                             transformed_block = true;
                             new_instr[idx] = op_imm;
                         }
@@ -82,9 +80,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
 
                             new_instr[idx] =
                                 Instruction::ImmLoad { src: Val::Integer(0), dst: *dst };
-                        } else if let Some(op_imm) =
-                            expr.as_immediate_instruction_right(c)
-                        {
+                        } else if let Some(op_imm) = expr.as_immediate_instruction_right(c) {
                             transformed_block = true;
                             new_instr[idx] = op_imm;
                         }
@@ -111,9 +107,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                 // Keep track of all registers that are constants
                 if new_instr[idx].is_load_imm() {
                     const_map.insert(Operand::Register(*dst), a.clone_to_value());
-                    back_const_map
-                        .entry(a.clone_to_value())
-                        .or_insert(Operand::Register(*dst));
+                    back_const_map.entry(a.clone_to_value()).or_insert(Operand::Register(*dst));
                 }
 
                 // Have we seen this before in this block
@@ -157,12 +151,10 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                         new_instr[idx] = folded;
                     } else {
                         match (expr, back_const_map.get(&val)) {
-                            (
-                                Instruction::I2I { src, dst },
-                                Some(Operand::Register(prev)),
-                            ) if src != prev => {
-                                new_instr[idx] =
-                                    Instruction::I2I { src: *prev, dst: *dst };
+                            (Instruction::I2I { src, dst }, Some(Operand::Register(prev)))
+                                if src != prev =>
+                            {
+                                new_instr[idx] = Instruction::I2I { src: *prev, dst: *dst };
                                 continue;
                             }
                             _ => {}
@@ -176,9 +168,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
                 // Keep track of all registers that are constants
                 if new_instr[idx].is_load_imm() {
                     const_map.insert(Operand::Register(*dst), a.clone_to_value());
-                    back_const_map
-                        .entry(a.clone_to_value())
-                        .or_insert(Operand::Register(*dst));
+                    back_const_map.entry(a.clone_to_value()).or_insert(Operand::Register(*dst));
                 }
 
                 match expr_map.get(&(a.clone(), b.clone(), new_instr[idx].inst_name())) {
@@ -223,8 +213,7 @@ pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
             || new_instr[idx].is_load_imm()
         {
             transformed_block |= true;
-            new_instr[idx] =
-                Instruction::Skip(format!("[lvn unused] {}", new_instr[idx]));
+            new_instr[idx] = Instruction::Skip(format!("[lvn unused] {}", new_instr[idx]));
         }
     }
 
@@ -266,11 +255,7 @@ fn track_used(instructions: &[Instruction]) -> Vec<usize> {
         }
 
         match (l, r, dst) {
-            (
-                Some(Operand::Register(left)),
-                Some(Operand::Register(right)),
-                Some(_dst),
-            ) => {
+            (Some(Operand::Register(left)), Some(Operand::Register(right)), Some(_dst)) => {
                 used_reg.insert(left);
                 used_reg.insert(right);
             }
@@ -395,8 +380,7 @@ fn compress_conditional_branches(instructions: &mut [Instruction]) -> bool {
                 }
             };
 
-            instructions[idx] =
-                Instruction::Skip(format!("[lvn cbc] {}", instructions[idx]));
+            instructions[idx] = Instruction::Skip(format!("[lvn cbc] {}", instructions[idx]));
             instructions[idx + 1] =
                 Instruction::Skip(format!("[lvn cbc] {}", instructions[idx + 1]));
             instructions[idx + 2] = new_instruction;
@@ -422,10 +406,7 @@ fn is_cond_branch(idx: usize, insts: &[Instruction]) -> bool {
     )
 }
 
-fn compress_load_stores(
-    instructions: &mut [Instruction],
-    special: &HashSet<Reg>,
-) -> bool {
+fn compress_load_stores(instructions: &mut [Instruction], special: &HashSet<Reg>) -> bool {
     let mut modified = false;
     // We subtract 2 since we are using windows of 3 instructions to test for comparisons
     let len = instructions.len().saturating_sub(2);
@@ -448,21 +429,17 @@ fn compress_load_stores(
             (
                 Instruction::Add { src_a: add_src_a, src_b: add_src_b, dst: add_dst },
                 Instruction::Store { src: store_src, dst: store_dst },
-            ) if add_dst == store_dst => Instruction::StoreAdd {
-                src: *store_src,
-                add: *add_src_b,
-                dst: *add_src_a,
-            },
+            ) if add_dst == store_dst => {
+                Instruction::StoreAdd { src: *store_src, add: *add_src_b, dst: *add_src_a }
+            }
             (
                 Instruction::ImmSub { src: sub_src, konst, dst: sub_dst },
                 Instruction::Store { src: store_src, dst: store_dst },
-            ) if sub_dst == store_dst && !special.contains(sub_dst) => {
-                Instruction::StoreAddImm {
-                    src: *store_src,
-                    add: konst.negate().unwrap(),
-                    dst: *sub_src,
-                }
-            }
+            ) if sub_dst == store_dst && !special.contains(sub_dst) => Instruction::StoreAddImm {
+                src: *store_src,
+                add: konst.negate().unwrap(),
+                dst: *sub_src,
+            },
             _ => continue,
         };
 

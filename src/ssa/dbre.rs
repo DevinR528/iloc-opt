@@ -13,9 +13,7 @@ pub struct RenameMeta {
     stack: VecDeque<usize>,
 }
 impl Default for RenameMeta {
-    fn default() -> Self {
-        Self { stack: VecDeque::from([]) }
-    }
+    fn default() -> Self { Self { stack: VecDeque::from([]) } }
 }
 
 fn rewrite_name(reg: &mut Reg, meta: &RenameMeta) {
@@ -120,8 +118,7 @@ pub fn dom_val_num(
                     rewrite_name(arg, m);
                 }
             }
-            Instruction::ImmCall { args, ret, .. }
-            | Instruction::ImmRCall { args, ret, .. } => {
+            Instruction::ImmCall { args, ret, .. } | Instruction::ImmRCall { args, ret, .. } => {
                 for arg in args {
                     let m = meta.entry(Operand::Register(*arg)).or_default();
                     rewrite_name(arg, m);

@@ -14,9 +14,7 @@ pub enum LoopInfo {
     PartOf(String),
 }
 impl LoopInfo {
-    pub fn new(header: &str) -> Self {
-        Self::Loop { header: header.to_string(), parent: None }
-    }
+    pub fn new(header: &str) -> Self { Self::Loop { header: header.to_string(), parent: None } }
     pub fn header(&self) -> &str {
         match self {
             LoopInfo::Loop { header, .. } | LoopInfo::PartOf(header) => header,
@@ -36,9 +34,7 @@ pub struct LoopAnalysis {
 }
 
 impl LoopAnalysis {
-    pub fn loop_map(&self) -> &HashMap<String, LoopInfo> {
-        &self.loop_map
-    }
+    pub fn loop_map(&self) -> &HashMap<String, LoopInfo> { &self.loop_map }
 
     pub fn is_nested(&self, child: &OrdLabel) -> bool {
         let mut child = child.as_str();
@@ -96,10 +92,8 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) -> LoopAnalysis 
     }
 
     let empty = BTreeSet::default();
-    let mut loop_map = loops
-        .iter()
-        .map(|(k, v)| (k.clone(), LoopInfo::new(v)))
-        .collect::<BTreeMap<_, _>>();
+    let mut loop_map =
+        loops.iter().map(|(k, v)| (k.clone(), LoopInfo::new(v))).collect::<BTreeMap<_, _>>();
     let mut stack = vec![];
     let mut seen = BTreeSet::new();
     // Iterate over the known loops to find the blocks they "own" as part of their loop,
@@ -140,9 +134,7 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) -> LoopAnalysis 
                             let key = node_loop.to_string();
                             match loop_map.entry(key) {
                                 Entry::Occupied(mut o) => match o.get_mut() {
-                                    LoopInfo::Loop { parent, .. } => {
-                                        *parent = Some(lp.to_string())
-                                    }
+                                    LoopInfo::Loop { parent, .. } => *parent = Some(lp.to_string()),
                                     it => panic!("{} {:?}", node_loop, it),
                                 },
                                 it => panic!("{} {:?}", node_loop, it),

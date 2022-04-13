@@ -8,12 +8,8 @@ fn eval_cond_branch(
 ) -> Option<Instruction> {
     let (l, r) = expr.operands();
     match (
-        l.as_ref()
-            .and_then(|reg| reg.opt_reg())
-            .and_then(|l| const_map.get(&l).map(|(_, c)| c)),
-        r.as_ref()
-            .and_then(|reg| reg.opt_reg())
-            .and_then(|r| const_map.get(&r).map(|(_, c)| c)),
+        l.as_ref().and_then(|reg| reg.opt_reg()).and_then(|l| const_map.get(&l).map(|(_, c)| c)),
+        r.as_ref().and_then(|reg| reg.opt_reg()).and_then(|r| const_map.get(&r).map(|(_, c)| c)),
     ) {
         (Some(ValueKind::Known(a)), Some(ValueKind::Known(b))) => match expr {
             Instruction::CbrEQ { loc, .. } => {
@@ -66,27 +62,25 @@ fn eval_cond_branch(
             }
             _ => None,
         },
-        (Some(ValueKind::Known(val)), None) | (None, Some(ValueKind::Known(val))) => {
-            match expr {
-                Instruction::CbrT { loc, .. } => {
-                    let should_jump = val.is_one();
-                    Some(if should_jump {
-                        Instruction::ImmJump(loc.clone())
-                    } else {
-                        Instruction::Skip(format!("{}", expr))
-                    })
-                }
-                Instruction::CbrF { loc, .. } => {
-                    let should_jump = val.is_zero();
-                    Some(if should_jump {
-                        Instruction::ImmJump(loc.clone())
-                    } else {
-                        Instruction::Skip(format!("{}", expr))
-                    })
-                }
-                _ => None,
+        (Some(ValueKind::Known(val)), None) | (None, Some(ValueKind::Known(val))) => match expr {
+            Instruction::CbrT { loc, .. } => {
+                let should_jump = val.is_one();
+                Some(if should_jump {
+                    Instruction::ImmJump(loc.clone())
+                } else {
+                    Instruction::Skip(format!("{}", expr))
+                })
             }
-        }
+            Instruction::CbrF { loc, .. } => {
+                let should_jump = val.is_zero();
+                Some(if should_jump {
+                    Instruction::ImmJump(loc.clone())
+                } else {
+                    Instruction::Skip(format!("{}", expr))
+                })
+            }
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -98,12 +92,8 @@ fn eval_instruction(
     let (l, r) = expr.operands();
     let dst = expr.target_reg();
     match (
-        l.as_ref()
-            .and_then(|reg| reg.opt_reg())
-            .and_then(|l| const_map.get(&l).map(|(_, c)| c)),
-        r.as_ref()
-            .and_then(|reg| reg.opt_reg())
-            .and_then(|r| const_map.get(&r).map(|(_, c)| c)),
+        l.as_ref().and_then(|reg| reg.opt_reg()).and_then(|l| const_map.get(&l).map(|(_, c)| c)),
+        r.as_ref().and_then(|reg| reg.opt_reg()).and_then(|r| const_map.get(&r).map(|(_, c)| c)),
         dst,
     ) {
         // EXPRESSION REGISTERS
@@ -111,24 +101,15 @@ fn eval_instruction(
         (Some(n_val), Some(m_val), Some(dst)) => {
             // Can we fold this
             match (n_val, m_val) {
-                (ValueKind::Known(l), ValueKind::Known(r)) => {
-                    expr.fold(l, r).map(|folded| {
-                        (
-                            ValueKind::Known(
-                                folded.operands().0.unwrap().clone_to_value(),
-                            ),
-                            folded,
-                        )
-                    })
-                }
+                (ValueKind::Known(l), ValueKind::Known(r)) => expr.fold(l, r).map(|folded| {
+                    (ValueKind::Known(folded.operands().0.unwrap().clone_to_value()), folded)
+                }),
                 (ValueKind::Known(c), ValueKind::Maybe) => {
                     if let Some(id) = expr.identity_with_const_prop_left(c) {
                         // modify instruction with a move
                         Some((ValueKind::Maybe, expr.as_new_move_instruction(*id, *dst)?))
-                    } else if matches!(
-                        expr,
-                        Instruction::Mult { .. } | Instruction::FMult { .. }
-                    ) && c.is_zero()
+                    } else if matches!(expr, Instruction::Mult { .. } | Instruction::FMult { .. })
+                        && c.is_zero()
                     {
                         Some((
                             ValueKind::Known(Val::Integer(0)),
@@ -142,10 +123,8 @@ fn eval_instruction(
                     if let Some(id) = expr.identity_with_const_prop_right(c) {
                         // modify instruction with a move
                         Some((ValueKind::Maybe, expr.as_new_move_instruction(*id, *dst)?))
-                    } else if matches!(
-                        expr,
-                        Instruction::Mult { .. } | Instruction::FMult { .. }
-                    ) && c.is_zero()
+                    } else if matches!(expr, Instruction::Mult { .. } | Instruction::FMult { .. })
+                        && c.is_zero()
                     {
                         Some((
                             ValueKind::Known(Val::Integer(0)),
@@ -264,8 +243,7 @@ pub fn const_fold(
         worklist.pop_front()
     {
         // TODO: not great cloning this whole use_to_inst map...
-        for (blk, inst) in const_vals.use_to_inst.get(&n_reg).cloned().unwrap_or_default()
-        {
+        for (blk, inst) in const_vals.use_to_inst.get(&n_reg).cloned().unwrap_or_default() {
             // If this instruction has a destination
             let Some(m) = func.blocks[blk].instructions[inst].target_reg().copied() else {
                 // Else it's a possible jump/branch and the destination is a label
@@ -281,11 +259,8 @@ pub fn const_fold(
 
                 continue;
             };
-            let ((mb, mi), m_val) = const_vals
-                .defined
-                .entry(m)
-                .or_insert(((blk, inst), ValueKind::Maybe))
-                .clone();
+            let ((mb, mi), m_val) =
+                const_vals.defined.entry(m).or_insert(((blk, inst), ValueKind::Maybe)).clone();
             if !matches!(m_val, ValueKind::Unknowable) {
                 let Some((new, folded)) =
                     eval_instruction(&func.blocks[mb].instructions[mi], &const_vals.defined) else {
