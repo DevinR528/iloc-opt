@@ -630,7 +630,6 @@ fn ssa_cfg_trap() {
 
     println!("{:#?}", dom);
     // emit_cfg_viz(&cfg, "graphs/turd.dot");
-
     // dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }
 
