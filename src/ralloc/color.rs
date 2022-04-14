@@ -361,6 +361,38 @@ pub fn build_interference(
             }
         }
 
+        let mut combin = interfe.entry(*new).or_default().clone();
+        for m in merge {
+            combin = combin.union(&interfe.remove(m).unwrap_or_default()).copied().collect();
+        }
+        if let Some(n) = interfe.get_mut(new) {
+            *n = combin;
+        } else {
+            interfe.insert(*new, combin);
+        }
+    }
+
+    let connected_phis: BTreeMap<Reg, Reg> = phi_map.iter()
+        .flat_map(|(k, set)| set.iter().copied().chain(Some(*k)).map(|r| (r, *k)))
+        .collect();
+    let mut map = BTreeMap::new();
+    for block in &mut *blocks {
+        for inst in &mut block.instructions {
+            for reg in inst.registers_mut_iter() {
+                if matches!(reg, Reg::Phi(0, _)) { continue; }
+
+                if let Some(new_name) = connected_phis.get(reg) {
+                    let liverange = Reg::Var(map.len() + 1);
+                    let new = map.entry(*new_name).or_insert(liverange);
+                    *reg = *new;
+                } else {
+                    let liverange = Reg::Var(map.len() + 1);
+                    let new = map.entry(*reg).or_insert(liverange);
+                    *reg = *new;
+                }
+            }
+        }
+    }
 
     let (def_map, use_map) = build_use_def_map(domtree, start, &*blocks);
 
