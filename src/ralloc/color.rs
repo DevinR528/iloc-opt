@@ -320,86 +320,121 @@ pub fn build_interference(
     // print_maps("live_out", live_out.iter());
     // println!();
 
+    let connected_phis: BTreeMap<Reg, Reg> = phi_map.iter()
+        .flat_map(|(k, set)| set.iter().copied().chain(Some(*k)).map(|r| (r, *k)))
+        .collect();
+    let mut map = BTreeMap::new();
+
     let mut interference: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     for block in postorder(&domtree.cfg_succs_map, start) {
         let livenow = live_out.get_mut(block).unwrap();
         let blk_idx = blocks.iter().position(|b| b.label == block.as_str()).unwrap();
-        for inst in blocks[blk_idx].instructions.iter().rev() {
-            if matches!(inst, Instruction::Skip(..)) { continue; }
+        for inst in blocks[blk_idx].instructions.iter_mut().rev() {
+            if matches!(inst, Instruction::Skip(..)) {
+                continue;
+            }
 
             if let Some(dst) = inst.target_reg() {
+                let dst_new_name = if let Some(new_name) = connected_phis.get(dst) {
+                    let len = map.len() + 1;
+                    *map.entry(*new_name).or_insert(Reg::Var(len))
+                } else {
+                    let len = map.len() + 1;
+                    *map.entry(*dst).or_insert(Reg::Var(len))
+                };
                 for reg in &*livenow {
-                    if dst == reg || matches!(dst, Reg::Phi(0, _)) || matches!(reg, Reg::Phi(0, _)) {
+                    if dst == reg || matches!(dst, Reg::Phi(0, _)) || matches!(reg, Reg::Phi(0, _))
+                    {
                         continue;
                     }
 
-                    interference.entry(*dst).or_default().insert(*reg);
-                    interference.entry(*reg).or_default().insert(*dst);
+                    let reg_new_name = if let Some(new_name) = connected_phis.get(reg) {
+                        let len = map.len() + 1;
+                        *map.entry(*new_name).or_insert(Reg::Var(len))
+                    } else {
+                        let len = map.len() + 1;
+                        *map.entry(*reg).or_insert(Reg::Var(len))
+                    };
+
+                    interference.entry(dst_new_name).or_default().insert(reg_new_name);
+                    interference.entry(reg_new_name).or_default().insert(dst_new_name);
                 }
                 // Incase there is a register that has no overlapping live ranges
-                interference.entry(*dst).or_default();
+                interference.entry(dst_new_name).or_default();
                 livenow.remove(dst);
             }
             for operand in inst.operand_iter() {
                 if matches!(operand, Reg::Phi(0, _) | Reg::Var(0)) {
                     continue;
                 }
+
+                let operand_new_name = if let Some(new_name) = connected_phis.get(&operand) {
+                    let len = map.len() + 1;
+                    *map.entry(*new_name).or_insert(Reg::Var(len))
+                } else {
+                    let len = map.len() + 1;
+                    *map.entry(operand).or_insert(Reg::Var(len))
+                };
                 // Incase there is a register that has no overlapping live ranges
-                interference.entry(operand).or_default();
+                interference.entry(operand_new_name).or_default();
                 livenow.insert(operand);
             }
-        }
-    }
 
-    let mut interfe = interference.clone();
-    for (new, merge) in &phi_map {
-        for m in merge {
-            for edges in interfe.values_mut() {
-                if edges.remove(m) {
-                    edges.insert(*new);
-                }
-            }
-        }
-
-        let mut combin = interfe.entry(*new).or_default().clone();
-        for m in merge {
-            combin = combin.union(&interfe.remove(m).unwrap_or_default()).copied().collect();
-        }
-        if let Some(n) = interfe.get_mut(new) {
-            *n = combin;
-        } else {
-            interfe.insert(*new, combin);
-        }
-    }
-
-    let connected_phis: BTreeMap<Reg, Reg> = phi_map.iter()
-        .flat_map(|(k, set)| set.iter().copied().chain(Some(*k)).map(|r| (r, *k)))
-        .collect();
-    let mut map = BTreeMap::new();
-    for block in &mut *blocks {
-        for inst in &mut block.instructions {
-            for reg in inst.registers_mut_iter() {
-                if matches!(reg, Reg::Phi(0, _)) { continue; }
-
-                if let Some(new_name) = connected_phis.get(reg) {
-                    let liverange = Reg::Var(map.len() + 1);
-                    let new = map.entry(*new_name).or_insert(liverange);
-                    *reg = *new;
-                } else {
-                    let liverange = Reg::Var(map.len() + 1);
-                    let new = map.entry(*reg).or_insert(liverange);
-                    *reg = *new;
-                }
+            // Now remap the names of the register in the instructions
+            for r in inst.registers_mut_iter() {
+                *r = *map.get(r).unwrap();
             }
         }
     }
+
+    // let mut interfe = interference.clone();
+    // for (new, merge) in &phi_map {
+    //     for m in merge {
+    //         for edges in interfe.values_mut() {
+    //             if edges.remove(m) {
+    //                 edges.insert(*new);
+    //             }
+    //         }
+    //     }
+    //     let mut combin = interfe.entry(*new).or_default().clone();
+    //     for m in merge {
+    //         combin = combin.union(&interfe.remove(m).unwrap_or_default()).copied().collect();
+    //     }
+    //     if let Some(n) = interfe.get_mut(new) {
+    //         *n = combin;
+    //     } else {
+    //         interfe.insert(*new, combin);
+    //     }
+    // }
+
+    // let connected_phis: BTreeMap<Reg, Reg> = phi_map.iter()
+    //     .flat_map(|(k, set)| set.iter().copied().chain(Some(*k)).map(|r| (r, *k)))
+    //     .collect();
+    // let mut map = BTreeMap::new();
+    // for block in &mut *blocks {
+    //     for inst in &mut block.instructions {
+    //         for reg in inst.registers_mut_iter() {
+    //             if matches!(reg, Reg::Phi(0, _)) { continue; }
+
+    //             if let Some(new_name) = connected_phis.get(reg) {
+    //                 let liverange = Reg::Var(map.len() + 1);
+    //                 let new = map.entry(*new_name).or_insert(liverange);
+    //                 *reg = *new;
+    //             } else {
+    //                 let liverange = Reg::Var(map.len() + 1);
+    //                 let new = map.entry(*reg).or_insert(liverange);
+    //                 *reg = *new;
+    //             }
+    //         }
+    //     }
+    // }
 
     let (def_map, use_map) = build_use_def_map(domtree, start, &*blocks);
 
     println!();
     print_maps("phi_map", phi_map.iter());
     print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
-    print_maps("interfe_comb", interfe.iter());
+    // print_maps("interfe_comb", interfe.iter());
     println!();
 
     // let mut still_good = true;
