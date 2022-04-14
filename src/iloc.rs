@@ -55,6 +55,10 @@ impl Val {
         Some(Self::Integer(self.to_int()? % other.to_int()?))
     }
 
+    pub fn divide(&self, other: &Self) -> Option<Self> {
+        Some(Self::Integer(self.to_int()? / other.to_int()?))
+    }
+
     pub fn and(&self, other: &Self) -> Option<Self> {
         Some(Self::Integer(self.to_int()? & other.to_int()?))
     }
@@ -438,6 +442,8 @@ pub enum Instruction {
     IWrite(Reg),
     /// `fread %r` where r is a null terminated string source.
     SWrite(Reg),
+    /// `putchar %r` where r is a int but written as ascii.
+    PutChar(Reg),
 
     // Stack operations
     /// `push`
@@ -541,6 +547,7 @@ impl Hash for Instruction {
             | Instruction::IRead(s)
             | Instruction::FWrite(s)
             | Instruction::IWrite(s)
+            | Instruction::PutChar(s)
             | Instruction::SWrite(s) => (s, variant).hash(state),
             Instruction::Push(s) => (s, variant).hash(state),
             Instruction::PushR(s) => (s, variant).hash(state),
@@ -787,6 +794,7 @@ impl PartialEq for Instruction {
             (Self::FWrite(l0), Self::FWrite(r0)) => l0 == r0,
             (Self::IWrite(l0), Self::IWrite(r0)) => l0 == r0,
             (Self::SWrite(l0), Self::SWrite(r0)) => l0 == r0,
+            (Self::PutChar(l0), Self::PutChar(r0)) => l0 == r0,
             (Self::Push(l0), Self::Push(r0)) => l0 == r0,
             (Self::PushR(l0), Self::PushR(r0)) => l0 == r0,
             (
@@ -936,6 +944,7 @@ impl fmt::Display for Instruction {
             | Self::FWrite(reg)
             | Self::IWrite(reg)
             | Self::SWrite(reg)
+            | Self::PutChar(reg)
             | Self::PushR(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
 
             Self::Push(val) => writeln!(f, "    {} {}", self.inst_name(), val),
@@ -1136,6 +1145,7 @@ impl Instruction {
             | Self::FWrite(reg)
             | Self::IWrite(reg)
             | Self::SWrite(reg)
+            | Self::PutChar(reg)
             | Self::PushR(reg) => reg.remove_phi(),
 
             Self::Push(..) => {}
@@ -1323,6 +1333,7 @@ impl Instruction {
             | Self::FWrite(r)
             | Self::SWrite(r)
             | Self::IRead(r)
+            | Self::PutChar(r)
             | Self::FRead(r) => vec![*r],
 
             Self::CmpLT { a, b, .. }
@@ -1398,7 +1409,7 @@ impl Instruction {
             Self::StoreAdd { src, add, .. } => {
                 (Some(Operand::Register(*src)), Some(Operand::Register(*add)))
             }
-            Self::IWrite(r) | Self::FWrite(r) | Self::SWrite(r) => {
+            Self::IWrite(r) | Self::FWrite(r) | Self::SWrite(r) | Self::PutChar(r) => {
                 (Some(Operand::Register(*r)), None)
             }
             Self::IRead(r) | Self::FRead(r) => (Some(Operand::Register(*r)), None),
@@ -1583,6 +1594,7 @@ impl Instruction {
             Self::FWrite(_) => "fwrite",
             Self::IWrite(_) => "iwrite",
             Self::SWrite(_) => "swrite",
+            Self::PutChar(_) => "putchar",
             Self::Push(_) => "push",
             Self::PushR(_) => "pushr",
             Self::Pop => "pop",
@@ -2026,6 +2038,7 @@ impl Instruction {
             | Self::FWrite(r)
             | Self::SWrite(r)
             | Self::IRead(r)
+            | Self::PutChar(r)
             | Self::FRead(r) => vec![r],
 
             Self::CmpLT { a, b, dst }
@@ -2107,6 +2120,7 @@ impl Instruction {
             | Self::FWrite(r)
             | Self::SWrite(r)
             | Self::IRead(r)
+            | Self::PutChar(r)
             | Self::FRead(r) => vec![r],
 
             Self::CmpLT { a, b, dst }
@@ -2180,6 +2194,11 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 dst: Reg::from_str(dst)?,
             }),
             ["rshift", a, b, "=>", dst] => instructions.push(Instruction::RShift {
+                src_a: Reg::from_str(a)?,
+                src_b: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["div", a, b, "=>", dst] => instructions.push(Instruction::Div {
                 src_a: Reg::from_str(a)?,
                 src_b: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
@@ -2354,6 +2373,7 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             ["fwrite", src] => instructions.push(Instruction::FWrite(Reg::from_str(src)?)),
             ["iwrite", src] => instructions.push(Instruction::IWrite(Reg::from_str(src)?)),
             ["swrite", src] => instructions.push(Instruction::SWrite(Reg::from_str(src)?)),
+            ["putchar", src] => instructions.push(Instruction::PutChar(Reg::from_str(src)?)),
 
             // Branch operations
             ["jumpI", "->", label] => {
@@ -2457,8 +2477,8 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 size: size.parse().map_err(|_| "failed to parse .global size")?,
                 align: align.parse().map_err(|_| "failed to parse .global align")?,
             }),
-            [".string", name, str_lit] => instructions
-                .push(Instruction::String { name: name.to_string(), content: str_lit.to_string() }),
+            [".string", name, str_lit @ ..] => instructions
+                .push(Instruction::String { name: name.to_string(), content: str_lit.join(" ").replace("\\n", "\n") }),
             [".float", name, val] => instructions.push(Instruction::Float {
                 name: name.to_string(),
                 content: val.parse().map_err(|_| "failed to parse .float value")?,
