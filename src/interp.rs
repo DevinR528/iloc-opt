@@ -186,6 +186,13 @@ impl Interpreter {
                 let val = a.modulus(b)?;
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
+            Instruction::Div { src_a, src_b, dst } => {
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
+
+                let val = a.divide(b)?;
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
+            }
             Instruction::And { src_a, src_b, dst } => {
                 let a = self.registers().get(src_a)?;
                 let b = self.registers().get(src_b)?;
@@ -637,13 +644,16 @@ impl Interpreter {
                     Val::Integer(buf.trim().parse().unwrap());
             }
             Instruction::FWrite(r) => {
-                println!("{:?}", self.registers().get(r)?.to_float()?)
+                println!("{}", self.registers().get(r)?.to_float()?)
             }
             Instruction::IWrite(r) => {
-                println!("{:?}", self.registers().get(r)?.to_int()?)
+                println!("{}", self.registers().get(r)?.to_int()?)
+            }
+            Instruction::PutChar(r) => {
+                print!("{}", char::from_u32(self.registers().get(r)?.to_int()? as u32).unwrap())
             }
             Instruction::SWrite(r) => {
-                println!("{}", stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize])
+                print!("{}", stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize])
             }
             _ => todo!("{:?}", instrs[self.inst_idx]),
         }
