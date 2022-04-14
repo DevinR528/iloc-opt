@@ -11,7 +11,7 @@ use crate::{
         build_cfg,
         dce::{build_stripped_cfg, dead_code},
         dom_val_num, dominator_tree, find_loops, insert_phi_functions, reverse_postorder, OrdLabel,
-    },
+    }, ralloc::color::{ColoredGraph, FailedColoring},
 };
 
 mod color;
@@ -51,7 +51,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
         let mut stack = VecDeque::new();
         dom_val_num(&mut func.blocks, 0, &mut meta, &dtree, &mut stack);
 
-        // WARNING THIS IS EXPENSIVISH
+        // WARNING THIS IS EXPENSIVE-ISH
         // Sneaky sneaky
         //
         // This removes dead phi nodes that otherwise complicate the interference graph
@@ -67,23 +67,9 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
             // This is the graph that goes with the following terminal printouts
             dump_to(&IlocProgram { preamble: vec![], functions: vec![func.clone()] });
 
-            let (definitions, use_map) = color::build_use_def_map(&dtree, &start, &func.blocks);
-            // TODO: make these Reg::Var to begin with...
-            let mut defs: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
-            for (d, locations) in definitions {
-                for loc in locations {
-                    defs.entry(d.to_register()).or_default().insert(loc);
-                }
-            }
-            let mut uses: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
-            for (d, locations) in use_map {
-                for loc in locations {
-                    uses.entry(d.to_register()).or_default().insert(loc);
-                }
-            }
-            match color::build_interference(&func.blocks, &dtree, &start, &defs, &uses, &loop_map) {
-                Ok((colored_graph, interfere)) => break (colored_graph, interfere, defs),
-                Err(insert_spills) => {
+            match color::build_interference(&mut func.blocks, &dtree, &start, &loop_map) {
+                Ok(ColoredGraph { graph, interference, defs }) => break (graph, interference, defs),
+                Err(FailedColoring { insert_spills, uses, defs }) => {
                     println!("SPILLED {:?}", insert_spills);
 
                     let mut spills = vec![];
@@ -180,8 +166,6 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
             }
         };
         func.stack_size = stack_size;
-
-        return;
 
         for blk in &mut func.blocks {
             for inst in &mut blk.instructions {
