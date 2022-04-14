@@ -87,14 +87,14 @@ impl fmt::Debug for ColorNode {
     }
 }
 
-pub type DefUsePair = (BTreeMap<Reg, Vec<(usize, usize)>>, BTreeMap<Reg, Vec<(usize, usize)>>);
+pub type DefUsePair = (BTreeMap<Reg, BTreeSet<(usize, usize)>>, BTreeMap<Reg, BTreeSet<(usize, usize)>>);
 pub fn build_use_def_map(
     domtree: &DominatorTree,
     start: &OrdLabel,
     blocks: &[Block],
 ) -> DefUsePair {
-    let mut use_map: BTreeMap<_, Vec<_>> = BTreeMap::new();
-    let mut def_map: BTreeMap<_, Vec<_>> = BTreeMap::new();
+    let mut use_map: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+    let mut def_map: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     for (b, (label, blk)) in reverse_postorder(&domtree.cfg_succs_map, start)
         .filter_map(|label| Some((label, blocks.iter().find(|b| b.label == label.as_str())?)))
         .enumerate()
@@ -109,37 +109,50 @@ pub fn build_use_def_map(
                     let mut phi = *reg;
                     phi.as_phi(subs);
 
-                    def_map.entry(phi).or_default().push((b, i));
+                    def_map.entry(phi).or_default().insert((b, i));
                 }
                 Instruction::Frame { params, .. } => {
                     for p in params {
-                        def_map.entry(*p).or_default().push((b, i));
+                        def_map.entry(*p).or_default().insert((b, i));
                     }
                 }
                 _ => (),
             }
             if let Some(dst) = inst.target_reg() {
-                def_map.entry(*dst).or_default().push((b, i));
+                def_map.entry(*dst).or_default().insert((b, i));
             }
             for operand in inst.operand_iter() {
-                use_map.entry(operand).or_default().push((b, i));
+                use_map.entry(operand).or_default().insert((b, i));
             }
         }
     }
     (def_map, use_map)
 }
 
+#[derive(Debug, Default)]
+pub struct ColoredGraph {
+    pub graph: BTreeMap<Reg, ColorNode>,
+    pub interference: BTreeMap<Reg, BTreeSet<Reg>>,
+    pub defs: BTreeMap<Reg, BTreeSet<(usize, usize)>>
+}
+
+#[derive(Debug, Default)]
+pub struct FailedColoring {
+    pub insert_spills: BTreeSet<Reg>,
+    pub uses: BTreeMap<Reg, BTreeSet<(usize, usize)>>,
+    pub defs: BTreeMap<Reg, BTreeSet<(usize, usize)>>
+}
+
+
 /// The `Ok` variant is the successfully colored graph and the original interference graph
 /// (this is debug mostly), The `Err` variant is the set of registers that failed to
 /// color.
 pub type InterfereResult =
-    Result<(BTreeMap<Reg, ColorNode>, BTreeMap<Reg, BTreeSet<Reg>>), BTreeSet<Reg>>;
+    Result<ColoredGraph, FailedColoring>;
 pub fn build_interference(
-    blocks: &[Block],
+    blocks: &mut [Block],
     domtree: &DominatorTree,
     start: &OrdLabel,
-    def_map: &BTreeMap<Reg, BTreeSet<(usize, usize)>>,
-    use_map: &BTreeMap<Reg, BTreeSet<(usize, usize)>>,
     loop_map: &LoopAnalysis,
 ) -> InterfereResult {
     //
@@ -149,130 +162,6 @@ pub fn build_interference(
     // live-in at some successor of `q`.
     //
     //
-    let mut upvar: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
-    let mut varkill: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
-    for (label, blk) in reverse_postorder(&domtree.cfg_succs_map, start)
-        .filter_map(|label| Some((label, blocks.iter().find(|b| b.label == label.as_str())?)))
-    {
-        let uvar = upvar.entry(label.clone()).or_default();
-        let kill = varkill.entry(label.clone()).or_default();
-        for inst in &blk.instructions {
-            if matches!(inst, Instruction::Skip(..)) {
-                continue;
-            }
-            match inst {
-                Instruction::Frame { params, .. } => {
-                    for p in params {
-                        // uvar.insert(*p);
-                        kill.insert(*p);
-                    }
-                    continue;
-                }
-                Instruction::Phi(r, set, subs) => {
-                    let subs = subs.unwrap();
-                    let mut phi = *r;
-                    phi.as_phi(subs);
-                    kill.insert(phi);
-                }
-                _ => (),
-            }
-
-            for op in inst.operand_iter() {
-                if matches!(op, Reg::Phi(0, _) | Reg::Var(0)) {
-                    continue;
-                }
-
-                if !kill.contains(&op) {
-                    // We found a use without a definition above it
-                    uvar.insert(op);
-                }
-            }
-
-            if let Some(t) = inst.target_reg() {
-                kill.insert(*t);
-            }
-        }
-    }
-    print_maps("up_exposed", upvar.iter());
-    print_maps("var_kill", varkill.iter());
-    println!();
-
-    let empty = BTreeSet::new();
-    let mut changed = true;
-    let mut live_out: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
-    while changed {
-        changed = false;
-        for label in postorder(&domtree.cfg_succs_map, start) {
-            let mut merge = BTreeSet::new();
-            for succ in domtree.cfg_succs_map.get(label).unwrap_or(&BTreeSet::new()) {
-                let live_out_diff_kill = live_out
-                    .get(succ)
-                    .unwrap_or(&empty)
-                    .difference(varkill.get(succ).unwrap_or(&empty))
-                    .copied()
-                    .collect();
-                let upvar_and_liveout =
-                    upvar.get(succ).unwrap_or(&empty).union(&live_out_diff_kill).copied().collect();
-
-                merge = merge.union(&upvar_and_liveout).copied().collect();
-            }
-
-            let curr = live_out.entry(label.clone()).or_default();
-            if merge != *curr {
-                changed = true;
-                *curr = merge;
-            }
-        }
-    }
-
-    changed = true;
-    let mut interfere: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
-    while changed {
-        changed = false;
-        for label in postorder(&domtree.cfg_succs_map, start) {
-            let blk_idx = blocks.iter().position(|b| b.label == label.as_str()).unwrap();
-
-            let live = live_out.entry(label.clone()).or_default();
-            for inst in blocks[blk_idx].instructions.iter().rev() {
-                if matches!(inst, Instruction::Skip(..)) { continue; }
-
-                if let Some(dst) = inst.target_reg() {
-                    for reg in &*live {
-                        if dst == reg || matches!(dst, Reg::Phi(0, _)) || matches!(reg, Reg::Phi(0, _)) {
-                            continue;
-                        }
-                        changed |= interfere.entry(*reg).or_default().insert(*dst);
-                        changed |= interfere.entry(*dst).or_default().insert(*reg);
-                    }
-
-                    live.remove(dst);
-                    interfere.entry(*dst).or_default();
-                }
-
-                for op in inst.operand_iter() {
-                    if matches!(op, Reg::Phi(0, _) | Reg::Var(0)) { continue; }
-                    live.insert(op);
-                }
-
-                match inst {
-                    Instruction::Phi(r, set, subs) => {
-                        let subs = subs.unwrap();
-                        let mut phi = *r;
-                        phi.as_phi(subs);
-                        live.remove(&phi);
-                    }
-                    Instruction::Frame { params, .. } => {
-                        for p in params {
-                            live.remove(p);
-                        }
-                    }
-                    _ => (),
-                }
-            }
-        }
-    }
-    print_maps("interfere_1", interfere.iter());
-    println!();
 
     let mut changed = true;
     let mut phi_defs: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
@@ -283,8 +172,7 @@ pub fn build_interference(
     let mut uexpr: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
     while changed {
         changed = false;
-        for label in reverse_postorder(&domtree.cfg_succs_map, start)
-        {
+        for label in reverse_postorder(&domtree.cfg_succs_map, start) {
             let blk_idx = blocks.iter().position(|b| b.label == label.as_str()).unwrap();
             // TODO: this is really inefficient and ugly
             let ugh = defs.clone();
@@ -361,10 +249,9 @@ pub fn build_interference(
         }
     }
 
-    print_maps("phi_defs", phi_defs.iter());
-    print_maps("phi_uses", phi_uses.iter());
-    print_maps("phi_map", phi_map.iter());
-    print_maps("upexpo", uexpr.iter());
+    // print_maps("phi_defs", phi_defs.iter());
+    // print_maps("phi_uses", phi_uses.iter());
+    // print_maps("upexpo", uexpr.iter());
     // println!();
 
     changed = true;
@@ -429,9 +316,9 @@ pub fn build_interference(
         }
     }
 
-    print_maps("live_in", live_in.iter());
-    print_maps("live_out", live_out.iter());
-    println!();
+    // print_maps("live_in", live_in.iter());
+    // print_maps("live_out", live_out.iter());
+    // println!();
 
     let mut interference: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     for block in postorder(&domtree.cfg_succs_map, start) {
@@ -474,17 +361,11 @@ pub fn build_interference(
             }
         }
 
-        let mut combin = interfe.entry(*new).or_default().clone();
-        for m in merge {
-            combin = combin.union(&interfe.remove(m).unwrap_or_default()).copied().collect();
-        }
-        if let Some(n) = interfe.get_mut(&new) {
-            *n = combin;
-        } else {
-            interfe.insert(*new, combin);
-        }
-    }
 
+    let (def_map, use_map) = build_use_def_map(domtree, start, &*blocks);
+
+    println!();
+    print_maps("phi_map", phi_map.iter());
     print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
     print_maps("interfe_comb", interfe.iter());
     println!();
@@ -507,7 +388,7 @@ pub fn build_interference(
         // edges.into_iter().map(ColoredReg::Uncolored).collect())); } else {
         // still_good = false;
         graph_degree.push_front((register, edges));
-        let (reg, edges) = find_cheap_spill(&mut graph_degree, blocks, def_map, use_map, loop_map);
+        let (reg, edges) = find_cheap_spill(&mut graph_degree, blocks, &def_map, &use_map, loop_map);
 
         for (_, es) in &mut graph_degree {
             es.remove(&reg);
@@ -523,7 +404,7 @@ pub fn build_interference(
     // We have nodes to color or we don't and return.
     let Some((reg, node)) = color_hard_first.pop_front().map(|(reg, edges)| {
             (reg, ColorNode { color: curr_color, edges })
-        }) else { return Ok((BTreeMap::new(), BTreeMap::new())); };
+        }) else { return Ok(ColoredGraph::default()) };
 
     let mut need_to_spill = vec![];
     let mut graph = BTreeMap::from_iter(std::iter::once((reg, node)));
@@ -565,25 +446,25 @@ pub fn build_interference(
         }
     }
 
-    emit_ralloc_viz(
-        &domtree.cfg_succs_map,
-        start,
-        blocks,
-        &graph,
-        &interference,
-        // &def_map
-        //     .iter()
-        //     .map(|(k, v)| (*k, v.iter().cloned().collect()))
-        //     .collect::<BTreeMap<_, Vec<_>>>(),
-        "boo",
-    );
+    // emit_ralloc_viz(
+    //     &domtree.cfg_succs_map,
+    //     start,
+    //     blocks,
+    //     &graph,
+    //     &interference,
+    //     // &def_map
+    //     //     .iter()
+    //     //     .map(|(k, v)| (*k, v.iter().cloned().collect()))
+    //     //     .collect::<BTreeMap<_, Vec<_>>>(),
+    //     "boo",
+    // );
 
     if need_to_spill.is_empty() {
         print!("{} ", start);
         print_maps("colored", graph.iter());
         println!();
 
-        Ok((graph, interference))
+        Ok(ColoredGraph { graph, interference, defs: def_map, })
     } else {
         print_maps("colored", graph.iter());
 
@@ -592,7 +473,7 @@ pub fn build_interference(
             insert_load_store.insert(spilled);
         }
 
-        Err(insert_load_store)
+        Err(FailedColoring { insert_spills: insert_load_store, uses: use_map, defs: def_map })
     }
 }
 
@@ -690,3 +571,138 @@ fn emit_cfg_viz(cfg: &BTreeMap<Reg, BTreeSet<Reg>>, file: &str) {
     writeln!(buf, "}}").unwrap();
     fs::write(file, buf).unwrap();
 }
+
+
+//
+//
+//
+//
+// Standard algorithm for computing interference, which is broken for SSA numbered things
+
+// let mut upvar: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
+// let mut varkill: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
+// for (label, blk) in reverse_postorder(&domtree.cfg_succs_map, start)
+//     .filter_map(|label| Some((label, blocks.iter().find(|b| b.label == label.as_str())?)))
+// {
+//     let uvar = upvar.entry(label.clone()).or_default();
+//     let kill = varkill.entry(label.clone()).or_default();
+//     for inst in &blk.instructions {
+//         if matches!(inst, Instruction::Skip(..)) {
+//             continue;
+//         }
+//         match inst {
+//             Instruction::Frame { params, .. } => {
+//                 for p in params {
+//                     // uvar.insert(*p);
+//                     kill.insert(*p);
+//                 }
+//                 continue;
+//             }
+//             Instruction::Phi(r, set, subs) => {
+//                 let subs = subs.unwrap();
+//                 let mut phi = *r;
+//                 phi.as_phi(subs);
+//                 kill.insert(phi);
+//             }
+//             _ => (),
+//         }
+
+//         for op in inst.operand_iter() {
+//             if matches!(op, Reg::Phi(0, _) | Reg::Var(0)) {
+//                 continue;
+//             }
+
+//             if !kill.contains(&op) {
+//                 // We found a use without a definition above it
+//                 uvar.insert(op);
+//             }
+//         }
+
+//         if let Some(t) = inst.target_reg() {
+//             kill.insert(*t);
+//         }
+//     }
+// }
+// print_maps("up_exposed", upvar.iter());
+// print_maps("var_kill", varkill.iter());
+// println!();
+
+// let empty = BTreeSet::new();
+// let mut changed = true;
+// let mut live_out: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
+// while changed {
+//     changed = false;
+//     for label in postorder(&domtree.cfg_succs_map, start) {
+//         let mut merge = BTreeSet::new();
+//         for succ in domtree.cfg_succs_map.get(label).unwrap_or(&BTreeSet::new()) {
+//             let live_out_diff_kill = live_out
+//                 .get(succ)
+//                 .unwrap_or(&empty)
+//                 .difference(varkill.get(succ).unwrap_or(&empty))
+//                 .copied()
+//                 .collect();
+//             let upvar_and_liveout =
+//                 upvar.get(succ).unwrap_or(&empty).union(&live_out_diff_kill).copied().collect();
+
+//             merge = merge.union(&upvar_and_liveout).copied().collect();
+//         }
+
+//         let curr = live_out.entry(label.clone()).or_default();
+//         if merge != *curr {
+//             changed = true;
+//             *curr = merge;
+//         }
+//     }
+// }
+
+// changed = true;
+// let mut interfere: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
+// while changed {
+//     changed = false;
+//     for label in postorder(&domtree.cfg_succs_map, start) {
+//         let blk_idx = blocks.iter().position(|b| b.label == label.as_str()).unwrap();
+
+//         let live = live_out.entry(label.clone()).or_default();
+//         for inst in blocks[blk_idx].instructions.iter().rev() {
+//             if matches!(inst, Instruction::Skip(..)) {
+//                 continue;
+//             }
+
+//             if let Some(dst) = inst.target_reg() {
+//                 for reg in &*live {
+//                     if dst == reg
+//                         || matches!(dst, Reg::Phi(0, _))
+//                         || matches!(reg, Reg::Phi(0, _))
+//                     {
+//                         continue;
+//                     }
+//                     changed |= interfere.entry(*reg).or_default().insert(*dst);
+//                     changed |= interfere.entry(*dst).or_default().insert(*reg);
+//                 }
+
+//                 live.remove(dst);
+//                 interfere.entry(*dst).or_default();
+//             }
+
+//             for op in inst.operand_iter() {
+//                 if matches!(op, Reg::Phi(0, _) | Reg::Var(0)) { continue; }
+//                 live.insert(op);
+//             }
+
+//             match inst {
+//                 Instruction::Phi(r, set, subs) => {
+//                     let subs = subs.unwrap();
+//                     let mut phi = *r;
+//                     phi.as_phi(subs);
+//                     live.remove(&phi);
+//                 }
+//                 Instruction::Frame { params, .. } => {
+//                     for p in params {
+//                         live.remove(p);
+//                     }
+//                 }
+//                 _ => (),
+//             }
+//         }
+//     }
+// }
