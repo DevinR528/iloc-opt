@@ -1,4 +1,14 @@
-#![feature(let_else, map_first_last, once_cell, stmt_expr_attributes, let_chains, try_blocks)]
+#![feature(
+    let_else,
+    map_first_last,
+    once_cell,
+    stmt_expr_attributes,
+    let_chains,
+    try_blocks,
+    drain_filter,
+    default_free_fn,
+    if_let_guard
+)]
 #![allow(unused)]
 
 use std::{
@@ -29,8 +39,8 @@ mod lcm;
 mod ssa;
 
 /// ## Register Allocation
-/// Using live ranges, an interference graph, and coloring of that graph we allocate registers
-/// for our currently infinite set.
+/// Using live ranges, an interference graph, and coloring of that graph we allocate
+/// registers for our currently infinite set.
 mod ralloc;
 
 use iloc::{make_blks, parse_text};

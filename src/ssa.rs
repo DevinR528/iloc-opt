@@ -64,8 +64,8 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
                 // Skip the implicit branch to the block below the current one
                 // since we found an unconditional jump.
                 //
-                // TODO: can we make note of this for optimization...(if there are trailing
-                // unreachable instructions)
+                // TODO: can we make note of this for optimization...(if there are
+                // trailing unreachable instructions)
                 if inst.unconditional_jmp() {
                     continue 'block;
                 }
@@ -99,8 +99,9 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
 
 #[derive(Debug)]
 pub struct DominatorTree {
-    /// Dominator frontiers are the join points of a graph, this is not necessarily the direct
-    /// predecessors of a block but it will always be a join of two predecessors into one.
+    /// Dominator frontiers are the join points of a graph, this is not necessarily the
+    /// direct predecessors of a block but it will always be a join of two
+    /// predecessors into one.
     pub dom_frontier_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_dom_frontier: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_idom_map: HashMap<OrdLabel, OrdLabel>,
@@ -126,8 +127,8 @@ pub fn dominator_tree(
     }
 
     // We need this to be accurate to the numbering of `succs` below, otherwise
-    // when ralloc needs SSA numbering we crash, since the las value for `start` was the last from
-    // doing RPO based on predecessors and the single exit
+    // when ralloc needs SSA numbering we crash, since the las value for `start` was the
+    // last from doing RPO based on predecessors and the single exit
     let start = OrdLabel::from_known(start.as_str());
 
     let succs: HashMap<_, BTreeSet<OrdLabel>> = cfg
@@ -223,7 +224,8 @@ pub fn dominator_tree(
         let parents = preds.get(node).unwrap_or(&empty);
         // Node must be a join point (have multiple preds)
         if parents.len() > 1 {
-            // For each previous node find a predecessor of `label` that also dominates `label
+            // For each previous node find a predecessor of `label` that also dominates
+            // `label
             for p in parents {
                 let mut run = p;
                 // Until we hit an immediate dominator
@@ -311,7 +313,8 @@ pub fn dominator_tree(
     }
 
     // println!("pid {:#?}", post_idom_map);
-    // println!("pdt {:#?}\ndt {:#?}\ndft {:#?}", post_dom_tree, dom_tree, dom_frontier_map);
+    // println!("pdt {:#?}\ndt {:#?}\ndft {:#?}", post_dom_tree, dom_tree,
+    // dom_frontier_map);
 
     let empty = BTreeSet::new();
     // This is control dependence
@@ -347,10 +350,12 @@ pub fn dominator_tree(
     //         for m in post_dom_frontier.get(c).cloned().unwrap_or_default() {
     //             if !post_dom_tree.get(node).map_or(false, |set| set.contains(&m)) {
     //                 // This is node -> nodes it controls
-    //                 // post_dom_frontier.entry(m.clone()).or_default().insert(node.clone());
+    //                 //
+    // post_dom_frontier.entry(m.clone()).or_default().insert(node.clone());
 
     //                 // This is node -> nodes that control it (generally nodes above it)
-    //                 post_dom_frontier.entry(node.clone()).or_default().insert(m.clone());
+    //
+    // post_dom_frontier.entry(node.clone()).or_default().insert(m.clone());
     //             }
     //         }
     //     }
@@ -389,8 +394,8 @@ pub fn insert_phi_functions(
     let mut globals = vec![];
     let mut blocks_map = HashMap::new();
 
-    // TODO: now that I do this bottom-up phis could be inserted as each block is encountered since
-    // we know dom frontier
+    // TODO: now that I do this bottom-up phis could be inserted as each block is
+    // encountered since we know dom frontier
     for blk in postorder(cfg_succs, start) {
         // This represents any redefinitions that are local to the current block
         let mut varkil = HashSet::new();
@@ -432,10 +437,10 @@ pub fn insert_phi_functions(
             // The dominance frontier (join point) is the block that needs
             // the 𝛟 added to it
             for d in dom_front.get(blk).unwrap_or(&empty_set) {
-                // If we have seen this register or it isn't in the current block we are checking
-                // skip it
+                // If we have seen this register or it isn't in the current block we are
+                // checking skip it
                 if !phis.get(d).map_or(false, |set| set.contains(global_reg))
-                    && blocks_map.get(global_reg).map_or(false, |blk_set| blk_set.contains(d))
+                    && blocks_map.get(global_reg).map_or(false, |l| l.contains(blk))
                 {
                     // insert phi func
                     phis.entry(d.clone()).or_default().insert(global_reg.clone());
@@ -447,6 +452,9 @@ pub fn insert_phi_functions(
     }
 
     for (label, set) in &phis {
+        if label.as_str() == ".E_exit" {
+            continue;
+        }
         let blk = func.blocks.iter_mut().find(|b| b.label == label.as_str()).unwrap();
         // If the block starts with a frame and label skip it other wise just skip a label
         let index = if let Instruction::Frame { .. } = &blk.instructions[0] { 2 } else { 1 };
@@ -465,8 +473,8 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         let start = OrdLabel::new_start(&func.label);
         let dtree = dominator_tree(&cfg, &mut func.blocks, &start);
 
-        // println!("pdtree: {:#?}\npdftree: {:#?}", dtree.post_dom_tree, dtree.post_dom_frontier);
-
+        print_maps("cfg_succs", dtree.cfg_succs_map.iter());
+        print_maps("dom_tree", dtree.dom_tree.iter());
         // The `phis` used to fill the `meta` map
         let _phis =
             insert_phi_functions(func, &dtree.cfg_succs_map, &start, &dtree.dom_frontier_map);
@@ -581,17 +589,17 @@ fn ssa_cfg_while() {
 
     use crate::iloc::{make_basic_blocks, make_blks, parse_text};
 
-    let input = fs::read_to_string("input/gcd.il").unwrap();
+    let input = fs::read_to_string("input/hmm.il").unwrap();
     let iloc = parse_text(&input).unwrap();
     let mut blocks = make_basic_blocks(&make_blks(iloc));
 
-    let cfg = build_cfg(&mut blocks.functions[1]);
+    let cfg = build_cfg(&mut blocks.functions[0]);
     // println!("{:?}", cfg);
 
-    emit_cfg_viz(&cfg, "graphs/gcd.dot");
+    emit_cfg_viz(&cfg, "graphs/hmm.dot");
 
-    let name = OrdLabel::new_start(&blocks.functions[1].label);
-    dominator_tree(&cfg, &mut blocks.functions[1].blocks, &name);
+    let name = OrdLabel::new_start(&blocks.functions[0].label);
+    dominator_tree(&cfg, &mut blocks.functions[0].blocks, &name);
 }
 
 #[test]
@@ -622,10 +630,48 @@ fn ssa_cfg_trap() {
 
     println!("{:#?}", dom);
     // emit_cfg_viz(&cfg, "graphs/turd.dot");
-
     // dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }
 
+#[test]
+fn lcm_simple() {
+    use std::fs;
+
+    use crate::iloc::{make_basic_blocks, make_blks, parse_text};
+
+    let input = "
+    .data
+.text
+.frame pre_example, 4, %vr100, %vr200, %vr300
+	loadI 4 => %vr4
+	i2i %vr4 => %vr5
+	loadI 5 => %vr6
+	comp %vr100, %vr6 => %vr7
+	testge %vr7 => %vr8
+	cbr %vr8 -> .L1
+.L0: nop
+	add %vr200, %vr5 => %vr9
+	i2i %vr9 => %vr300
+	loadI 1 => %vr10
+	add %vr100, %vr10 => %vr11
+	i2i %vr11 => %vr100
+	loadI 5 => %vr6
+	comp %vr100, %vr6 => %vr7
+	testge %vr7 => %vr8
+	cbrne %vr8 -> .L0
+.L1: nop
+	iwrite %vr300
+	ret
+";
+    let iloc = parse_text(input).unwrap();
+    let mut blocks = make_basic_blocks(&make_blks(iloc));
+
+    let cfg = build_cfg(&mut blocks.functions[0]);
+    let name = OrdLabel::new_start(&blocks.functions[0].label);
+    let dom = dominator_tree(&cfg, &mut blocks.functions[0].blocks, &name);
+
+    lazy_code_motion(&mut blocks.functions[0], &dom, cfg.exits.last().unwrap());
+}
 #[allow(unused)]
 fn emit_cfg_viz(cfg: &ControlFlowGraph, file: &str) {
     use std::{

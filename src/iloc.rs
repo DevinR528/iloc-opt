@@ -55,6 +55,10 @@ impl Val {
         Some(Self::Integer(self.to_int()? % other.to_int()?))
     }
 
+    pub fn divide(&self, other: &Self) -> Option<Self> {
+        Some(Self::Integer(self.to_int()? / other.to_int()?))
+    }
+
     pub fn and(&self, other: &Self) -> Option<Self> {
         Some(Self::Integer(self.to_int()? & other.to_int()?))
     }
@@ -79,9 +83,7 @@ impl Val {
         Some(Self::Float(self.to_float()? / other.to_float()?))
     }
 
-    pub fn negate(&self) -> Option<Self> {
-        Some(Self::Integer(-self.to_int()?))
-    }
+    pub fn negate(&self) -> Option<Self> { Some(Self::Integer(-self.to_int()?)) }
 
     pub fn is_zero(&self) -> bool {
         match self {
@@ -243,7 +245,9 @@ impl fmt::Display for Reg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Reg::Var(num) if unsafe { crate::SSA } => write!(f, "%vr{}", num),
-            Reg::Phi(num, subs) if unsafe { crate::SSA } => write!(f, "%vr{}_{}", num, subs),
+            Reg::Phi(num, subs) if unsafe { crate::SSA } => {
+                write!(f, "%vr{}_{}", num, subs)
+            }
             // Reg::Phi(num, subs) => write!(f, "%vr{}_{}", num, subs),
             Reg::Var(num) | Reg::Phi(num, ..) => write!(f, "%vr{}", num),
         }
@@ -285,21 +289,15 @@ impl Reg {
 pub struct Loc(pub String);
 
 impl Loc {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
+    pub fn as_str(&self) -> &str { self.0.as_str() }
 }
 impl FromStr for Loc {
     type Err = &'static str;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.to_string()))
-    }
+    fn from_str(s: &str) -> Result<Self, Self::Err> { Ok(Self(s.to_string())) }
 }
 impl fmt::Display for Loc {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 #[rustfmt::skip]
@@ -349,12 +347,16 @@ pub enum Instruction {
     /// %r => %r `load`
     Load { src: Reg, dst: Reg },
     /// (%r + c) => %r `loadAI`
+    ///
+    /// Where `add + src` is the location on the stack to load into `dst`.
     LoadAddImm { src: Reg, add: Val, dst: Reg },
     /// (%r + %r) => %r `loadAO`
     LoadAdd { src: Reg, add: Reg, dst: Reg },
     /// %r => %r `store`
     Store { src: Reg, dst: Reg },
     /// %r => (%r + c) `storeAI`
+    ///
+    /// Where `add + dst` is the location on the stack to store `src`.
     StoreAddImm { src: Reg, add: Val, dst: Reg },
     /// %r => (%r + %r) `storeAO`
     StoreAdd { src: Reg, add: Reg, dst: Reg },
@@ -440,6 +442,8 @@ pub enum Instruction {
     IWrite(Reg),
     /// `fread %r` where r is a null terminated string source.
     SWrite(Reg),
+    /// `putchar %r` where r is a int but written as ascii.
+    PutChar(Reg),
 
     // Stack operations
     /// `push`
@@ -543,6 +547,7 @@ impl Hash for Instruction {
             | Instruction::IRead(s)
             | Instruction::FWrite(s)
             | Instruction::IWrite(s)
+            | Instruction::PutChar(s)
             | Instruction::SWrite(s) => (s, variant).hash(state),
             Instruction::Push(s) => (s, variant).hash(state),
             Instruction::PushR(s) => (s, variant).hash(state),
@@ -789,6 +794,7 @@ impl PartialEq for Instruction {
             (Self::FWrite(l0), Self::FWrite(r0)) => l0 == r0,
             (Self::IWrite(l0), Self::IWrite(r0)) => l0 == r0,
             (Self::SWrite(l0), Self::SWrite(r0)) => l0 == r0,
+            (Self::PutChar(l0), Self::PutChar(r0)) => l0 == r0,
             (Self::Push(l0), Self::Push(r0)) => l0 == r0,
             (Self::PushR(l0), Self::PushR(r0)) => l0 == r0,
             (
@@ -938,6 +944,7 @@ impl fmt::Display for Instruction {
             | Self::FWrite(reg)
             | Self::IWrite(reg)
             | Self::SWrite(reg)
+            | Self::PutChar(reg)
             | Self::PushR(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
 
             Self::Push(val) => writeln!(f, "    {} {}", self.inst_name(), val),
@@ -1010,9 +1017,7 @@ impl Operand {
 }
 
 impl Instruction {
-    pub fn new_phi(reg: Reg) -> Self {
-        Self::Phi(reg, BTreeSet::default(), None)
-    }
+    pub fn new_phi(reg: Reg) -> Self { Self::Phi(reg, BTreeSet::default(), None) }
     pub fn remove_phis(&mut self) {
         match self {
             Self::FLoad { src, dst }
@@ -1140,6 +1145,7 @@ impl Instruction {
             | Self::FWrite(reg)
             | Self::IWrite(reg)
             | Self::SWrite(reg)
+            | Self::PutChar(reg)
             | Self::PushR(reg) => reg.remove_phi(),
 
             Self::Push(..) => {}
@@ -1315,6 +1321,7 @@ impl Instruction {
 
             Self::StoreAddImm { src, dst, .. } => vec![*src, *dst],
             Self::StoreAdd { src, add, dst } => vec![*src, *add, *dst],
+            Self::Store { src, dst } => vec![*src, *dst],
 
             // TODO: I think this is correct
             // Self::ImmLoad { src, .. } => vec![],
@@ -1322,12 +1329,11 @@ impl Instruction {
                 vec![*src, *add]
             }
 
-            Self::Store { src, dst } => vec![*src, *dst],
-
             Self::IWrite(r)
             | Self::FWrite(r)
             | Self::SWrite(r)
             | Self::IRead(r)
+            | Self::PutChar(r)
             | Self::FRead(r) => vec![*r],
 
             Self::CmpLT { a, b, .. }
@@ -1403,7 +1409,7 @@ impl Instruction {
             Self::StoreAdd { src, add, .. } => {
                 (Some(Operand::Register(*src)), Some(Operand::Register(*add)))
             }
-            Self::IWrite(r) | Self::FWrite(r) | Self::SWrite(r) => {
+            Self::IWrite(r) | Self::FWrite(r) | Self::SWrite(r) | Self::PutChar(r) => {
                 (Some(Operand::Register(*r)), None)
             }
             Self::IRead(r) | Self::FRead(r) => (Some(Operand::Register(*r)), None),
@@ -1588,6 +1594,7 @@ impl Instruction {
             Self::FWrite(_) => "fwrite",
             Self::IWrite(_) => "iwrite",
             Self::SWrite(_) => "swrite",
+            Self::PutChar(_) => "putchar",
             Self::Push(_) => "push",
             Self::PushR(_) => "pushr",
             Self::Pop => "pop",
@@ -1649,16 +1656,12 @@ impl Instruction {
         )
     }
 
-    pub fn unconditional_jmp(&self) -> bool {
-        matches!(self, Self::ImmJump(..))
-    }
+    pub fn unconditional_jmp(&self) -> bool { matches!(self, Self::ImmJump(..)) }
 
-    pub fn is_return(&self) -> bool {
-        matches!(self, Self::Ret | Self::ImmRet(_))
-    }
+    pub fn is_return(&self) -> bool { matches!(self, Self::Ret | Self::ImmRet(_)) }
 
-    /// Turn any instruction that would be more efficient as a move. This will not move around
-    /// existing `i2i` and `f2f` instructions since there is no gain.
+    /// Turn any instruction that would be more efficient as a move. This will not move
+    /// around existing `i2i` and `f2f` instructions since there is no gain.
     pub fn as_new_move_instruction(&self, src: Reg, dst: Reg) -> Option<Self> {
         match self {
             Self::Add { .. }
@@ -1743,7 +1746,8 @@ impl Instruction {
         })
     }
 
-    /// If this operation is an identity operation, return the register that would be unchanged.
+    /// If this operation is an identity operation, return the register that would be
+    /// unchanged.
     ///
     /// `add %vr2, 0 => %vr3` is the same as `i2i %vr2 => %vr3`
     ///
@@ -1834,9 +1838,9 @@ impl Instruction {
         })
     }
 
-    /// If this operation is an identity operation, return the register that would be unchanged.
-    /// `val` is always the left operand, subtraction is __never__ a valid identity op for this
-    /// call.
+    /// If this operation is an identity operation, return the register that would be
+    /// unchanged. `val` is always the left operand, subtraction is __never__ a valid
+    /// identity op for this call.
     ///
     /// `add %vr2, 0 => %vr3` is the same as `i2i %vr2 => %vr3`
     pub fn identity_with_const_prop_left(&self, val: &Val) -> Option<&Reg> {
@@ -1851,8 +1855,9 @@ impl Instruction {
         })
     }
 
-    /// If this operation is an identity operation, return the register that would be unchanged.
-    /// `val` is always the right operand, subtraction is a valid identity op.
+    /// If this operation is an identity operation, return the register that would be
+    /// unchanged. `val` is always the right operand, subtraction is a valid identity
+    /// op.
     ///
     /// `add %vr2, 0 => %vr3` is the same as `i2i %vr2 => %vr3`
     pub fn identity_with_const_prop_right(&self, val: &Val) -> Option<&Reg> {
@@ -1960,9 +1965,7 @@ impl Instruction {
         )
     }
 
-    pub fn is_phi(&self) -> bool {
-        matches!(self, Self::Phi(..))
-    }
+    pub fn is_phi(&self) -> bool { matches!(self, Self::Phi(..)) }
 
     pub fn is_tmp_expr(&self) -> bool {
         matches!(
@@ -2035,6 +2038,7 @@ impl Instruction {
             | Self::FWrite(r)
             | Self::SWrite(r)
             | Self::IRead(r)
+            | Self::PutChar(r)
             | Self::FRead(r) => vec![r],
 
             Self::CmpLT { a, b, dst }
@@ -2106,8 +2110,6 @@ impl Instruction {
             Self::StoreAddImm { src, dst, .. } => vec![src, dst],
             Self::StoreAdd { src, add, dst } => vec![src, add, dst],
 
-            // TODO: I think this is correct
-            // Self::ImmLoad { src, .. } => vec![],
             Self::LoadAdd { src, add, dst } | Self::FLoadAdd { src, add, dst } => {
                 vec![src, add, dst]
             }
@@ -2118,6 +2120,7 @@ impl Instruction {
             | Self::FWrite(r)
             | Self::SWrite(r)
             | Self::IRead(r)
+            | Self::PutChar(r)
             | Self::FRead(r) => vec![r],
 
             Self::CmpLT { a, b, dst }
@@ -2150,7 +2153,9 @@ impl Instruction {
 
             Self::ImmLoad { dst, .. } => vec![dst],
 
-            _ => vec![],
+            Self::Label(..) | Self::ImmJump(..) | Self::Ret => vec![],
+
+            what => todo!("{:?}", what),
         }
     }
 }
@@ -2189,6 +2194,11 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 dst: Reg::from_str(dst)?,
             }),
             ["rshift", a, b, "=>", dst] => instructions.push(Instruction::RShift {
+                src_a: Reg::from_str(a)?,
+                src_b: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["div", a, b, "=>", dst] => instructions.push(Instruction::Div {
                 src_a: Reg::from_str(a)?,
                 src_b: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
@@ -2363,6 +2373,7 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             ["fwrite", src] => instructions.push(Instruction::FWrite(Reg::from_str(src)?)),
             ["iwrite", src] => instructions.push(Instruction::IWrite(Reg::from_str(src)?)),
             ["swrite", src] => instructions.push(Instruction::SWrite(Reg::from_str(src)?)),
+            ["putchar", src] => instructions.push(Instruction::PutChar(Reg::from_str(src)?)),
 
             // Branch operations
             ["jumpI", "->", label] => {
@@ -2466,8 +2477,8 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 size: size.parse().map_err(|_| "failed to parse .global size")?,
                 align: align.parse().map_err(|_| "failed to parse .global align")?,
             }),
-            [".string", name, str_lit] => instructions
-                .push(Instruction::String { name: name.to_string(), content: str_lit.to_string() }),
+            [".string", name, str_lit @ ..] => instructions
+                .push(Instruction::String { name: name.to_string(), content: str_lit.join(" ").replace("\\n", "\n") }),
             [".float", name, val] => instructions.push(Instruction::Float {
                 name: name.to_string(),
                 content: val.parse().map_err(|_| "failed to parse .float value")?,
@@ -2475,7 +2486,7 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             [label, "nop"] => instructions.push(Instruction::Label(label.replace(':', ""))),
             [first, ..] if first.starts_with('#') => {}
             [label] if label.starts_with('.') => {
-                instructions.push(Instruction::Label(label.to_string()))
+                instructions.push(Instruction::Label(label.replace(':', "")))
             }
             inst => todo!("{:?}", inst),
             // _ => {
@@ -2493,16 +2504,14 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn exit() -> Self {
-        Self { label: ".E_exit".to_string(), instructions: vec![] }
-    }
+    pub fn exit() -> Self { Self { label: ".E_exit".to_string(), instructions: vec![] } }
     /// All `Instruction`s with `Instruction::Skip` filtered out.
     pub fn instructions(&self) -> impl Iterator<Item = &Instruction> + '_ {
         self.instructions.iter().filter(|i| !matches!(i, Instruction::Skip(..)))
     }
 
-    /// Returns the optional name of the block the conditional branch jumps to, the caller must find
-    /// the fall through block name.
+    /// Returns the optional name of the block the conditional branch jumps to, the caller
+    /// must find the fall through block name.
     pub fn ends_with_cond_branch(&self) -> Option<&str> {
         self.instructions.last().and_then(|i| i.is_cnd_jump().then(|| i.uses_label()).flatten())
     }
@@ -2515,7 +2524,7 @@ impl Block {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Function {
     pub label: String,
     pub stack_size: usize,
@@ -2614,7 +2623,8 @@ pub fn make_basic_blocks(iloc: &IlocProgram) -> IlocProgram {
         for blk in &func.blocks {
             blocks.push(Block { label: blk.label.clone(), instructions: vec![] });
             for (idx, inst) in blk.instructions.iter().enumerate() {
-                // We always add the instruction even when it's a cbr/jmp with no block after
+                // We always add the instruction even when it's a cbr/jmp with no block
+                // after
                 blocks.last_mut().unwrap().instructions.push(inst.clone());
 
                 if inst.is_cnd_jump() && !matches!(blk.instructions.get(idx + 1), None) {

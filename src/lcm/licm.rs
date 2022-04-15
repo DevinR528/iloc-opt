@@ -14,9 +14,7 @@ pub enum LoopInfo {
     PartOf(String),
 }
 impl LoopInfo {
-    pub fn new(header: &str) -> Self {
-        Self::Loop { header: header.to_string(), parent: None }
-    }
+    pub fn new(header: &str) -> Self { Self::Loop { header: header.to_string(), parent: None } }
     pub fn header(&self) -> &str {
         match self {
             LoopInfo::Loop { header, .. } | LoopInfo::PartOf(header) => header,
@@ -36,9 +34,7 @@ pub struct LoopAnalysis {
 }
 
 impl LoopAnalysis {
-    pub fn loop_map(&self) -> &HashMap<String, LoopInfo> {
-        &self.loop_map
-    }
+    pub fn loop_map(&self) -> &HashMap<String, LoopInfo> { &self.loop_map }
 
     pub fn is_nested(&self, child: &OrdLabel) -> bool {
         let mut child = child.as_str();
@@ -100,8 +96,8 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) -> LoopAnalysis 
         loops.iter().map(|(k, v)| (k.clone(), LoopInfo::new(v))).collect::<BTreeMap<_, _>>();
     let mut stack = vec![];
     let mut seen = BTreeSet::new();
-    // Iterate over the known loops to find the blocks they "own" as part of their loop, this also
-    // determines which loops are nested in in other loops
+    // Iterate over the known loops to find the blocks they "own" as part of their loop,
+    // this also determines which loops are nested in in other loops
     for lp in loop_ord.into_iter().rev() {
         for pred in domtree.cfg_preds_map.get(lp).unwrap_or(&empty) {
             // Add the back edges to the stack/worklist
