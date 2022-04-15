@@ -473,8 +473,8 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
         let start = OrdLabel::new_start(&func.label);
         let dtree = dominator_tree(&cfg, &mut func.blocks, &start);
 
-        print_maps("cfg_succs", dtree.cfg_succs_map.iter());
-        print_maps("dom_tree", dtree.dom_tree.iter());
+        // print_maps("cfg_succs", dtree.cfg_succs_map.iter());
+        // print_maps("dom_tree", dtree.dom_tree.iter());
         // The `phis` used to fill the `meta` map
         let _phis =
             insert_phi_functions(func, &dtree.cfg_succs_map, &start, &dtree.dom_frontier_map);
