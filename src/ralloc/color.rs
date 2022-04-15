@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     fmt,
-    ops::{AddAssign, Range},
+    ops::{AddAssign, Range}, process::Command,
 };
 
 use crate::{
@@ -95,10 +95,8 @@ pub fn build_use_def_map(
 ) -> DefUsePair {
     let mut use_map: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     let mut def_map: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
-    for (b, (label, blk)) in reverse_postorder(&domtree.cfg_succs_map, start)
-        .filter_map(|label| Some((label, blocks.iter().find(|b| b.label == label.as_str())?)))
-        .enumerate()
-    {
+    for (b, blk) in blocks.iter().enumerate() {
+
         for (i, inst) in blk.instructions.iter().enumerate() {
             if matches!(inst, Instruction::Skip(..)) {
                 continue;
@@ -156,7 +154,6 @@ pub fn build_interference(
     loop_map: &LoopAnalysis,
 ) -> InterfereResult {
     //
-    //
     // For a node `q` in CFG a variable `v` is live-in at `q` if there is a path, not containing the
     // definition of `v`, from `q` to a  node where v is used. IT is live-out at `q` if it is
     // live-in at some successor of `q`.
@@ -164,6 +161,7 @@ pub fn build_interference(
     //
 
     let mut changed = true;
+
     let mut phi_defs: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
     let mut phi_uses: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
     let mut phi_map: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
@@ -187,9 +185,7 @@ pub fn build_interference(
                 }
 
                 for op in inst.operand_iter() {
-                    if matches!(op, Reg::Phi(0, _) | Reg::Var(0)) {
-                        continue;
-                    }
+                    if matches!(op, Reg::Phi(0, _) | Reg::Var(0)) { continue; }
 
                     if !def_loc.contains(&op) {
                         // We found a use without a definition above it
@@ -316,10 +312,12 @@ pub fn build_interference(
         }
     }
 
-    // print_maps("live_in", live_in.iter());
-    // print_maps("live_out", live_out.iter());
-    // println!();
+    print_maps("live_in", live_in.iter());
+    print_maps("live_out", live_out.iter());
+    println!();
 
+    // Mapping of the `Reg::Phi` name we chose and all `Reg::Phi`s connected to it by
+    // `Instruction::Phi` nodes
     let connected_phis: BTreeMap<Reg, Reg> = phi_map.iter()
         .flat_map(|(k, set)| set.iter().copied().chain(Some(*k)).map(|r| (r, *k)))
         .collect();
@@ -364,9 +362,7 @@ pub fn build_interference(
                 livenow.remove(dst);
             }
             for operand in inst.operand_iter() {
-                if matches!(operand, Reg::Phi(0, _) | Reg::Var(0)) {
-                    continue;
-                }
+                if matches!(operand, Reg::Phi(0, _) | Reg::Var(0)) { continue; }
 
                 let operand_new_name = if let Some(new_name) = connected_phis.get(&operand) {
                     let len = map.len() + 1;
@@ -382,59 +378,24 @@ pub fn build_interference(
 
             // Now remap the names of the register in the instructions
             for r in inst.registers_mut_iter() {
-                *r = *map.get(r).unwrap();
+                if matches!(r, Reg::Phi(0, _) | Reg::Var(0)) {
+                    *r = Reg::Var(0);
+                    continue;
+                }
+
+                let reg = if let Some(new_name) = connected_phis.get(r) { *new_name } else { *r };
+                *r = *map.get(&reg).unwrap_or_else(|| panic!("{:?}", r));
             }
         }
     }
 
-    // let mut interfe = interference.clone();
-    // for (new, merge) in &phi_map {
-    //     for m in merge {
-    //         for edges in interfe.values_mut() {
-    //             if edges.remove(m) {
-    //                 edges.insert(*new);
-    //             }
-    //         }
-    //     }
-    //     let mut combin = interfe.entry(*new).or_default().clone();
-    //     for m in merge {
-    //         combin = combin.union(&interfe.remove(m).unwrap_or_default()).copied().collect();
-    //     }
-    //     if let Some(n) = interfe.get_mut(new) {
-    //         *n = combin;
-    //     } else {
-    //         interfe.insert(*new, combin);
-    //     }
-    // }
-
-    // let connected_phis: BTreeMap<Reg, Reg> = phi_map.iter()
-    //     .flat_map(|(k, set)| set.iter().copied().chain(Some(*k)).map(|r| (r, *k)))
-    //     .collect();
-    // let mut map = BTreeMap::new();
-    // for block in &mut *blocks {
-    //     for inst in &mut block.instructions {
-    //         for reg in inst.registers_mut_iter() {
-    //             if matches!(reg, Reg::Phi(0, _)) { continue; }
-
-    //             if let Some(new_name) = connected_phis.get(reg) {
-    //                 let liverange = Reg::Var(map.len() + 1);
-    //                 let new = map.entry(*new_name).or_insert(liverange);
-    //                 *reg = *new;
-    //             } else {
-    //                 let liverange = Reg::Var(map.len() + 1);
-    //                 let new = map.entry(*reg).or_insert(liverange);
-    //                 *reg = *new;
-    //             }
-    //         }
-    //     }
-    // }
-
     let (def_map, use_map) = build_use_def_map(domtree, start, &*blocks);
 
-    println!();
-    print_maps("phi_map", phi_map.iter());
+    // println!();
+    // print_maps("phi_map", phi_map.iter());
+    print_maps("def_map", def_map.iter());
+    print_maps("use_map", use_map.iter());
     print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
-    // print_maps("interfe_comb", interfe.iter());
     println!();
 
     // let mut still_good = true;
@@ -452,11 +413,11 @@ pub fn build_interference(
         //     }
         //     color_hard_first
         //         .push_front((reg,
-        // edges.into_iter().map(ColoredReg::Uncolored).collect())); } else {
-        // still_good = false;
+        //     edges.into_iter().map(ColoredReg::Uncolored).collect()));
+        // } else {
+        //     still_good = false;
         graph_degree.push_front((register, edges));
         let (reg, edges) = find_cheap_spill(&mut graph_degree, blocks, &def_map, &use_map, loop_map);
-
         for (_, es) in &mut graph_degree {
             es.remove(&reg);
         }
@@ -525,6 +486,14 @@ pub fn build_interference(
     //     //     .collect::<BTreeMap<_, Vec<_>>>(),
     //     "boo",
     // );
+    // Command::new("dot")
+    //     .args(["-Tpdf", "boo.dot", "-o", "boo.pdf"])
+    //     .spawn()
+    //     .expect("failed to execute process");
+    // Command::new("firefox")
+    //     .arg("boo.pdf")
+    //     .spawn()
+    //     .expect("failed to execute process");
 
     if need_to_spill.is_empty() {
         print!("{} ", start);

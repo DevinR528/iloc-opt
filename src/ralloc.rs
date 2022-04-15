@@ -18,12 +18,34 @@ mod color;
 
 use color::ColorNode;
 
-pub const K_DEGREE: usize = 4;
+pub const K_DEGREE: usize = 16;
 
 #[derive(Debug)]
 pub enum Spill {
     Store { stack_size: usize, reg: Reg, blk_idx: usize, inst_idx: usize },
     Load { stack_size: usize, reg: Reg, blk_idx: usize, inst_idx: usize },
+}
+impl PartialEq for Spill {
+    fn eq(&self, other: &Self) -> bool {
+        self.blk_idx() == other.blk_idx() && self.inst_idx() == other.inst_idx()
+    }
+}
+impl Eq for Spill {}
+impl PartialOrd for Spill {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(match self.blk_idx().cmp(&other.blk_idx()) {
+            Ordering::Equal => self.inst_idx().cmp(&other.inst_idx()),
+            res => res,
+        })
+    }
+}
+impl Ord for Spill {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.blk_idx().cmp(&other.blk_idx()) {
+            Ordering::Equal => self.inst_idx().cmp(&other.inst_idx()),
+            res => res,
+        }
+    }
 }
 impl Spill {
     pub fn blk_idx(&self) -> usize {
@@ -65,14 +87,13 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
         // TODO: Move/copy coalesce instructions in `build_interference`
         let (graph, interfere, defs) = loop {
             // This is the graph that goes with the following terminal printouts
-            dump_to(&IlocProgram { preamble: vec![], functions: vec![func.clone()] });
 
             match color::build_interference(&mut func.blocks, &dtree, &start, &loop_map) {
                 Ok(ColoredGraph { graph, interference, defs }) => break (graph, interference, defs),
                 Err(FailedColoring { insert_spills, uses, defs }) => {
                     println!("SPILLED {:?}", insert_spills);
 
-                    let mut spills = vec![];
+                    let mut spills = BTreeSet::new();
                     for blk in &func.blocks {
                         let mut count = 0;
                         for (i, inst) in blk.instructions.iter().enumerate() {
@@ -89,7 +110,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                             _ => {},
                                         }
                                     }
-                                    spills.push(Spill::Store { stack_size, reg: *dst, blk_idx, inst_idx });
+                                    spills.insert(Spill::Store { stack_size, reg: *dst, blk_idx, inst_idx });
                                 }
                                 for &(blk_idx, mut inst_idx) in uses.get(&dst.to_register()).unwrap_or(&BTreeSet::new()) {
                                     if inst_idx == 0 {
@@ -99,16 +120,11 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                             _ => {},
                                         }
                                     }
-                                    spills.push(Spill::Load { stack_size, reg: *dst, blk_idx, inst_idx });
+                                    spills.insert(Spill::Load { stack_size, reg: *dst, blk_idx, inst_idx });
                                 }
                             }
                         }
                     }
-
-                    spills.sort_by(|a, b| match a.blk_idx().cmp(&b.blk_idx()) {
-                        Ordering::Equal => a.inst_idx().cmp(&b.inst_idx()),
-                        res => res,
-                    });
 
                     let mut curr_blk_idx = 0;
                     let mut add = 0;
@@ -161,16 +177,21 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                             }
                         }
                     }
+                    dump_to(&IlocProgram { preamble: vec![], functions: vec![func.clone()] });
+
                     std::io::stdin().read_line(&mut String::new());
                 }
             }
         };
+
+
         func.stack_size = stack_size;
 
         for blk in &mut func.blocks {
             for inst in &mut blk.instructions {
                 for reg in inst.registers_mut_iter() {
-                    if matches!(reg, Reg::Phi(0, _)) {
+                    // There should never be a phi left, just in case...
+                    if matches!(reg, Reg::Var(0) | Reg::Phi(0, _)) {
                         *reg = Reg::Var(0);
                         continue;
                     }
@@ -424,6 +445,7 @@ fn emit_ralloc_viz(
                 }
                 let mut start = 0;
                 for (live, because) in map {
+                    // only start coloring when we actually have defined the register
                     if !seen.contains(&live) {
                         // continue;
                     }
