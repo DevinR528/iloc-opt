@@ -121,6 +121,7 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
         // Which blocks does `b_label` control the execution of (where does this block
         // jump/branch/fall-through to)
         for blk in domtree.post_dom_frontier.get(b_label).unwrap_or(&empty) {
+            // println!("{b_label} {blk}");
             let Some(block) = func.blocks.iter()
                 .find(|b| {
                     b.label == blk.as_str()
@@ -236,7 +237,7 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
                 // instructions into `blk`
                 if cfg_preds.get(loc).map_or(false, |set| set.len() == 1) {
                     changed = true;
-                    println!("combine {loc} into {blk} {:?}", cfg_map);
+                    println!("combine {loc} into {blk}");
                     combine(func, loc, blk.as_str());
                 }
                 // The `all()` method defaults to true if no iteration happens!!
