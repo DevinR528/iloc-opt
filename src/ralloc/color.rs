@@ -90,7 +90,6 @@ impl fmt::Debug for ColorNode {
 pub type DefUsePair = (BTreeMap<Reg, BTreeSet<(usize, usize)>>, BTreeMap<Reg, BTreeSet<(usize, usize)>>);
 pub fn build_use_def_map(
     domtree: &DominatorTree,
-    start: &OrdLabel,
     blocks: &[Block],
 ) -> DefUsePair {
     let mut use_map: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
@@ -150,9 +149,10 @@ pub type InterfereResult =
 pub fn build_interference(
     blocks: &mut [Block],
     domtree: &DominatorTree,
-    start: &OrdLabel,
     loop_map: &LoopAnalysis,
 ) -> InterfereResult {
+
+    let start = OrdLabel::entry();
     //
     // For a node `q` in CFG a variable `v` is live-in at `q` if there is a path, not containing the
     // definition of `v`, from `q` to a  node where v is used. IT is live-out at `q` if it is
@@ -170,7 +170,7 @@ pub fn build_interference(
     let mut uexpr: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
     while changed {
         changed = false;
-        for label in reverse_postorder(&domtree.cfg_succs_map, start) {
+        for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
             let blk_idx = blocks.iter().position(|b| b.label == label.as_str()).unwrap();
             // TODO: this is really inefficient and ugly
             let ugh = defs.clone();
@@ -256,7 +256,7 @@ pub fn build_interference(
     let mut live_in: BTreeMap<OrdLabel, BTreeSet<Reg>> = BTreeMap::new();
     while changed {
         changed = false;
-        for label in postorder(&domtree.cfg_succs_map, start) {
+        for label in postorder(&domtree.cfg_succs_map, &start) {
             let empty_bset = BTreeSet::new();
 
             // LIVE-IN
@@ -324,7 +324,7 @@ pub fn build_interference(
     let mut map = BTreeMap::new();
 
     let mut interference: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
-    for block in postorder(&domtree.cfg_succs_map, start) {
+    for block in postorder(&domtree.cfg_succs_map, &start) {
         let livenow = live_out.get_mut(block).unwrap();
         let blk_idx = blocks.iter().position(|b| b.label == block.as_str()).unwrap();
         for inst in blocks[blk_idx].instructions.iter_mut().rev() {
@@ -389,12 +389,12 @@ pub fn build_interference(
         }
     }
 
-    let (def_map, use_map) = build_use_def_map(domtree, start, &*blocks);
+    let (def_map, use_map) = build_use_def_map(domtree, &*blocks);
 
     // println!();
-    // print_maps("phi_map", phi_map.iter());
-    print_maps("def_map", def_map.iter());
-    print_maps("use_map", use_map.iter());
+    print_maps("phi_map", phi_map.iter());
+    // print_maps("def_map", def_map.iter());
+    // print_maps("use_map", use_map.iter());
     print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
     println!();
 
@@ -476,7 +476,7 @@ pub fn build_interference(
 
     // emit_ralloc_viz(
     //     &domtree.cfg_succs_map,
-    //     start,
+    //     &start,
     //     blocks,
     //     &graph,
     //     &interference,

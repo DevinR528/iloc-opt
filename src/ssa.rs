@@ -1,7 +1,7 @@
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque, BTreeMap};
 
 use crate::{
-    iloc::{Block, Function, IlocProgram, Instruction, Operand},
+    iloc::{Block, Function, IlocProgram, Instruction, Operand, Reg},
     lcm::print_maps,
 };
 
@@ -21,7 +21,9 @@ use fold::{const_fold, ConstMap, ValueKind, WorkStuff};
 #[derive(Clone, Debug, Default)]
 pub struct ControlFlowGraph {
     paths: HashMap<String, BTreeSet<OrdLabel>>,
-    pub exits: Vec<OrdLabel>,
+    /// After `build_cfg` this will only ever be one `.E_exit` since this is used to merge all actual
+    /// exit blocks to a single exit.
+    exits: Vec<OrdLabel>,
 }
 
 impl ControlFlowGraph {
@@ -33,15 +35,17 @@ impl ControlFlowGraph {
 
 pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
     let mut cfg = ControlFlowGraph::default();
+    // Add the entry block to the label cache
+    OrdLabel::new_add(0, ".E_entry");
+    func.blocks.insert(0, Block::enter());
     'block: for (idx, block) in func.blocks.iter().enumerate() {
         let b_label = &block.label;
 
         let mut sort = 1;
         let mut unreachable = false;
-        // TODO: only iter the branch instructions with labels
         'inst: for inst in &block.instructions {
-            // TODO: can we make note of this for optimization...(if there are trailing
-            // unreachable instructions)
+            // N.B.
+            // `build_stripped_cfg` in the `dce` mod takes care of all cleaning unreachable code
             if inst.is_return() {
                 cfg.exits.push(if idx == 0 {
                     OrdLabel::new_add(0, b_label)
@@ -64,8 +68,8 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
                 // Skip the implicit branch to the block below the current one
                 // since we found an unconditional jump.
                 //
-                // TODO: can we make note of this for optimization...(if there are
-                // trailing unreachable instructions)
+                // N.B.
+                // `build_stripped_cfg` in the `dce` mod takes care of all cleaning unreachable code
                 if inst.unconditional_jmp() {
                     continue 'block;
                 }
@@ -78,21 +82,21 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
         }
     }
 
+    // N.B.
+    // `build_stripped_cfg` in the `dce` mod takes care of all cleaning unreachable code
+    //
     // Remove unreachable blocks from the cf graph
     // let remove_blks = all.difference(&seen.keys().copied().collect::<BTreeSet<_>>());
     // for blk_idx in remove_blks {
     //     func.blocks.remove(blk_idx);
     // }
 
-    if cfg.exits.len() > 1 {
-        let exits: Vec<_> = cfg.exits.drain(..).collect();
-        for exit in exits {
-            cfg.add_edge(exit.as_str(), ".E_exit", 1);
-        }
-        cfg.exits.push(OrdLabel::from_known(".E_exit"));
-
-        func.blocks.push(Block::exit());
+    let exits: Vec<_> = cfg.exits.drain(..).collect();
+    for exit in exits {
+        cfg.add_edge(exit.as_str(), ".E_exit", 1);
     }
+    cfg.exits.push(OrdLabel::from_known(".E_exit"));
+    func.blocks.push(Block::exit());
 
     cfg
 }
@@ -111,15 +115,14 @@ pub struct DominatorTree {
 }
 
 // TODO: Cleanup (see todo's above loops and such)
-pub fn dominator_tree(
-    cfg: &ControlFlowGraph,
-    blocks: &mut [Block],
-    start: &OrdLabel,
-) -> DominatorTree {
+pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> DominatorTree {
+    let start = OrdLabel::entry();
+    let exit = OrdLabel::exit();
+
     for (ord, n) in reverse_postorder(
         &cfg.paths.iter().map(|(k, v)| (OrdLabel::new(k), v.clone())).collect::<HashMap<_, _>>(),
-        start,
-    )
+        &start,
+    ).into_iter()
     .enumerate()
     {
         // Updates the global map that keeps track of a labels order in the graph
@@ -127,15 +130,18 @@ pub fn dominator_tree(
     }
 
     // We need this to be accurate to the numbering of `succs` below, otherwise
-    // when ralloc needs SSA numbering we crash, since the las value for `start` was the
-    // last from doing RPO based on predecessors and the single exit
+    // when ralloc needs SSA numbering we crash, since the last value for `start` was the
+    // last from doing postorder.
     let start = OrdLabel::from_known(start.as_str());
 
     let succs: HashMap<_, BTreeSet<OrdLabel>> = cfg
         .paths
         .iter()
         .map(|(k, v)| {
-            (OrdLabel::from_known(k), v.iter().map(|l| OrdLabel::from_known(l.as_str())).collect())
+            (
+                OrdLabel::from_known(k),
+                v.iter().map(|l| OrdLabel::from_known(l.as_str())).collect(),
+            )
         })
         .collect();
 
@@ -148,8 +154,11 @@ pub fn dominator_tree(
 
     // Build dominator tree
     let mut dom_map = HashMap::with_capacity(blocks.len());
-    let all_nodes: Vec<_> = reverse_postorder(&succs, &start).cloned().collect();
-    dom_map.insert(start, BTreeSet::new());
+    let all_nodes: Vec<_> = reverse_postorder(&succs, &start).into_iter().cloned().collect();
+
+    println!("{:?}", all_nodes);
+
+    dom_map.insert(start.clone(), BTreeSet::new());
     for n in all_nodes.iter().skip(1) {
         dom_map.insert(n.clone(), all_nodes.iter().cloned().collect());
     }
@@ -242,7 +251,8 @@ pub fn dominator_tree(
     }
 
     // Reorder the numbering on each block so they are reversed
-    let all_nodes: Vec<_> = reverse_postorder(&preds, cfg.exits.first().unwrap())
+    let all_nodes: Vec<_> = postorder(&succs, &start)
+        .into_iter()
         .enumerate()
         .map(|(i, l)| {
             OrdLabel::update(i as isize, l.as_str());
@@ -312,9 +322,12 @@ pub fn dominator_tree(
         }
     }
 
-    // println!("pid {:#?}", post_idom_map);
-    // println!("pdt {:#?}\ndt {:#?}\ndft {:#?}", post_dom_tree, dom_tree,
-    // dom_frontier_map);
+    print_maps("dom_tree", dom_tree.iter());
+    // print_maps("dom_frontier_map", dom_frontier_map.iter());
+
+    // print_maps("post_idom", post_idom_map.iter());
+    // print_maps("post_dom_tree", post_dom_tree.iter());
+
 
     let empty = BTreeSet::new();
     // This is control dependence
@@ -387,16 +400,18 @@ pub fn dominator_tree(
 pub fn insert_phi_functions(
     func: &mut Function,
     cfg_succs: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
-    start: &OrdLabel,
     dom_front: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
-) -> HashMap<OrdLabel, HashSet<Operand>> {
+) -> BTreeMap<OrdLabel, BTreeSet<Reg>> {
+    let start = OrdLabel::entry();
+
     // All the registers that are used across blocks
     let mut globals = vec![];
     let mut blocks_map = HashMap::new();
-
+    let mut varkill = BTreeMap::new();
+    let mut upvar = BTreeMap::new();
     // TODO: now that I do this bottom-up phis could be inserted as each block is
     // encountered since we know dom frontier
-    for blk in postorder(cfg_succs, start) {
+    for blk in postorder(cfg_succs, &start) {
         // This represents any redefinitions that are local to the current block
         let mut varkil = HashSet::new();
         for inst in func
@@ -470,14 +485,15 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
     for func in &mut iloc.functions {
         let cfg = build_cfg(func);
 
-        let start = OrdLabel::new_start(&func.label);
-        let dtree = dominator_tree(&cfg, &mut func.blocks, &start);
+        let start = OrdLabel::entry();
+        let dtree = dominator_tree(&cfg, &mut func.blocks);
 
         // print_maps("cfg_succs", dtree.cfg_succs_map.iter());
         // print_maps("dom_tree", dtree.dom_tree.iter());
+
         // The `phis` used to fill the `meta` map
         let _phis =
-            insert_phi_functions(func, &dtree.cfg_succs_map, &start, &dtree.dom_frontier_map);
+            insert_phi_functions(func, &dtree.cfg_succs_map, &dtree.dom_frontier_map);
 
         let mut meta = HashMap::new();
         let mut stack = VecDeque::new();
@@ -526,7 +542,7 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
             }
         }
 
-        lazy_code_motion(func, &dtree, cfg.exits.last().unwrap());
+        lazy_code_motion(func, &dtree);
 
         func.blocks.retain(|b| b.label != ".E_exit");
     }
@@ -544,12 +560,12 @@ fn lcm_pre() {
     let iloc = parse_text(&input).unwrap();
     let mut blocks = make_basic_blocks(&make_blks(iloc));
 
-    let start = OrdLabel::new_start(&blocks.functions[0].label);
+    let start = OrdLabel::entry();
 
     let cfg = build_cfg(&mut blocks.functions[0]);
-    let dtree = dominator_tree(&cfg, &mut blocks.functions[0].blocks, &start);
+    let dtree = dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 
-    lazy_code_motion(&mut blocks.functions[0], &dtree, cfg.exits.last().unwrap());
+    lazy_code_motion(&mut blocks.functions[0], &dtree, );
 
     let mut buf = String::new();
     for inst in blocks.instruction_iter() {
@@ -598,8 +614,8 @@ fn ssa_cfg_while() {
 
     emit_cfg_viz(&cfg, "graphs/hmm.dot");
 
-    let name = OrdLabel::new_start(&blocks.functions[0].label);
-    dominator_tree(&cfg, &mut blocks.functions[0].blocks, &name);
+    let name = OrdLabel::entry();
+    dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }
 
 #[test]
@@ -625,8 +641,8 @@ fn ssa_cfg_trap() {
     let mut blocks = make_basic_blocks(&make_blks(iloc));
 
     let cfg = build_cfg(&mut blocks.functions[0]);
-    let name = OrdLabel::new_start(&blocks.functions[0].label);
-    let dom = dominator_tree(&cfg, &mut blocks.functions[0].blocks, &name);
+    let name = OrdLabel::entry();
+    let dom = dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 
     println!("{:#?}", dom);
     // emit_cfg_viz(&cfg, "graphs/turd.dot");
@@ -667,10 +683,10 @@ fn lcm_simple() {
     let mut blocks = make_basic_blocks(&make_blks(iloc));
 
     let cfg = build_cfg(&mut blocks.functions[0]);
-    let name = OrdLabel::new_start(&blocks.functions[0].label);
-    let dom = dominator_tree(&cfg, &mut blocks.functions[0].blocks, &name);
+    let name = OrdLabel::entry();
+    let dom = dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 
-    lazy_code_motion(&mut blocks.functions[0], &dom, cfg.exits.last().unwrap());
+    lazy_code_motion(&mut blocks.functions[0], &dom, );
 }
 #[allow(unused)]
 fn emit_cfg_viz(cfg: &ControlFlowGraph, file: &str) {

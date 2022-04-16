@@ -127,19 +127,16 @@ fn main() {
             let mut blocks = make_basic_blocks(&make_blks(iloc));
             for func in &mut blocks.functions {
                 let cfg = build_cfg(func);
-                let start = OrdLabel::new_start(&func.label);
-
-                let dtree = dominator_tree(&cfg, &mut func.blocks, &start);
+                let dtree = dominator_tree(&cfg, &mut func.blocks);
                 let phis = ssa::insert_phi_functions(
                     func,
                     &dtree.cfg_succs_map,
-                    &start,
                     &dtree.dom_frontier_map,
                 );
 
                 let mut meta = HashMap::new();
                 for (_blk_label, register_set) in phis {
-                    meta.extend(register_set.iter().map(|op| (op.clone(), RenameMeta::default())));
+                    meta.extend(register_set.iter().map(|op| (*op, RenameMeta::default())));
                 }
                 let mut stack = VecDeque::new();
                 // Label but don't remove any with the `SSA` flag on

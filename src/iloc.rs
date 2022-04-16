@@ -968,6 +968,7 @@ impl fmt::Display for Instruction {
             Self::Float { name, content } => {
                 writeln!(f, "    .{} {}, {}", self.inst_name(), name, content)
             }
+            Self::Label(label) if label == ".E_entry" || label == ".E_exit" => Ok(()),
             Self::Label(label) => {
                 writeln!(f, "{}: nop", label)
             }
@@ -2504,7 +2505,19 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn exit() -> Self { Self { label: ".E_exit".to_string(), instructions: vec![] } }
+    pub fn enter() -> Self {
+        Self {
+            label: ".E_entry".to_string(),
+            instructions: vec![Instruction::Label(".E_entry".to_string())]
+        }
+    }
+    pub fn exit() -> Self {
+        Self {
+            label: ".E_exit".to_string(),
+            instructions: vec![Instruction::Label(".E_exit".to_string())]
+        }
+    }
+
     /// All `Instruction`s with `Instruction::Skip` filtered out.
     pub fn instructions(&self) -> impl Iterator<Item = &Instruction> + '_ {
         self.instructions.iter().filter(|i| !matches!(i, Instruction::Skip(..)))
