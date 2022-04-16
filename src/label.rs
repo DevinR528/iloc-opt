@@ -14,11 +14,11 @@ pub struct OrdLabel(isize, String);
 impl OrdLabel {
     // Create a new `OrdLabel, removing the `:` and without the sorting filler in the
     // front of the label.
-    pub fn new(label: &str) -> Self { Self(111, label.to_string()) }
+    pub fn new(label: &str) -> Self { Self(11, label.to_string()) }
 
     pub fn entry() -> Self { Self(0, ".E_entry".to_string()) }
 
-    pub fn exit() -> Self { Self(0, ".E_exit".to_string()) }
+    pub fn exit() -> Self { Self(1111111, ".E_exit".to_string()) }
 
     pub fn new_start(start: &str) -> Self {
         let l = Self(0, format!(".F_{}", start));
@@ -60,8 +60,8 @@ impl fmt::Display for OrdLabel {
 
 impl fmt::Debug for OrdLabel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({} {})", self.0, self.1)
-        // self.as_str().fmt(f)
+        // write!(f, "({} {})", self.0, self.1)
+        self.as_str().fmt(f)
     }
 }
 
