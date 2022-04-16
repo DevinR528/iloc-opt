@@ -8,7 +8,7 @@ use crate::{
     iloc::{Block, Function, Instruction, Operand, Reg},
     lcm::{print_maps, LoopAnalysis},
     ralloc::{emit_good_ralloc_viz, emit_ralloc_viz, K_DEGREE},
-    ssa::{postorder, reverse_postorder, DominatorTree, OrdLabel},
+    ssa::{postorder, rpo, DominatorTree, OrdLabel},
 };
 
 const INFINITY: isize = isize::MAX;
@@ -153,6 +153,7 @@ pub fn build_interference(
 ) -> InterfereResult {
 
     let start = OrdLabel::entry();
+    let exit = OrdLabel::exit();
     //
     // For a node `q` in CFG a variable `v` is live-in at `q` if there is a path, not containing the
     // definition of `v`, from `q` to a  node where v is used. IT is live-out at `q` if it is
@@ -170,7 +171,7 @@ pub fn build_interference(
     let mut uexpr: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
     while changed {
         changed = false;
-        for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
+        for label in rpo(&domtree.cfg_succs_map, &start) {
             let blk_idx = blocks.iter().position(|b| b.label == label.as_str()).unwrap();
             // TODO: this is really inefficient and ugly
             let ugh = defs.clone();

@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque, BTreeMap};
 
 pub use crate::{
     label::OrdLabel,
-    lcm::{find_loops, lazy_code_motion, postorder, reverse_postorder, print_maps},
+    lcm::{find_loops, lazy_code_motion, postorder, rpo, print_maps},
     iloc::{Block, Function, IlocProgram, Instruction, Operand, Reg},
 };
 
@@ -32,7 +32,7 @@ impl ControlFlowGraph {
 pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
     let mut cfg = ControlFlowGraph::default();
     // Add the entry block to the label cache
-    OrdLabel::new_add(0, ".E_entry");
+    let _save_the_label = OrdLabel::new_add(0, ".E_entry");
     func.blocks.insert(0, Block::enter());
     'block: for (idx, block) in func.blocks.iter().enumerate() {
         let b_label = &block.label;
@@ -72,7 +72,7 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
             }
         }
 
-        if let Some(next) = func.blocks.get(idx + 1) {
+        if let Some(next) = func.blocks.get(idx + 1) && !unreachable {
             let next_label = &next.label;
             cfg.add_edge(b_label, next_label, 0);
         }
@@ -118,10 +118,12 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
     let mut preds: HashMap<_, BTreeSet<_>> = HashMap::new();
     for (from, set) in &cfg.paths {
         for to in set {
-            preds.entry(to.clone()).or_default().insert(OrdLabel::new(from));
+            preds.entry(to.clone()).or_default().insert(OrdLabel::from_known(from));
         }
     }
-    for (ord, n) in reverse_postorder(&preds, &exit).into_iter().enumerate() {
+
+    let succs = cfg.paths.iter().map(|(k, v)| (OrdLabel::from_known(k), v.clone())).collect::<HashMap<_, _>>();
+    for (ord, n) in rpo(&succs, &start).into_iter().enumerate() {
         // Updates the global map that keeps track of a labels order in the graph
         OrdLabel::update(ord as isize, n.as_str());
     }
@@ -149,7 +151,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
 
     // Build dominator tree
     let mut dom_map = HashMap::with_capacity(blocks.len());
-    let all_nodes: Vec<_> = reverse_postorder(&preds, &exit).into_iter().cloned().collect();
+    let all_nodes: Vec<_> = rpo(&succs, &start).into_iter().cloned().collect();
     dom_map.insert(start.clone(), BTreeSet::new());
     for n in all_nodes.iter().skip(1) {
         dom_map.insert(n.clone(), all_nodes.iter().cloned().collect());
@@ -191,8 +193,8 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
         }
     }
 
-    // print_maps("dom_map", dom_map.iter());
-    // print_maps("dom_tree", dom_tree.iter());
+    print_maps("dom_map", dom_map.iter());
+    print_maps("dom_tree", dom_tree.iter());
 
     // Build dominance predecessor map (AKA find join points)
     let mut dom_tree_pred = HashMap::with_capacity(all_nodes.len());
@@ -606,13 +608,13 @@ fn ssa_cfg() {
 
     use crate::iloc::{make_basic_blocks, make_blks, parse_text};
 
-    let input = fs::read_to_string("input/while_array.lvn.dbre.dce.pre.il").unwrap();
+    let input = fs::read_to_string("input/partition.il").unwrap();
     let iloc = parse_text(&input).unwrap();
     let mut blocks = make_basic_blocks(&make_blks(iloc));
 
     let cfg = build_cfg(&mut blocks.functions[0]);
     println!("{:?}", cfg);
-    emit_cfg_viz(&cfg, "graphs/while_array.dot");
+    emit_cfg_viz(&cfg, "graphs/partition.dot");
 }
 
 #[test]

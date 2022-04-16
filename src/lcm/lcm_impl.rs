@@ -6,7 +6,7 @@ use std::{
 use crate::{
     iloc::{Block, Function, Instruction, Loc, Reg},
     lcm::find_loops,
-    ssa::{postorder, reverse_postorder, DominatorTree, OrdLabel},
+    ssa::{postorder, rpo, DominatorTree, OrdLabel},
 };
 
 pub fn print_maps<K: fmt::Debug, V: fmt::Debug>(name: &str, map: impl Iterator<Item = (K, V)>) {
@@ -61,7 +61,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut kill: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for label in reverse_postorder(&domtree.cfg_preds_map, &exit) {
+        for label in rpo(&domtree.cfg_succs_map, &start) {
             let Some(blk) = func.blocks.iter().find(|b| b.label == label.as_str()) else { continue; };
 
             let uni = universe.entry(label.clone()).or_default();
@@ -110,7 +110,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut avail_in: HashMap<OrdLabel, BTreeSet<_>> = HashMap::new();
     while changed {
         changed = false;
-        for label in reverse_postorder(&domtree.cfg_preds_map, &exit) {
+        for label in rpo(&domtree.cfg_succs_map, &start) {
             let empty_bset = BTreeSet::new();
             // AVAILABLE-IN (only used to compute `avail_out`)
             // Empty set for anticipated-out exit block
@@ -241,7 +241,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut earliest: HashMap<(OrdLabel, OrdLabel), BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for succ in reverse_postorder(&domtree.cfg_preds_map, &exit) {
+        for succ in rpo(&domtree.cfg_succs_map, &start) {
             // Same thing as succ != start
             let Some(preds) = domtree.cfg_preds_map.get(succ) else { continue; };
             for pred in preds {
@@ -292,7 +292,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut later_in: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for b_label in reverse_postorder(&domtree.cfg_preds_map, &exit) {
+        for b_label in rpo(&domtree.cfg_succs_map, &start) {
             // This is the same as b_label != start
             let Some(preds) = domtree.cfg_preds_map.get(b_label) else { continue; };
 
@@ -347,7 +347,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut delete: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for b_label in reverse_postorder(&domtree.cfg_preds_map, &exit) {
+        for b_label in rpo(&domtree.cfg_succs_map, &start) {
             // This works as `if b_label == start { both == ∅ }`
             let Some(preds) = domtree.cfg_preds_map.get(b_label) else { continue; };
 
