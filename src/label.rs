@@ -16,6 +16,15 @@ impl OrdLabel {
     // front of the label.
     pub fn new(label: &str) -> Self { Self(111, label.to_string()) }
 
+    pub fn entry() -> Self { Self(0, ".E_entry".to_string()) }
+
+    pub fn exit() -> Self { Self(0, ".E_exit".to_string()) }
+
+    pub fn new_start(start: &str) -> Self {
+        let l = Self(0, format!(".F_{}", start));
+        LABEL_MAP.lock().unwrap().entry(format!(".F_{}", start)).or_insert(l).clone()
+    }
+
     pub fn new_add(sort: isize, label: &str) -> Self {
         match LABEL_MAP.lock().unwrap().entry(label.to_string()) {
             Entry::Occupied(o) => o.get().clone(),
@@ -33,16 +42,13 @@ impl OrdLabel {
                 o.get_mut().0 = sort;
             }
             Entry::Vacant(_) => {
-                unreachable!()
+                unreachable!("{label}")
             }
         }
     }
 
-    pub fn from_known(label: &str) -> Self { LABEL_MAP.lock().unwrap().get(label).unwrap().clone() }
-
-    pub fn new_start(start: &str) -> Self {
-        let l = Self(-1, format!(".F_{}", start));
-        LABEL_MAP.lock().unwrap().entry(format!(".F_{}", start)).or_insert(l).clone()
+    pub fn from_known(label: &str) -> Self {
+        LABEL_MAP.lock().unwrap().get(label).unwrap().clone()
     }
 
     pub fn as_str(&self) -> &str { &self.1 }
@@ -54,8 +60,8 @@ impl fmt::Display for OrdLabel {
 
 impl fmt::Debug for OrdLabel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // write!(f, "({} {})", self.0, self.1)
-        self.as_str().fmt(f)
+        write!(f, "({} {})", self.0, self.1)
+        // self.as_str().fmt(f)
     }
 }
 

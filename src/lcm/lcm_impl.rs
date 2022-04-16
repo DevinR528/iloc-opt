@@ -9,10 +9,10 @@ use crate::{
     ssa::{postorder, reverse_postorder, DominatorTree, OrdLabel},
 };
 
-pub fn print_maps<K: fmt::Debug, V: fmt::Debug>(name: &str, map: impl Iterator<Item = (K, V)>) {
+pub fn print_maps<K: fmt::Display, V: fmt::Debug>(name: &str, map: impl Iterator<Item = (K, V)>) {
     println!("{} {{", name);
     for (k, v) in map {
-        println!("    {:?}: {:?},", k, v);
+        println!("    {}: {:?},", k, v);
     }
     println!("}}")
 }
@@ -27,8 +27,10 @@ pub fn print_maps<K: fmt::Debug, V: fmt::Debug>(name: &str, map: impl Iterator<I
 //        C
 //
 
-pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &OrdLabel) {
-    let start = OrdLabel::new_start(&func.label);
+pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
+    let start = OrdLabel::entry();
+    let exit = OrdLabel::exit();
+
     let mut use_map: HashMap<_, Vec<_>> = HashMap::new();
     let mut dst_map: HashMap<_, _> = HashMap::new();
     for blk in &func.blocks {
@@ -59,22 +61,16 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
     let mut kill: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for (label, blk) in reverse_postorder(&domtree.cfg_succs_map, &start).filter_map(|label| {
-            #[rustfmt::skip]
-            Some((
-                label,
-                func.blocks.iter().find(|b| b.label == label.as_str())?
-            ))
-        }) {
-            let uni = universe.entry(label.clone()).or_default();
+        for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
+            let Some(blk) = func.blocks.iter().find(|b| b.label == label.as_str()) else { continue; };
 
+            let uni = universe.entry(label.clone()).or_default();
             let dloc = dexpr.entry(label.clone()).or_default();
             let uloc = uexpr.entry(label.clone()).or_default();
             let k_loc = kill.entry(label.clone()).or_default();
-            for inst in &blk.instructions {
-                let dst = inst.target_reg();
 
-                if let Some(t) = dst {
+            for inst in &blk.instructions {
+                if let Some(t) = inst.target_reg() {
                     uni.insert(*t);
                     dloc.insert(*t);
                     if !k_loc.contains(t) {
@@ -205,7 +201,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
 
             // ANTICIPATED-OUT
             // Empty set for anticipated-out exit block
-            if label == exit {
+            if *label == exit {
                 anti_out.insert(label.clone(), BTreeSet::new());
             } else {
                 // anticipated-out is all successors of `label`s anticipated-in sets

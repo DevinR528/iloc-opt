@@ -63,12 +63,14 @@ impl Spill {
 }
 
 pub fn allocate_registers(prog: &mut IlocProgram) {
+    return;
     'func: for func in &mut prog.functions {
-        let start = OrdLabel::new_start(&func.label);
+        let start = OrdLabel::entry();
+        let exit = OrdLabel::exit();
 
         let cfg = build_cfg(func);
-        let mut dtree = dominator_tree(&cfg, &mut func.blocks, &start);
-        insert_phi_functions(func, &dtree.cfg_succs_map, &start, &dtree.dom_frontier_map);
+        let mut dtree = dominator_tree(&cfg, &mut func.blocks);
+        insert_phi_functions(func, &dtree.cfg_succs_map, &dtree.dom_frontier_map);
         let mut meta = HashMap::new();
         let mut stack = VecDeque::new();
         dom_val_num(&mut func.blocks, 0, &mut meta, &dtree, &mut stack);
@@ -88,7 +90,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
         let (graph, interfere, defs) = loop {
             // This is the graph that goes with the following terminal printouts
 
-            match color::build_interference(&mut func.blocks, &dtree, &start, &loop_map) {
+            match color::build_interference(&mut func.blocks, &dtree, &loop_map) {
                 Ok(ColoredGraph { graph, interference, defs }) => break (graph, interference, defs),
                 Err(FailedColoring { insert_spills, uses, defs }) => {
                     println!("SPILLED {:?}", insert_spills);
@@ -177,13 +179,13 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                             }
                         }
                     }
-                    dump_to(&IlocProgram { preamble: vec![], functions: vec![func.clone()] });
 
                     std::io::stdin().read_line(&mut String::new());
                 }
             }
         };
 
+        dump_to(&IlocProgram { preamble: vec![], functions: vec![func.clone()] });
 
         func.stack_size = stack_size;
 

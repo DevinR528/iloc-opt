@@ -207,8 +207,8 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
             let fall_through = func.blocks.get(idx + 1).map(|b| b.label.to_string());
             let fall_through = fall_through.as_deref();
 
-            let cond_branch = block.ends_with_cond_branch();
-            if let Some(loc) = cond_branch {
+            // Fallthrough and branch go to the same place
+            if let Some(loc) = block.ends_with_cond_branch() {
                 if Some(loc) == fall_through {
                     changed = true;
                     to_jump.push((idx, Instruction::ImmJump(Loc(loc.to_string()))));
@@ -281,6 +281,9 @@ pub fn build_stripped_cfg(func: &Function) -> HashMap<OrdLabel, BTreeSet<OrdLabe
         let b_label = &block.label;
         for inst in &block.instructions {
             if inst.is_return() {
+                cfg.entry(OrdLabel::from_known(b_label))
+                    .or_default()
+                    .insert(OrdLabel::from_known(".E_exit"));
                 continue 'blk;
             }
 
