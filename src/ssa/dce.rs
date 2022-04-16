@@ -181,6 +181,8 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
 }
 
 pub fn cleanup(func: &mut Function, start: &OrdLabel) {
+    let exit = OrdLabel::exit();
+
     let mut cfg_map = build_stripped_cfg(func);
 
     let mut to_jump = vec![];
@@ -189,7 +191,7 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
         let mut cfg_preds: HashMap<_, BTreeSet<_>> = HashMap::new();
         for (from, tos) in &cfg_map {
             for to in tos {
-                cfg_preds.entry(to.as_str()).or_default().insert(from.as_str());
+                cfg_preds.entry(to.clone()).or_default().insert(from.clone());
             }
         }
 
@@ -223,8 +225,10 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
                     continue;
                 };
 
-                // The `all()` method defaults to true if no iteration happens!!
-                if block.instructions.iter().all(|i| matches!(i, Instruction::Skip(..))) {
+                // The `all()` method defaults to true if no iteration happens
+                if block.instructions.iter().all(|i| {
+                    matches!(i, Instruction::Skip(..) | Instruction::Label(..) | Instruction::Phi(..))
+                }) {
                     changed = true;
                     println!("transfer {blk} to {loc}");
                     replace_transfer(func, blk.as_str(), loc, idx);
@@ -235,13 +239,15 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
                 // has one successor (so we aren't messing with any
                 // dominators) we remove the jump in blk and move `loc`'s
                 // instructions into `blk`
-                if cfg_preds.get(loc).map_or(false, |set| set.len() == 1) {
+                if cfg_preds.get(&OrdLabel::new(loc)).map_or(false, |set| set.len() == 1) {
                     changed = true;
                     println!("combine {loc} into {blk}");
                     combine(func, loc, blk.as_str());
                 }
                 // The `all()` method defaults to true if no iteration happens!!
-                if jump_to.instructions.iter().all(|i| matches!(i, Instruction::Skip(..))) {
+                if jump_to.instructions.iter().all(|i| {
+                    matches!(i, Instruction::Skip(..) | Instruction::Label(..) | Instruction::Phi(..))
+                }) {
                     changed = true;
                     println!("overwrite {blk} to {loc}");
                 }
@@ -256,7 +262,7 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
         }
 
         let all: HashSet<_> = func.blocks.iter().map(|b| OrdLabel::new(&b.label)).collect();
-        let used: HashSet<_> = reverse_postorder(&cfg_map, start).cloned().collect();
+        let used: HashSet<_> = reverse_postorder(&cfg_preds, &exit).into_iter().cloned().collect();
         for unused in all.difference(&used) {
             changed = true;
             let pos = func.blocks.iter().position(|b| b.label == unused.as_str()).unwrap();

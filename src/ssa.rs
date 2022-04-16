@@ -1,20 +1,16 @@
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque, BTreeMap};
 
-use crate::{
+pub use crate::{
+    label::OrdLabel,
+    lcm::{find_loops, lazy_code_motion, postorder, reverse_postorder, print_maps},
     iloc::{Block, Function, IlocProgram, Instruction, Operand, Reg},
-    lcm::print_maps,
 };
 
 mod dbre;
 pub mod dce;
 mod fold;
 
-pub use crate::{
-    label::OrdLabel,
-    lcm::{find_loops, lazy_code_motion, postorder, reverse_postorder},
-};
 pub use dbre::{dom_val_num, RenameMeta};
-
 use dce::dead_code;
 use fold::{const_fold, ConstMap, ValueKind, WorkStuff};
 
@@ -119,12 +115,13 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
     let start = OrdLabel::entry();
     let exit = OrdLabel::exit();
 
-    for (ord, n) in reverse_postorder(
-        &cfg.paths.iter().map(|(k, v)| (OrdLabel::new(k), v.clone())).collect::<HashMap<_, _>>(),
-        &start,
-    ).into_iter()
-    .enumerate()
-    {
+    let mut preds: HashMap<_, BTreeSet<_>> = HashMap::new();
+    for (from, set) in &cfg.paths {
+        for to in set {
+            preds.entry(to.clone()).or_default().insert(OrdLabel::new(from));
+        }
+    }
+    for (ord, n) in reverse_postorder(&preds, &exit).into_iter().enumerate() {
         // Updates the global map that keeps track of a labels order in the graph
         OrdLabel::update(ord as isize, n.as_str());
     }
@@ -133,7 +130,6 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
     // when ralloc needs SSA numbering we crash, since the last value for `start` was the
     // last from doing postorder.
     let start = OrdLabel::from_known(start.as_str());
-
     let succs: HashMap<_, BTreeSet<OrdLabel>> = cfg
         .paths
         .iter()
@@ -144,7 +140,6 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
             )
         })
         .collect();
-
     let mut preds: HashMap<_, BTreeSet<_>> = HashMap::new();
     for (from, set) in &succs {
         for to in set {
@@ -154,10 +149,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
 
     // Build dominator tree
     let mut dom_map = HashMap::with_capacity(blocks.len());
-    let all_nodes: Vec<_> = reverse_postorder(&succs, &start).into_iter().cloned().collect();
-
-    println!("{:?}", all_nodes);
-
+    let all_nodes: Vec<_> = reverse_postorder(&preds, &exit).into_iter().cloned().collect();
     dom_map.insert(start.clone(), BTreeSet::new());
     for n in all_nodes.iter().skip(1) {
         dom_map.insert(n.clone(), all_nodes.iter().cloned().collect());
@@ -199,6 +191,9 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
         }
     }
 
+    // print_maps("dom_map", dom_map.iter());
+    // print_maps("dom_tree", dom_tree.iter());
+
     // Build dominance predecessor map (AKA find join points)
     let mut dom_tree_pred = HashMap::with_capacity(all_nodes.len());
     for (to, set) in &dom_tree {
@@ -206,6 +201,8 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
             dom_tree_pred.entry(from.clone()).or_insert_with(BTreeSet::new).insert(to.clone());
         }
     }
+
+    // print_maps("dom_preds", dom_tree_pred.iter());
 
     let mut idom_map = HashMap::with_capacity(all_nodes.len());
     for node in &all_nodes {
@@ -322,7 +319,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
         }
     }
 
-    print_maps("dom_tree", dom_tree.iter());
+    // print_maps("dom_tree", dom_tree.iter());
     // print_maps("dom_frontier_map", dom_frontier_map.iter());
 
     // print_maps("post_idom", post_idom_map.iter());
@@ -353,39 +350,10 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
             }
         }
     }
-
     // Carr's isn't the same as post dominator frontier...
     // It misses 1 -> 5 (see above)
-    //
-    // for node in postorder(&post_dom_tree, cfg.exits) {
-    //     println!("{}", node.as_str());
-    //     for c in succs.get(node).unwrap_or(&empty) {
-    //         for m in post_dom_frontier.get(c).cloned().unwrap_or_default() {
-    //             if !post_dom_tree.get(node).map_or(false, |set| set.contains(&m)) {
-    //                 // This is node -> nodes it controls
-    //                 //
-    // post_dom_frontier.entry(m.clone()).or_default().insert(node.clone());
 
-    //                 // This is node -> nodes that control it (generally nodes above it)
-    //
-    // post_dom_frontier.entry(node.clone()).or_default().insert(m.clone());
-    //             }
-    //         }
-    //     }
-    //     for m in preds.get(node).unwrap_or(&empty) {
-    //         // We have to use the updated label orderings or we get duplicates
-    //         let m = OrdLabel::from_known(m.as_str());
-    //         if !post_dom_tree.get(node).map_or(false, |set| set.contains(&m)) {
-    //             // This is node -> nodes it controls
-    //             // post_dom_frontier.entry(m).or_default().insert(node.clone());
-
-    //             // This is node -> nodes that control it (generally nodes above it)
-    //             post_dom_frontier.entry(node.clone()).or_default().insert(m);
-    //         }
-    //     }
-    // }
-
-    // println!("pdf {:#?}", post_dom_frontier);
+    // print_maps("pdf", post_dom_frontier.iter());
 
     DominatorTree {
         dom_frontier_map,
@@ -486,8 +454,8 @@ pub fn insert_phi_functions(
         }
     }
 
-    print_maps("liveout", live_out.iter());
-    print_maps("livein", live_in.iter());
+    // print_maps("liveout", live_out.iter());
+    // print_maps("livein", live_in.iter());
 
     let empty_label = BTreeSet::new();
     let mut phis: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();

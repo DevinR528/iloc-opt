@@ -9,10 +9,10 @@ use crate::{
     ssa::{postorder, reverse_postorder, DominatorTree, OrdLabel},
 };
 
-pub fn print_maps<K: fmt::Display, V: fmt::Debug>(name: &str, map: impl Iterator<Item = (K, V)>) {
+pub fn print_maps<K: fmt::Debug, V: fmt::Debug>(name: &str, map: impl Iterator<Item = (K, V)>) {
     println!("{} {{", name);
     for (k, v) in map {
-        println!("    {}: {:?},", k, v);
+        println!("    {:?}: {:?},", k, v);
     }
     println!("}}")
 }
@@ -61,7 +61,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut kill: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
+        for label in reverse_postorder(&domtree.cfg_preds_map, &exit) {
             let Some(blk) = func.blocks.iter().find(|b| b.label == label.as_str()) else { continue; };
 
             let uni = universe.entry(label.clone()).or_default();
@@ -110,7 +110,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut avail_in: HashMap<OrdLabel, BTreeSet<_>> = HashMap::new();
     while changed {
         changed = false;
-        for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
+        for label in reverse_postorder(&domtree.cfg_preds_map, &exit) {
             let empty_bset = BTreeSet::new();
             // AVAILABLE-IN (only used to compute `avail_out`)
             // Empty set for anticipated-out exit block
@@ -241,7 +241,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut earliest: HashMap<(OrdLabel, OrdLabel), BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for succ in reverse_postorder(&domtree.cfg_succs_map, &start) {
+        for succ in reverse_postorder(&domtree.cfg_preds_map, &exit) {
             // Same thing as succ != start
             let Some(preds) = domtree.cfg_preds_map.get(succ) else { continue; };
             for pred in preds {
@@ -292,7 +292,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut later_in: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for b_label in reverse_postorder(&domtree.cfg_succs_map, &start) {
+        for b_label in reverse_postorder(&domtree.cfg_preds_map, &exit) {
             // This is the same as b_label != start
             let Some(preds) = domtree.cfg_preds_map.get(b_label) else { continue; };
 
@@ -347,7 +347,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut delete: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for b_label in reverse_postorder(&domtree.cfg_succs_map, &start) {
+        for b_label in reverse_postorder(&domtree.cfg_preds_map, &exit) {
             // This works as `if b_label == start { both == ∅ }`
             let Some(preds) = domtree.cfg_preds_map.get(b_label) else { continue; };
 
@@ -376,9 +376,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
         }
     }
 
-    // print_maps("insert", insert.iter());
-    // print_maps("delete", delete.iter());
-    // println!();
+    print_maps("insert", insert.iter());
+    print_maps("delete", delete.iter());
+    println!();
 
     let loop_analysis = find_loops(func, domtree);
 
@@ -388,16 +388,19 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     for ((pred, succ), registers) in insert.into_iter().filter(|(_, regs)| !regs.is_empty()) {
         let mut to_move = vec![];
         for r in &registers {
+            let Some(inst) = dst_map.get(&(succ.clone(), *r)) else {
+                continue;
+            };
+
+            if !is_lcm_expr(inst) { continue; }
+
             if delete.get(&pred).map_or(false, |dset| dset.contains(r)) {
                 deleted.insert((pred.clone(), *r));
                 continue;
             }
 
-            let Some(inst) = dst_map.get(&(succ.clone(), *r)) else {
-                continue;
-            };
 
-            // if matches!(inst, Instruction::I2F { .. }) { continue; }
+
 
             let Some(b) = func.blocks.iter().position(|b| b.label == succ.as_str()) else {
                 unreachable!("{:?}", succ)
@@ -405,6 +408,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
             let Some(i) = func.blocks[b].instructions.iter().position(|i| i == inst) else {
                 unreachable!("{:?}", (succ, &func.blocks[b]))
             };
+
+            println!("INSERT {:?}", inst);
+
             let can_delete = delete.get(&succ).map_or(false, |dset| dset.contains(r));
             to_move.push(if can_delete {
                 deleted.insert((succ.clone(), *r));
@@ -494,7 +500,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
                     unreachable!("{:?}", label)
                 };
 
-                // if matches!(inst, Instruction::I2F { .. }) { continue; }
+                if !is_lcm_expr(inst) { continue; }
 
                 let Some(b) = func.blocks.iter().position(|b| b.label == label.as_str()) else {
                     unreachable!("{:?}", label)
@@ -507,4 +513,18 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
             }
         }
     }
+}
+
+fn is_lcm_expr(inst: &Instruction) -> bool {
+    !matches!(
+        inst,
+        Instruction::Call { .. }
+            | Instruction::ImmCall { .. }
+            | Instruction::ImmRCall { .. }
+            | Instruction::Load { .. }
+            | Instruction::I2I { .. }
+            | Instruction::I2F { .. }
+            | Instruction::F2I { .. }
+            | Instruction::F2F { .. }
+        )
 }
