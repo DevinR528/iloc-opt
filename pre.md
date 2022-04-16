@@ -21,13 +21,13 @@ counts instructions are identical.
 
 | File            | Original | PRE/DCE   | Time     | Percentage |
 | -               | -        | -         | -        | -          |
-|`arrayparam.il`  |841       | 366       | 1 ms     | 56.7%      |
+|`arrayparam.il`  |841       | 373       | 1 ms     | 56.7%      |
 |`bubble.il`      |4374      | 1810      | 1 ms     | 55.9%      |
 |`check.il`       |140       | 2         | 0 ms     | 98.5%      |
-|`dynamic.il`     |39155     | 15473     | 4 ms     | 56.2%      |
+|`dynamic.il`     |39155     | 14443     | 4 ms     | 56.2%      |
 |`fib.il`         |274       | 168       | 0 ms     | 38.6%      |
 |`gcd.il`         |103       | 59        | 0 ms     | 42.7%      |
-|`newdyn.il`      |136919    | 47414     | 2 ms     | 61.7%      |
+|`newdyn.il`      |136919    | 44104     | 2 ms     | 61.7%      |
 |`qs.il`          |4574      | 2403      | 2  ms    | 47.0%      |
 |`while_array.il` |377       | 176       | 0 ms     | 50.9%      |
 

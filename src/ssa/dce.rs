@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::{
     iloc::{Function, Instruction, Loc, Val},
-    ssa::{postorder, reverse_postorder, DominatorTree},
+    ssa::{postorder, rpo, DominatorTree},
     OrdLabel,
 };
 
@@ -262,7 +262,7 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
         }
 
         let all: HashSet<_> = func.blocks.iter().map(|b| OrdLabel::new(&b.label)).collect();
-        let used: HashSet<_> = reverse_postorder(&cfg_preds, &exit).into_iter().cloned().collect();
+        let used: HashSet<_> = rpo(&cfg_map, start).into_iter().cloned().collect();
         for unused in all.difference(&used) {
             changed = true;
             let pos = func.blocks.iter().position(|b| b.label == unused.as_str()).unwrap();
@@ -271,9 +271,7 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
 
         if changed {
             cfg_map = build_stripped_cfg(func);
-            // for (i, l) in func.blocks.iter().map(|b| b.label).enumerate() {
-            //     *func.block_map.get_mut(&l).unwrap() = i;
-            // }
+
         }
     }
 }

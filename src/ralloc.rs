@@ -10,7 +10,7 @@ use crate::{
     ssa::{
         build_cfg,
         dce::{build_stripped_cfg, dead_code},
-        dom_val_num, dominator_tree, find_loops, insert_phi_functions, reverse_postorder, OrdLabel,
+        dom_val_num, dominator_tree, find_loops, insert_phi_functions, rpo, OrdLabel,
     }, ralloc::color::{ColoredGraph, FailedColoring},
 };
 
@@ -267,7 +267,7 @@ fn ralloc_simple() {
 }
 
 fn emit_good_ralloc_viz(
-    cfg: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
+    cfg_succs: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     start: &OrdLabel,
     blocks: &[Block],
     colored: &BTreeMap<Reg, ColorNode>,
@@ -299,7 +299,7 @@ fn emit_good_ralloc_viz(
     let mut seen_edges = BTreeSet::new();
     let mut buf = String::new();
     writeln!(buf, "digraph cfg {{").unwrap();
-    for n in reverse_postorder(cfg, start) {
+    for n in rpo(cfg_succs, start) {
         let blk_idx = blocks.iter().position(|b| b.label == n.as_str()).unwrap();
         let blk = &blocks[blk_idx];
         for (i_idx, inst) in blk.instructions.iter().enumerate() {
@@ -366,7 +366,7 @@ fn emit_good_ralloc_viz(
 }
 
 fn emit_ralloc_viz(
-    cfg: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
+    cfg_succs: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     start: &OrdLabel,
     blocks: &[Block],
     colored: &BTreeMap<Reg, ColorNode>,
@@ -391,7 +391,7 @@ fn emit_ralloc_viz(
 
     let mut buf = String::new();
     writeln!(buf, "digraph cfg {{").unwrap();
-    for n in reverse_postorder(cfg, start) {
+    for n in rpo(cfg_succs, start) {
         let blk = blocks.iter().find(|b| b.label == n.as_str()).unwrap();
         writeln!(
             buf,
@@ -478,7 +478,7 @@ fn emit_ralloc_viz(
         }
         writeln!(buf, "</table>>]");
 
-        for e in cfg.get(n).unwrap_or(&BTreeSet::new()) {
+        for e in cfg_succs.get(n).unwrap_or(&BTreeSet::new()) {
             writeln!(buf, "{} -> {}", n.as_str().replace('.', "_"), e.as_str().replace('.', "_"))
                 .unwrap();
         }

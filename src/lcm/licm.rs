@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     iloc::Function,
-    ssa::{reverse_postorder, DominatorTree, OrdLabel},
+    ssa::{rpo, DominatorTree, OrdLabel},
 };
 
 #[derive(Debug)]
@@ -72,12 +72,12 @@ impl LoopAnalysis {
 }
 
 pub fn find_loops(func: &mut Function, domtree: &DominatorTree) -> LoopAnalysis {
-    let exit = OrdLabel::exit();
+    let start = OrdLabel::entry();
     // println!("{:#?}", domtree);
     let mut loops = BTreeMap::<_, String>::new();
     let mut loop_ord = vec![];
     // We traverse the CFG in reverse postorder
-    for blk in reverse_postorder(&domtree.cfg_succs_map, &exit) {
+    for blk in rpo(&domtree.cfg_succs_map, &start) {
         // We check each predecessor of the control flow graph
         for pred in domtree.cfg_preds_map.get(blk).unwrap_or(&BTreeSet::default()) {
             // If the block dominates one of it's preds it is a back edge to a loop
