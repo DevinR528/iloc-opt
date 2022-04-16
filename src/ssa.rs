@@ -413,7 +413,8 @@ pub fn insert_phi_functions(
     // encountered since we know dom frontier
     for blk in postorder(cfg_succs, &start) {
         // This represents any redefinitions that are local to the current block
-        let mut varkil = HashSet::new();
+        let mut varkil = BTreeSet::new();
+        let mut upv = BTreeSet::new();
         for inst in func
             .blocks
             .iter()
@@ -421,44 +422,91 @@ pub fn insert_phi_functions(
             .map_or(&[] as &[_], |b| &b.instructions)
         {
             let (a, b) = inst.operands();
-            let dst = inst.target_reg();
-            if let Some(a @ Operand::Register(..)) = a {
+            if let Some(Operand::Register(a)) = a {
                 if !varkil.contains(&a) {
-                    blocks_map.entry(a.clone()).or_insert_with(HashSet::new).insert(blk);
+                    blocks_map.entry(a).or_insert_with(BTreeSet::new).insert(blk.clone());
                     globals.push(a);
+                    upv.insert(a);
                 }
             }
-            if let Some(b @ Operand::Register(..)) = b {
+            if let Some(Operand::Register(b)) = b {
                 if !varkil.contains(&b) {
-                    blocks_map.entry(b.clone()).or_insert_with(HashSet::new).insert(blk);
+                    blocks_map.entry(b).or_insert_with(BTreeSet::new).insert(blk.clone());
                     globals.push(b);
+                    upv.insert(b);
                 }
             }
-            if let Some(dst) = dst {
-                varkil.insert(Operand::Register(*dst));
-                blocks_map.entry(Operand::Register(*dst)).or_insert_with(HashSet::new).insert(blk);
+            if let Some(dst) = inst.target_reg() {
+                varkil.insert(*dst);
+                blocks_map.entry(*dst).or_insert_with(BTreeSet::new).insert(blk.clone());
+            }
+        }
+
+        varkill.insert(blk.clone(), varkil);
+        upvar.insert(blk.clone(), upv);
+    }
+
+    let empty = BTreeSet::new();
+    let mut changed = true;
+    let mut live_in: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
+    let mut live_out: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
+    while changed {
+        changed = false;
+        for label in postorder(cfg_succs, &start) {
+            let live_def_diff = live_out
+                .get(label)
+                .unwrap_or(&empty)
+                .difference(varkill.get(label).unwrap_or(&empty))
+                .copied()
+                .collect();
+
+            // PhiDef(b) ∪ UpExpr(b) ∪ (LiveOut(b) - Defs(b))
+            let new = upvar.get(label).unwrap_or(&empty)
+                .union(&live_def_diff)
+                .copied()
+                .collect();
+            let old = live_in.entry(label.clone()).or_default();
+            if *old != new {
+                *old = new;
+                changed |= true;
+            }
+
+            let mut new = cfg_succs
+                .get(label) // TODO: filter exit node out
+                .unwrap_or(&BTreeSet::new())
+                .iter()
+                .map(|s| live_in.get(s).unwrap_or(&empty))
+                .fold(BTreeSet::new(), |collect, next| collect.union(next).copied().collect());
+
+            let curr = live_out.entry(label.clone()).or_default();
+            if new != *curr {
+                changed = true;
+                *curr = new;
             }
         }
     }
 
-    let empty = HashSet::new();
-    let empty_set = BTreeSet::new();
-    let mut phis: HashMap<_, HashSet<_>> = HashMap::new();
+    print_maps("liveout", live_out.iter());
+    print_maps("livein", live_in.iter());
+
+    let empty_label = BTreeSet::new();
+    let mut phis: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     for global_reg in &globals {
         let mut worklist =
-            blocks_map.get(global_reg).unwrap_or(&empty).iter().copied().collect::<VecDeque<_>>();
+            blocks_map.get(global_reg).unwrap_or(&empty_label).iter().collect::<VecDeque<_>>();
         // For every block that this variable is live in
         while let Some(blk) = worklist.pop_front() {
             // The dominance frontier (join point) is the block that needs
             // the 𝛟 added to it
-            for d in dom_front.get(blk).unwrap_or(&empty_set) {
+            for d in dom_front.get(blk).unwrap_or(&empty_label) {
                 // If we have seen this register or it isn't in the current block we are
                 // checking skip it
                 if !phis.get(d).map_or(false, |set| set.contains(global_reg))
-                    && blocks_map.get(global_reg).map_or(false, |l| l.contains(blk))
+                    && blocks_map.get(global_reg).map_or(false, |l| l.contains(d))
+                    && live_in.get(d).map_or(false, |set| set.contains(global_reg))
                 {
                     // insert phi func
-                    phis.entry(d.clone()).or_default().insert(global_reg.clone());
+                    phis.entry(d.clone()).or_default().insert(*global_reg);
                     // Add the dom frontier node to the `worklist`
                     worklist.push_back(d);
                 }
@@ -467,14 +515,14 @@ pub fn insert_phi_functions(
     }
 
     for (label, set) in &phis {
-        if label.as_str() == ".E_exit" {
-            continue;
-        }
+        // if label.as_str() == ".E_exit" {
+        //     continue;
+        // }
         let blk = func.blocks.iter_mut().find(|b| b.label == label.as_str()).unwrap();
         // If the block starts with a frame and label skip it other wise just skip a label
         let index = if let Instruction::Frame { .. } = &blk.instructions[0] { 2 } else { 1 };
         for reg in set {
-            blk.instructions.insert(index, Instruction::new_phi(reg.copy_to_register()));
+            blk.instructions.insert(index, Instruction::new_phi(*reg));
         }
     }
 
