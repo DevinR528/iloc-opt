@@ -193,7 +193,8 @@ pub fn build_interference(
                         changed |= uloc.insert(op);
                     }
                 }
-                // All "kill" is after up_exposed
+                // All "kill" is after up_exposed since you can write to the same register
+                // used as an operand
                 if let Some(t) = inst.target_reg() {
                     def_loc.insert(*t);
                 }
@@ -218,11 +219,18 @@ pub fn build_interference(
                                 phi_uses.entry(l.clone()).or_default().insert(phi);
                             }
                         }
+
+                        // Merge Phi nodes, if any of the sets (what feeds me) have any elements in common
+                        // we merge them, this also includes the subscript since the subscript can be used
+                        // in future blocks (with no redef of that)
                         let mut move_to = BTreeMap::new();
                         for ((a, aset), (b, bset)) in phi_map.iter().zip(phi_map.iter().skip(1)) {
+                            let mut aset = aset.clone();
+                            let mut bset = bset.clone();
+                            aset.insert(*a); bset.insert(*b);
                             // This is checking `is_intersection` basically
                             // if there are common elements
-                            if !aset.is_disjoint(bset) {
+                            if !aset.is_disjoint(&bset) {
                                 move_to.insert(*a, *b);
                             }
                         }
@@ -249,7 +257,71 @@ pub fn build_interference(
     // print_maps("phi_defs", phi_defs.iter());
     // print_maps("phi_uses", phi_uses.iter());
     // print_maps("upexpo", uexpr.iter());
+    // print_maps("defs", defs.iter());
     // println!();
+
+    let connected_phis: BTreeMap<Reg, Reg> = phi_map.iter()
+        .flat_map(|(k, set)| set.iter().copied().chain(Some(*k)).map(|r| (r, *k)))
+        .collect();
+    let mut map = BTreeMap::new();
+    for block in postorder(&domtree.cfg_succs_map, &start) {
+        let blk_idx = blocks.iter().position(|b| b.label == block.as_str()).unwrap();
+        for inst in blocks[blk_idx].instructions.iter_mut().rev() {
+            if matches!(inst, Instruction::Skip(..)) {
+                continue;
+            }
+
+            let uloc = uexpr.entry(block.clone()).or_default();
+            let def_loc = defs.entry(block.clone()).or_default();
+            let phi_def_loc = phi_defs.entry(block.clone()).or_default();
+
+            if let Some(dst) = inst.target_reg_mut() {
+                if matches!(dst, Reg::Phi(0, _) | Reg::Var(0)) {
+                    *dst = Reg::Var(0);
+                    continue;
+                }
+                let dst_new_name = if let Some(new_name) = connected_phis.get(dst) {
+                    let len = map.len() + 1;
+                    *map.entry(*new_name).or_insert(Reg::Var(len))
+                } else {
+                    let len = map.len() + 1;
+                    *map.entry(*dst).or_insert(Reg::Var(len))
+                };
+                if def_loc.remove(dst) { def_loc.insert(dst_new_name); }
+                *dst = dst_new_name;
+            } else if let Instruction::Frame { params, .. } = inst {
+                for dst in params {
+                    let dst_new_name = if let Some(new_name) = connected_phis.get(dst) {
+                        let len = map.len() + 1;
+                        *map.entry(*new_name).or_insert(Reg::Var(len))
+                    } else {
+                        let len = map.len() + 1;
+                        *map.entry(*dst).or_insert(Reg::Var(len))
+                    };
+                    if def_loc.remove(dst) { def_loc.insert(dst_new_name); }
+                    *dst = dst_new_name;
+                }
+            }
+            for operand in inst.operand_iter_mut() {
+                if matches!(operand, Reg::Phi(0, _) | Reg::Var(0)) { continue; }
+
+                let operand_new_name = if let Some(new_name) = connected_phis.get(operand) {
+                    let len = map.len() + 1;
+                    *map.entry(*new_name).or_insert(Reg::Var(len))
+                } else {
+                    let len = map.len() + 1;
+                    *map.entry(*operand).or_insert(Reg::Var(len))
+                };
+
+                if uloc.remove(operand) { uloc.insert(operand_new_name); }
+                *operand = operand_new_name;
+            }
+        }
+    }
+
+    print_maps("upexpo", uexpr.iter());
+    print_maps("defs", defs.iter());
+    println!();
 
     changed = true;
     let empty = BTreeSet::new();
@@ -261,7 +333,6 @@ pub fn build_interference(
             let empty_bset = BTreeSet::new();
 
             // LIVE-IN
-            let phi_def = phi_defs.get(label).unwrap_or(&empty);
             let up_expr = uexpr.get(label).unwrap_or(&empty);
             let live_def_diff = live_out
                 .get(label)
@@ -270,11 +341,8 @@ pub fn build_interference(
                 .copied()
                 .collect();
 
-            // PhiDef(b) ∪ UpExpr(b) ∪ (LiveOut(b) - Defs(b))
-            let new = phi_def
-                .union(up_expr)
-                .copied()
-                .collect::<BTreeSet<_>>()
+            // UpExpr(b) ∪ (LiveOut(b) - Defs(b))
+            let new = up_expr
                 .union(&live_def_diff)
                 .copied()
                 .collect();
@@ -286,7 +354,7 @@ pub fn build_interference(
             }
 
             // live-out is
-            // (∪ ∀s {s: succs b} LiveIn(s) - PhiDefs(s)) ∪ PhiUse(b)
+            // (∪ ∀s {s: succs b} LiveIn(s))
             let mut new = domtree
                 .cfg_succs_map
                 .get(label) // TODO: filter exit node out
@@ -296,14 +364,8 @@ pub fn build_interference(
                     live_in
                         .get(s)
                         .unwrap_or(&empty)
-                        .difference(phi_defs.get(s).unwrap_or(&empty))
-                        .copied()
-                        .collect::<BTreeSet<_>>()
                 })
-                .fold(BTreeSet::new(), |collect, next| collect.union(&next).copied().collect())
-                .union(phi_uses.get(label).unwrap_or(&empty))
-                .copied()
-                .collect();
+                .fold(BTreeSet::new(), |collect, next| collect.union(next).copied().collect());
 
             let old = live_out.entry(label.clone()).or_default();
             if *old != new {
@@ -317,13 +379,6 @@ pub fn build_interference(
     print_maps("live_out", live_out.iter());
     println!();
 
-    // Mapping of the `Reg::Phi` name we chose and all `Reg::Phi`s connected to it by
-    // `Instruction::Phi` nodes
-    let connected_phis: BTreeMap<Reg, Reg> = phi_map.iter()
-        .flat_map(|(k, set)| set.iter().copied().chain(Some(*k)).map(|r| (r, *k)))
-        .collect();
-    let mut map = BTreeMap::new();
-
     let mut interference: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     for block in postorder(&domtree.cfg_succs_map, &start) {
         let livenow = live_out.get_mut(block).unwrap();
@@ -334,58 +389,32 @@ pub fn build_interference(
             }
 
             if let Some(dst) = inst.target_reg() {
-                let dst_new_name = if let Some(new_name) = connected_phis.get(dst) {
-                    let len = map.len() + 1;
-                    *map.entry(*new_name).or_insert(Reg::Var(len))
-                } else {
-                    let len = map.len() + 1;
-                    *map.entry(*dst).or_insert(Reg::Var(len))
-                };
                 for reg in &*livenow {
-                    if dst == reg || matches!(dst, Reg::Phi(0, _)) || matches!(reg, Reg::Phi(0, _))
+                    if dst == reg || matches!(dst, Reg::Var(0) | Reg::Phi(0, _)) || matches!(reg, Reg::Var(0) | Reg::Phi(0, _))
                     {
                         continue;
                     }
 
-                    let reg_new_name = if let Some(new_name) = connected_phis.get(reg) {
-                        let len = map.len() + 1;
-                        *map.entry(*new_name).or_insert(Reg::Var(len))
-                    } else {
-                        let len = map.len() + 1;
-                        *map.entry(*reg).or_insert(Reg::Var(len))
-                    };
-
-                    interference.entry(dst_new_name).or_default().insert(reg_new_name);
-                    interference.entry(reg_new_name).or_default().insert(dst_new_name);
+                    interference.entry(*dst).or_default().insert(*reg);
+                    interference.entry(*reg).or_default().insert(*dst);
                 }
                 // Incase there is a register that has no overlapping live ranges
-                interference.entry(dst_new_name).or_default();
+                interference.entry(*dst).or_default();
                 livenow.remove(dst);
+            } else if let Instruction::Frame { params, .. } = inst {
+                for dst in params {
+                    for reg in &*livenow {
+                        interference.entry(*dst).or_default().insert(*reg);
+                        interference.entry(*reg).or_default().insert(*dst);
+                    }
+                }
             }
             for operand in inst.operand_iter() {
-                if matches!(operand, Reg::Phi(0, _) | Reg::Var(0)) { continue; }
+                if matches!(operand, Reg::Var(0) | Reg::Phi(0, _)) { continue; }
 
-                let operand_new_name = if let Some(new_name) = connected_phis.get(&operand) {
-                    let len = map.len() + 1;
-                    *map.entry(*new_name).or_insert(Reg::Var(len))
-                } else {
-                    let len = map.len() + 1;
-                    *map.entry(operand).or_insert(Reg::Var(len))
-                };
                 // Incase there is a register that has no overlapping live ranges
-                interference.entry(operand_new_name).or_default();
+                interference.entry(operand).or_default();
                 livenow.insert(operand);
-            }
-
-            // Now remap the names of the register in the instructions
-            for r in inst.registers_mut_iter() {
-                if matches!(r, Reg::Phi(0, _) | Reg::Var(0)) {
-                    *r = Reg::Var(0);
-                    continue;
-                }
-
-                let reg = if let Some(new_name) = connected_phis.get(r) { *new_name } else { *r };
-                *r = *map.get(&reg).unwrap_or_else(|| panic!("{:?}", r));
             }
         }
     }
@@ -481,10 +510,6 @@ pub fn build_interference(
     //     blocks,
     //     &graph,
     //     &interference,
-    //     // &def_map
-    //     //     .iter()
-    //     //     .map(|(k, v)| (*k, v.iter().cloned().collect()))
-    //     //     .collect::<BTreeMap<_, Vec<_>>>(),
     //     "boo",
     // );
     // Command::new("dot")
