@@ -376,9 +376,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
         }
     }
 
-    print_maps("insert", insert.iter());
-    print_maps("delete", delete.iter());
-    println!();
+    // print_maps("insert", insert.iter());
+    // print_maps("delete", delete.iter());
+    // println!();
 
     let loop_analysis = find_loops(func, domtree);
 
@@ -392,7 +392,10 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
                 continue;
             };
 
-            if is_invalid_move(inst) { println!("[cannot move] {}", inst); continue; }
+            if is_invalid_move(inst) {
+                // println!("[cannot move] {}", inst);
+                continue;
+            }
 
             if delete.get(&pred).map_or(false, |dset| dset.contains(r)) {
                 deleted.insert((pred.clone(), *r));
@@ -408,8 +411,6 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
             let Some(i) = func.blocks[b].instructions.iter().position(|i| i == inst) else {
                 unreachable!("{:?}", (succ, &func.blocks[b]))
             };
-
-            println!("INSERT {:?}", inst);
 
             let can_delete = delete.get(&succ).map_or(false, |dset| dset.contains(r));
             to_move.push(if can_delete {
@@ -522,8 +523,10 @@ fn is_invalid_move(inst: &Instruction) -> bool {
             | Instruction::ImmCall { .. }
             | Instruction::ImmRCall { .. }
             | Instruction::Load { .. }
+            // | Instruction::I2I { .. }
             | Instruction::I2F { .. }
             | Instruction::F2I { .. }
             | Instruction::F2F { .. }
-        ) || matches!(inst, Instruction::I2I { src, .. } if *src != Reg::Var(0))
+        )
+        || matches!(inst, Instruction::I2I { src, .. } if *src != Reg::Var(0))
 }

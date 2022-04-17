@@ -1288,6 +1288,85 @@ impl Instruction {
         }
     }
 
+    pub fn operand_iter_mut(&mut self) -> Vec<&mut Reg> {
+        match self {
+            Self::I2I { src, .. }
+            | Self::F2I { src, .. }
+            | Self::I2F { src, .. }
+            | Self::F2F { src, .. }
+            | Self::Not { src, .. }
+            | Self::FLoad { src, .. }
+            | Self::Load { src, .. } => vec![src],
+
+            Self::Add { src_a, src_b, .. }
+            | Self::Sub { src_a, src_b, .. }
+            | Self::Mult { src_a, src_b, .. }
+            | Self::LShift { src_a, src_b, .. }
+            | Self::RShift { src_a, src_b, .. }
+            | Self::Mod { src_a, src_b, .. }
+            | Self::And { src_a, src_b, .. }
+            | Self::Or { src_a, src_b, .. }
+            | Self::FAdd { src_a, src_b, .. }
+            | Self::FSub { src_a, src_b, .. }
+            | Self::FMult { src_a, src_b, .. }
+            | Self::FDiv { src_a, src_b, .. }
+            | Self::FComp { src_a, src_b, .. } => vec![src_a, src_b],
+
+            Self::ImmAdd { src, .. }
+            | Self::ImmSub { src, .. }
+            | Self::ImmMult { src, .. }
+            | Self::ImmLShift { src, .. }
+            | Self::ImmRShift { src, .. }
+            | Self::LoadAddImm { src, .. }
+            | Self::FLoadAddImm { src, .. } => vec![src],
+
+            Self::StoreAddImm { src, dst, .. } => vec![src, dst],
+            Self::StoreAdd { src, add, dst } => vec![src, add, dst],
+            Self::Store { src, dst } => vec![src, dst],
+
+            // TODO: I think this is correct
+            // Self::ImmLoad { src, .. } => vec![],
+            Self::LoadAdd { src, add, .. } | Self::FLoadAdd { src, add, .. } => {
+                vec![src, add]
+            }
+
+            Self::IWrite(r)
+            | Self::FWrite(r)
+            | Self::SWrite(r)
+            | Self::IRead(r)
+            | Self::PutChar(r)
+            | Self::FRead(r) => vec![r],
+
+            Self::CmpLT { a, b, .. }
+            | Self::CmpLE { a, b, .. }
+            | Self::CmpGT { a, b, .. }
+            | Self::CmpGE { a, b, .. }
+            | Self::CmpEQ { a, b, .. }
+            | Self::CmpNE { a, b, .. }
+            | Self::Comp { a, b, .. }
+            | Self::CbrEQ { a, b, .. }
+            | Self::CbrNE { a, b, .. }
+            | Self::CbrGT { a, b, .. }
+            | Self::CbrGE { a, b, .. }
+            | Self::CbrLT { a, b, .. }
+            | Self::CbrLE { a, b, .. } => vec![a, b],
+
+            Self::CbrT { cond, .. } | Self::CbrF { cond, .. } => vec![cond],
+
+            Self::TestEQ { test, .. }
+            | Self::TestNE { test, .. }
+            | Self::TestGT { test, .. }
+            | Self::TestGE { test, .. }
+            | Self::TestLT { test, .. }
+            | Self::TestLE { test, .. } => vec![test],
+
+            Self::Call { args, .. } | Self::ImmCall { args, .. } => args.iter_mut().collect(),
+            Self::ImmRet(ret) => vec![ret],
+
+            _ => vec![],
+        }
+    }
+
     pub fn operand_iter(&self) -> Vec<Reg> {
         match self {
             Self::I2I { src, .. }

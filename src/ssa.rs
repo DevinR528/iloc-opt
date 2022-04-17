@@ -126,7 +126,6 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
     let exit = OrdLabel::exit();
 
     let succs = cfg.paths.iter().map(|(k, v)| (OrdLabel::from_known(k), v.clone())).collect::<HashMap<_, _>>();
-    print_maps("succs", succs.iter());
     for (ord, n) in rpo(&succs, &start).into_iter().enumerate() {
         // Updates the global map that keeps track of a labels order in the graph
         OrdLabel::update(ord as isize, n.as_str());
@@ -197,8 +196,8 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
         }
     }
 
-    print_maps("dom_map", dom_map.iter());
-    print_maps("dom_tree", dom_tree.iter());
+    // print_maps("dom_map", dom_map.iter());
+    // print_maps("dom_tree", dom_tree.iter());
 
     // Build dominance predecessor map (AKA find join points)
     let mut dom_tree_pred = HashMap::with_capacity(all_nodes.len());
@@ -208,7 +207,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
         }
     }
 
-    print_maps("dom_preds", dom_tree_pred.iter());
+    // print_maps("dom_preds", dom_tree_pred.iter());
 
     let mut idom_map = HashMap::with_capacity(all_nodes.len());
     for node in &all_nodes {
@@ -250,7 +249,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
             }
         }
     }
-    print_maps("dom_frontier", dom_frontier_map.iter());
+    // print_maps("dom_frontier", dom_frontier_map.iter());
 
     // Reorder the numbering on each block so they are reversed
     let all_nodes: Vec<_> = postorder(&succs, &start)
