@@ -63,7 +63,6 @@ impl Spill {
 }
 
 pub fn allocate_registers(prog: &mut IlocProgram) {
-    return;
     'func: for func in &mut prog.functions {
         let start = OrdLabel::entry();
         let exit = OrdLabel::exit();
@@ -84,12 +83,15 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
 
         let loop_map = find_loops(func, &dtree);
 
+        dump_to(
+            &IlocProgram { preamble: vec![], functions: vec![func.clone()] },
+            &format!("{}ssa", func.label)
+        );
+
         let mut stack_size = func.stack_size;
         // TODO: Move/copy coalesce instructions in `build_interference`
         // TODO: Move/copy coalesce instructions in `build_interference`
         let (graph, interfere, defs) = loop {
-            // This is the graph that goes with the following terminal printouts
-
             match color::build_interference(&mut func.blocks, &dtree, &loop_map) {
                 Ok(ColoredGraph { graph, interference, defs }) => break (graph, interference, defs),
                 Err(FailedColoring { insert_spills, uses, defs }) => {
@@ -185,7 +187,12 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
             }
         };
 
-        dump_to(&IlocProgram { preamble: vec![], functions: vec![func.clone()] });
+        dump_to(
+            &IlocProgram { preamble: vec![], functions: vec![func.clone()] },
+            &format!("{}ra", func.label)
+        );
+
+// return;
 
         func.stack_size = stack_size;
 
@@ -208,10 +215,15 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
     println!("NUMBER OF REGS {}", K_DEGREE);
 }
 
-fn dump_to(prog: &IlocProgram) {
+static mut CNT: usize = 0;
+fn dump_to(prog: &IlocProgram, name: &str) {
     let mut buf = String::new();
     let x: bool;
+    let cnt: usize;
     unsafe {
+        CNT += 1;
+        cnt = CNT;
+
         x = crate::SSA;
         crate::SSA = true;
     }
@@ -225,9 +237,9 @@ fn dump_to(prog: &IlocProgram) {
         crate::SSA = x;
     }
 
-    let mut path = std::path::PathBuf::from("./input/ralloc.il");
+    let mut path = std::path::PathBuf::from(&format!("./input/{}.il", name));
     let file = path.file_stem().unwrap().to_string_lossy().to_string();
-    path.set_file_name(&format!("{}.pre.ssa.il", file));
+    path.set_file_name(&format!("{}{}.pre.ssa.il", file, cnt));
     let mut fd =
         std::fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
     // Call the trait so I don't import stuff that will just be deleted
