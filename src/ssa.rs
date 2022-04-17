@@ -34,6 +34,8 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
     // Add the entry block to the label cache
     let _save_the_label = OrdLabel::new_add(0, ".E_entry");
     func.blocks.insert(0, Block::enter());
+
+    let mut dead = BTreeSet::new();
     'block: for (idx, block) in func.blocks.iter().enumerate() {
         let b_label = &block.label;
 
@@ -42,7 +44,7 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
         'inst: for inst in &block.instructions {
             // N.B.
             // `build_stripped_cfg` in the `dce` mod takes care of all cleaning unreachable code
-            if inst.is_return() {
+            if inst.is_return() && !dead.contains(b_label.as_str()) {
                 cfg.exits.push(if idx == 0 {
                     OrdLabel::new_add(0, b_label)
                 } else {
@@ -67,14 +69,22 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
                 // N.B.
                 // `build_stripped_cfg` in the `dce` mod takes care of all cleaning unreachable code
                 if inst.unconditional_jmp() {
-                    continue 'block;
+                    if unreachable {
+                        dead.insert(label);
+                    }
+                    unreachable = true;
+                    continue 'inst;
                 }
             }
         }
 
-        if let Some(next) = func.blocks.get(idx + 1) && !unreachable {
+        if let Some(next) = func.blocks.get(idx + 1) {
             let next_label = &next.label;
-            cfg.add_edge(b_label, next_label, 0);
+            if !unreachable {
+                cfg.add_edge(b_label, next_label, 0);
+            } else {
+                let _save_the_label = OrdLabel::new_add(sort, next_label);
+            }
         }
     }
 
@@ -115,14 +125,8 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
     let start = OrdLabel::entry();
     let exit = OrdLabel::exit();
 
-    let mut preds: HashMap<_, BTreeSet<_>> = HashMap::new();
-    for (from, set) in &cfg.paths {
-        for to in set {
-            preds.entry(to.clone()).or_default().insert(OrdLabel::from_known(from));
-        }
-    }
-
     let succs = cfg.paths.iter().map(|(k, v)| (OrdLabel::from_known(k), v.clone())).collect::<HashMap<_, _>>();
+    print_maps("succs", succs.iter());
     for (ord, n) in rpo(&succs, &start).into_iter().enumerate() {
         // Updates the global map that keeps track of a labels order in the graph
         OrdLabel::update(ord as isize, n.as_str());
@@ -204,7 +208,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
         }
     }
 
-    // print_maps("dom_preds", dom_tree_pred.iter());
+    print_maps("dom_preds", dom_tree_pred.iter());
 
     let mut idom_map = HashMap::with_capacity(all_nodes.len());
     for node in &all_nodes {
@@ -218,8 +222,6 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
             }
         }
     }
-
-    // println!("tree: {:#?} \ndom_preds: {:#?}\n{:?}", dom_tree, dom_tree_pred, preds);
 
     let empty = BTreeSet::new();
     // Keith Cooper/Linda Torczon EaC pg. 499 SSA dominance frontier algorithm
@@ -248,6 +250,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
             }
         }
     }
+    print_maps("dom_frontier", dom_frontier_map.iter());
 
     // Reorder the numbering on each block so they are reversed
     let all_nodes: Vec<_> = postorder(&succs, &start)
@@ -472,7 +475,6 @@ pub fn insert_phi_functions(
                 // If we have seen this register or it isn't in the current block we are
                 // checking skip it
                 if !phis.get(d).map_or(false, |set| set.contains(global_reg))
-                    && blocks_map.get(global_reg).map_or(false, |l| l.contains(d))
                     && live_in.get(d).map_or(false, |set| set.contains(global_reg))
                 {
                     // insert phi func
