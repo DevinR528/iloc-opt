@@ -121,7 +121,6 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
         // Which blocks does `b_label` control the execution of (where does this block
         // jump/branch/fall-through to)
         for blk in domtree.post_dom_frontier.get(b_label).unwrap_or(&empty) {
-            // println!("{b_label} {blk}");
             let Some(block) = func.blocks.iter()
                 .find(|b| {
                     b.label == blk.as_str()
@@ -155,10 +154,7 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
                     // post dominance
                     // Which blocks will for sure run next (so we can jump to it)
                     if let Some(label) = domtree.post_idom_map.get(blk.label.as_str()) {
-                        println!(
-                            "rewrite branch {} jumpI -> {:?} {:#?} {:#?}",
-                            inst, label, domtree.post_idom_map, domtree.post_dom_frontier
-                        );
+                        println!("rewrite branch to jump {} -> {:?}", inst, label);
 
                         jumps.push((b, i, Instruction::ImmJump(Loc(label.to_string()))));
                     }

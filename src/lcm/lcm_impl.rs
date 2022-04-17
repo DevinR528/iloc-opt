@@ -392,7 +392,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
                 continue;
             };
 
-            if !is_lcm_expr(inst) { continue; }
+            if is_invalid_move(inst) { println!("[cannot move] {}", inst); continue; }
 
             if delete.get(&pred).map_or(false, |dset| dset.contains(r)) {
                 deleted.insert((pred.clone(), *r));
@@ -500,7 +500,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
                     unreachable!("{:?}", label)
                 };
 
-                if !is_lcm_expr(inst) { continue; }
+                if is_invalid_move(inst) { continue; }
 
                 let Some(b) = func.blocks.iter().position(|b| b.label == label.as_str()) else {
                     unreachable!("{:?}", label)
@@ -515,16 +515,15 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     }
 }
 
-fn is_lcm_expr(inst: &Instruction) -> bool {
-    !matches!(
+fn is_invalid_move(inst: &Instruction) -> bool {
+    matches!(
         inst,
         Instruction::Call { .. }
             | Instruction::ImmCall { .. }
             | Instruction::ImmRCall { .. }
             | Instruction::Load { .. }
-            | Instruction::I2I { .. }
             | Instruction::I2F { .. }
             | Instruction::F2I { .. }
             | Instruction::F2F { .. }
-        )
+        ) || matches!(inst, Instruction::I2I { src, .. } if *src != Reg::Var(0))
 }
