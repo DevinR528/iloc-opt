@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque, BTreeMap};
 
 pub use crate::{
     label::OrdLabel,
-    lcm::{find_loops, lazy_code_motion, postorder, rpo, print_maps},
+    lcm::{find_loops, lazy_code_motion, postorder, reverse_postorder, print_maps},
     iloc::{Block, Function, IlocProgram, Instruction, Operand, Reg},
 };
 
@@ -120,13 +120,12 @@ pub struct DominatorTree {
     pub cfg_preds_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
 }
 
-// TODO: Cleanup (see todo's above loops and such)
 pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> DominatorTree {
     let start = OrdLabel::entry();
     let exit = OrdLabel::exit();
 
     let succs = cfg.paths.iter().map(|(k, v)| (OrdLabel::from_known(k), v.clone())).collect::<HashMap<_, _>>();
-    for (ord, n) in rpo(&succs, &start).into_iter().enumerate() {
+    for (ord, n) in reverse_postorder(&succs, &start).into_iter().enumerate() {
         // Updates the global map that keeps track of a labels order in the graph
         OrdLabel::update(ord as isize, n.as_str());
     }
@@ -154,7 +153,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
 
     // Build dominator tree
     let mut dom_map = HashMap::with_capacity(blocks.len());
-    let all_nodes: Vec<_> = rpo(&succs, &start).into_iter().cloned().collect();
+    let all_nodes: Vec<_> = reverse_postorder(&succs, &start).into_iter().cloned().collect();
     dom_map.insert(start.clone(), BTreeSet::new());
     for n in all_nodes.iter().skip(1) {
         dom_map.insert(n.clone(), all_nodes.iter().cloned().collect());
@@ -197,7 +196,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
     }
 
     // print_maps("dom_map", dom_map.iter());
-    // print_maps("dom_tree", dom_tree.iter());
+    // print_maps("cfg_preds", preds.iter());
 
     // Build dominance predecessor map (AKA find join points)
     let mut dom_tree_pred = HashMap::with_capacity(all_nodes.len());
@@ -222,19 +221,21 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
         }
     }
 
+    // print_maps("idom", idom_map.iter());
+
     let empty = BTreeSet::new();
     // Keith Cooper/Linda Torczon EaC pg. 499 SSA dominance frontier algorithm
     //
     // This is a mapping of node -> descendent in graph that is join point for this node
-    // (anytime the graph make the lower half of a diamond)
+    // (anytime the graph makes the lower half of a diamond)
     let mut dom_frontier_map: HashMap<OrdLabel, BTreeSet<OrdLabel>> =
         HashMap::with_capacity(all_nodes.len());
     for node in &all_nodes {
         let parents = preds.get(node).unwrap_or(&empty);
         // Node must be a join point (have multiple preds)
         if parents.len() > 1 {
-            // For each previous node find a predecessor of `label` that also dominates
-            // `label
+            // For each previous node find a predecessor of `node` that also dominates
+            // `node`
             for p in parents {
                 let mut run = p;
                 // Until we hit an immediate dominator
@@ -249,6 +250,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
             }
         }
     }
+
     // print_maps("dom_frontier", dom_frontier_map.iter());
 
     // Reorder the numbering on each block so they are reversed

@@ -10,7 +10,7 @@ use crate::{
     ssa::{
         build_cfg,
         dce::{build_stripped_cfg, dead_code},
-        dom_val_num, dominator_tree, find_loops, insert_phi_functions, rpo, OrdLabel,
+        dom_val_num, dominator_tree, find_loops, insert_phi_functions, reverse_postorder, OrdLabel,
     }, ralloc::color::{ColoredGraph, FailedColoring},
 };
 
@@ -311,7 +311,7 @@ fn emit_good_ralloc_viz(
     let mut seen_edges = BTreeSet::new();
     let mut buf = String::new();
     writeln!(buf, "digraph cfg {{").unwrap();
-    for n in rpo(cfg_succs, start) {
+    for n in reverse_postorder(cfg_succs, start) {
         let blk_idx = blocks.iter().position(|b| b.label == n.as_str()).unwrap();
         let blk = &blocks[blk_idx];
         for (i_idx, inst) in blk.instructions.iter().enumerate() {
@@ -403,7 +403,7 @@ fn emit_ralloc_viz(
 
     let mut buf = String::new();
     writeln!(buf, "digraph cfg {{").unwrap();
-    for n in rpo(cfg_succs, start) {
+    for n in reverse_postorder(cfg_succs, start) {
         let blk = blocks.iter().find(|b| b.label == n.as_str()).unwrap();
         writeln!(
             buf,
