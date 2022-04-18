@@ -4,7 +4,7 @@ use crate::ssa::OrdLabel;
 
 /// This is parent -> children, where children is fall through then jump (ssa val
 /// numbering needs this)
-pub fn rpo<'a>(
+pub fn reverse_postorder<'a>(
     succs: &'a HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     start: &'a OrdLabel,
 ) -> impl Iterator<Item = &'a OrdLabel> + 'a {

@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::{
     iloc::{Function, Instruction, Loc, Val},
-    ssa::{postorder, rpo, DominatorTree},
+    ssa::{postorder, reverse_postorder, DominatorTree},
     OrdLabel,
 };
 
@@ -193,6 +193,11 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
 
         changed = false;
         for blk in postorder(&cfg_map, start) {
+            // TODO: this should be ok...
+            // Ignore code motion moved blocks...
+            if blk.as_str().starts_with(".pre.") {
+                continue;
+            }
             let Some((idx, block)) = func.blocks.iter()
                 .enumerate()
                 .find(|(_, b)| b.label == blk.as_str())
@@ -215,6 +220,11 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
 
             // i (in "Engineering a Compiler" book pg. 548)
             if let Some(loc) = block.ends_with_jump() {
+                // TODO: this should be ok...
+                // Ignore code motion moved blocks...
+                if loc.starts_with(".pre.") {
+                    continue;
+                }
                 // j (in "Engineering a Compiler" book pg. 548)
                 let Some(jump_to) = func.blocks.iter().find(|b| b.label == loc).cloned() else {
                     // We removed a block (loc) this block (blk) has as an only child
@@ -232,9 +242,8 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
                 }
 
                 // Since this block ends with a jumpI (blk) and the location (loc) only
-                // has one successor (so we aren't messing with any
-                // dominators) we remove the jump in blk and move `loc`'s
-                // instructions into `blk`
+                // has one successor (so we aren't altering any dominator relations)
+                // we remove the jump in blk and move `loc`'s instructions into `blk`
                 if cfg_preds.get(&OrdLabel::new(loc)).map_or(false, |set| set.len() == 1) {
                     changed = true;
                     println!("combine {loc} into {blk}");
@@ -258,7 +267,7 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
         }
 
         let all: HashSet<_> = func.blocks.iter().map(|b| OrdLabel::new(&b.label)).collect();
-        let used: HashSet<_> = rpo(&cfg_map, start).into_iter().cloned().collect();
+        let used: HashSet<_> = reverse_postorder(&cfg_map, start).into_iter().cloned().collect();
         for unused in all.difference(&used) {
             changed = true;
             let pos = func.blocks.iter().position(|b| b.label == unused.as_str()).unwrap();
