@@ -1,5 +1,5 @@
 .data
-    .string .str_const_0, "howdy"
+    .string .str_const_0, "howdy\n"
 .text
 .frame main, 16
     loadI 0 => %vr1
