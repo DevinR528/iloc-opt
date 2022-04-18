@@ -2557,8 +2557,13 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 size: size.parse().map_err(|_| "failed to parse .global size")?,
                 align: align.parse().map_err(|_| "failed to parse .global align")?,
             }),
-            [".string", name, str_lit @ ..] => instructions
-                .push(Instruction::String { name: name.to_string(), content: str_lit.join(" ").replace("\\n", "\n") }),
+            [".string", name, str_lit @ ..] => {
+                let text = str_lit.join(" ");
+                instructions.push(Instruction::String {
+                    name: name.to_string(),
+                    content: text
+                });
+            },
             [".float", name, val] => instructions.push(Instruction::Float {
                 name: name.to_string(),
                 content: val.parse().map_err(|_| "failed to parse .float value")?,

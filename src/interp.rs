@@ -653,7 +653,12 @@ impl Interpreter {
                 print!("{}", char::from_u32(self.registers().get(r)?.to_int()? as u32).unwrap())
             }
             Instruction::SWrite(r) => {
-                print!("{}", stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize])
+                let text = &stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize];
+                let Val::String(text) = text else { return None; };
+                let text = text.trim_start_matches('"');
+                let text = text.trim_end_matches('"');
+                let text = text.replace("\\n", "\n");
+                print!("{}", text)
             }
             _ => todo!("{:?}", instrs[self.inst_idx]),
         }

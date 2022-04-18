@@ -358,9 +358,9 @@ pub fn build_interference(
         }
     }
 
-    print_maps("live_in", live_in.iter());
-    print_maps("live_out", live_out.iter());
-    println!();
+    // print_maps("live_in", live_in.iter());
+    // print_maps("live_out", live_out.iter());
+    // println!();
 
     let mut interference: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     for block in postorder(&domtree.cfg_succs_map, &start) {
@@ -407,7 +407,7 @@ pub fn build_interference(
     let (def_map, use_map) = build_use_def_map(domtree, &*blocks);
 
     // print_maps("phi_map", phi_map.iter());
-    // print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
+    print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
     // println!();
 
     // let mut still_good = true;
@@ -521,7 +521,7 @@ pub fn build_interference(
 
         Ok(ColoredGraph { graph, interference, defs: def_map, })
     } else {
-        // print_maps("colored", graph.iter());
+        print_maps("colored", graph.iter());
 
         let mut insert_load_store = BTreeSet::new();
         for spilled in need_to_spill.drain(..) {
