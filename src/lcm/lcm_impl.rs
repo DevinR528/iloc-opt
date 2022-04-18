@@ -6,7 +6,7 @@ use std::{
 use crate::{
     iloc::{Block, Function, Instruction, Loc, Reg},
     lcm::find_loops,
-    ssa::{postorder, rpo, DominatorTree, OrdLabel},
+    ssa::{postorder, reverse_postorder, DominatorTree, OrdLabel},
 };
 
 pub fn print_maps<K: fmt::Debug, V: fmt::Debug>(name: &str, map: impl Iterator<Item = (K, V)>) {
@@ -61,7 +61,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut kill: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for label in rpo(&domtree.cfg_succs_map, &start) {
+        for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
             let Some(blk) = func.blocks.iter().find(|b| b.label == label.as_str()) else { continue; };
 
             let uni = universe.entry(label.clone()).or_default();
@@ -110,7 +110,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut avail_in: HashMap<OrdLabel, BTreeSet<_>> = HashMap::new();
     while changed {
         changed = false;
-        for label in rpo(&domtree.cfg_succs_map, &start) {
+        for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
             let empty_bset = BTreeSet::new();
             // AVAILABLE-IN (only used to compute `avail_out`)
             // Empty set for anticipated-out exit block
@@ -241,7 +241,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut earliest: HashMap<(OrdLabel, OrdLabel), BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for succ in rpo(&domtree.cfg_succs_map, &start) {
+        for succ in reverse_postorder(&domtree.cfg_succs_map, &start) {
             // Same thing as succ != start
             let Some(preds) = domtree.cfg_preds_map.get(succ) else { continue; };
             for pred in preds {
@@ -292,7 +292,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut later_in: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for b_label in rpo(&domtree.cfg_succs_map, &start) {
+        for b_label in reverse_postorder(&domtree.cfg_succs_map, &start) {
             // This is the same as b_label != start
             let Some(preds) = domtree.cfg_preds_map.get(b_label) else { continue; };
 
@@ -343,11 +343,11 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
 
     // INSERT and DELETE
     changed = true;
-    let mut insert: HashMap<(OrdLabel, OrdLabel), BTreeSet<Reg>> = HashMap::new();
-    let mut delete: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
+    let mut insert: BTreeMap<(OrdLabel, OrdLabel), BTreeSet<Reg>> = BTreeMap::new();
+    let mut delete: BTreeMap<OrdLabel, BTreeSet<Reg>> = BTreeMap::new();
     while changed {
         changed = false;
-        for b_label in rpo(&domtree.cfg_succs_map, &start) {
+        for b_label in reverse_postorder(&domtree.cfg_succs_map, &start) {
             // This works as `if b_label == start { both == ∅ }`
             let Some(preds) = domtree.cfg_preds_map.get(b_label) else { continue; };
 
@@ -380,14 +380,16 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     // print_maps("delete", delete.iter());
     // println!();
 
-    let loop_analysis = find_loops(func, domtree);
-
-    // print_maps("loops", loop_analysis.loop_map().iter());
-
+    // These are the instructions that we know are in the delete set and we deleted them during insertion
+    // (we just moved the instruction from one `Vec<Instruction>` to another)
     let mut deleted = BTreeSet::new();
-    for ((pred, succ), registers) in insert.into_iter().filter(|(_, regs)| !regs.is_empty()) {
+    // The insert instructions that have a `pred` (or move to, aka this is the edge to insert on)
+    // and the instruction itself in common
+    let mut common_insert = BTreeSet::<Reg>::new();
+    for ((pred, succ), registers) in insert.iter().filter(|(_, regs)| !regs.is_empty()) {
+        if common_insert.is_superset(registers) { continue; }
         let mut to_move = vec![];
-        for r in &registers {
+        for r in registers {
             let Some(inst) = dst_map.get(&(succ.clone(), *r)) else {
                 continue;
             };
@@ -397,7 +399,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
                 continue;
             }
 
-            if delete.get(&pred).map_or(false, |dset| dset.contains(r)) {
+            if delete.get(pred).map_or(false, |dset| dset.contains(r)) {
                 deleted.insert((pred.clone(), *r));
                 continue;
             }
@@ -412,7 +414,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
                 unreachable!("{:?}", (succ, &func.blocks[b]))
             };
 
-            let can_delete = delete.get(&succ).map_or(false, |dset| dset.contains(r));
+            let can_delete = delete.get(succ).map_or(false, |dset| dset.contains(r));
             to_move.push(if can_delete {
                 deleted.insert((succ.clone(), *r));
                 let inst = func.blocks[b].instructions[i].clone();
@@ -428,10 +430,20 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
             continue;
         }
 
+        let preds_succs = domtree.cfg_succs_map.get(pred).unwrap();
+        let is_insert_on_all_succs_edges = preds_succs.iter()
+            .all(|s| {
+                insert.get(&(pred.clone(), s.clone())).map_or(false, |insert_set| {
+                    insert_set.is_subset(registers) && insert_set.is_superset(registers)
+                })
+            });
+        if is_insert_on_all_succs_edges {
+            common_insert.extend(registers);
+        }
         // If pred has only one successor insert at end of pred
         // If succ has only one predecessor insert at entry to succ
         // Else edge is critical so insert block into middle of edge
-        if domtree.cfg_succs_map.get(&pred).unwrap().len() == 1 {
+        if preds_succs.len() <= 1 || is_insert_on_all_succs_edges {
             let Some(pred_blk) = func.blocks
                 .iter_mut()
                 .find(|b| b.label == pred.as_str()) else { unreachable!() };
@@ -446,7 +458,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
             for inst in to_move.into_iter().rev() {
                 pred_blk.instructions.insert(end_idx, inst);
             }
-        } else if domtree.cfg_preds_map.get(&succ).unwrap().len() == 1 {
+        } else if domtree.cfg_preds_map.get(succ).unwrap().len() == 1 {
             let Some(succ_blk) = func.blocks
                 .iter_mut()
                 .find(|b| b.label == succ.as_str()) else { unreachable!() };
@@ -464,8 +476,6 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
             for inst in to_move.into_iter().rev() {
                 succ_blk.instructions.insert(start_idx, inst);
             }
-        // This is to guard against a move of instructions from succ into pred's edge
-        // actually being a move into a more nested loop
         } else {
             // println!(
             //     "p {} s {}\ns: {:#?}\np: {:#?}",
