@@ -1,27 +1,25 @@
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque, BTreeMap};
 
-use crate::{
-    iloc::{Block, Function, IlocProgram, Instruction, Operand},
-    lcm::print_maps,
+pub use crate::{
+    label::OrdLabel,
+    lcm::{find_loops, lazy_code_motion, postorder, reverse_postorder, print_maps},
+    iloc::{Block, Function, IlocProgram, Instruction, Operand, Reg},
 };
 
 mod dbre;
 pub mod dce;
 mod fold;
 
-pub use crate::{
-    label::OrdLabel,
-    lcm::{find_loops, lazy_code_motion, postorder, reverse_postorder},
-};
 pub use dbre::{dom_val_num, RenameMeta};
-
 use dce::dead_code;
 use fold::{const_fold, ConstMap, ValueKind, WorkStuff};
 
 #[derive(Clone, Debug, Default)]
 pub struct ControlFlowGraph {
     paths: HashMap<String, BTreeSet<OrdLabel>>,
-    pub exits: Vec<OrdLabel>,
+    /// After `build_cfg` this will only ever be one `.E_exit` since this is used to merge all actual
+    /// exit blocks to a single exit.
+    exits: Vec<OrdLabel>,
 }
 
 impl ControlFlowGraph {
@@ -33,16 +31,20 @@ impl ControlFlowGraph {
 
 pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
     let mut cfg = ControlFlowGraph::default();
+    // Add the entry block to the label cache
+    let _save_the_label = OrdLabel::new_add(0, ".E_entry");
+    func.blocks.insert(0, Block::enter());
+
+    let mut dead = BTreeSet::new();
     'block: for (idx, block) in func.blocks.iter().enumerate() {
         let b_label = &block.label;
 
         let mut sort = 1;
         let mut unreachable = false;
-        // TODO: only iter the branch instructions with labels
         'inst: for inst in &block.instructions {
-            // TODO: can we make note of this for optimization...(if there are trailing
-            // unreachable instructions)
-            if inst.is_return() {
+            // N.B.
+            // `build_stripped_cfg` in the `dce` mod takes care of all cleaning unreachable code
+            if inst.is_return() && !dead.contains(b_label.as_str()) {
                 cfg.exits.push(if idx == 0 {
                     OrdLabel::new_add(0, b_label)
                 } else {
@@ -64,43 +66,52 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
                 // Skip the implicit branch to the block below the current one
                 // since we found an unconditional jump.
                 //
-                // TODO: can we make note of this for optimization...(if there are trailing
-                // unreachable instructions)
+                // N.B.
+                // `build_stripped_cfg` in the `dce` mod takes care of all cleaning unreachable code
                 if inst.unconditional_jmp() {
-                    continue 'block;
+                    if unreachable {
+                        dead.insert(label);
+                    }
+                    unreachable = true;
+                    continue 'inst;
                 }
             }
         }
 
         if let Some(next) = func.blocks.get(idx + 1) {
             let next_label = &next.label;
-            cfg.add_edge(b_label, next_label, 0);
+            if !unreachable {
+                cfg.add_edge(b_label, next_label, 0);
+            } else {
+                let _save_the_label = OrdLabel::new_add(sort, next_label);
+            }
         }
     }
 
+    // N.B.
+    // `build_stripped_cfg` in the `dce` mod takes care of all cleaning unreachable code
+    //
     // Remove unreachable blocks from the cf graph
     // let remove_blks = all.difference(&seen.keys().copied().collect::<BTreeSet<_>>());
     // for blk_idx in remove_blks {
     //     func.blocks.remove(blk_idx);
     // }
 
-    if cfg.exits.len() > 1 {
-        let exits: Vec<_> = cfg.exits.drain(..).collect();
-        for exit in exits {
-            cfg.add_edge(exit.as_str(), ".E_exit", 1);
-        }
-        cfg.exits.push(OrdLabel::from_known(".E_exit"));
-
-        func.blocks.push(Block::exit());
+    let exits: Vec<_> = cfg.exits.drain(..).collect();
+    for exit in exits {
+        cfg.add_edge(exit.as_str(), ".E_exit", 1);
     }
+    cfg.exits.push(OrdLabel::from_known(".E_exit"));
+    func.blocks.push(Block::exit());
 
     cfg
 }
 
 #[derive(Debug)]
 pub struct DominatorTree {
-    /// Dominator frontiers are the join points of a graph, this is not necessarily the direct
-    /// predecessors of a block but it will always be a join of two predecessors into one.
+    /// Dominator frontiers are the join points of a graph, this is not necessarily the
+    /// direct predecessors of a block but it will always be a join of two
+    /// predecessors into one.
     pub dom_frontier_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_dom_frontier: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     post_idom_map: HashMap<OrdLabel, OrdLabel>,
@@ -109,35 +120,30 @@ pub struct DominatorTree {
     pub cfg_preds_map: HashMap<OrdLabel, BTreeSet<OrdLabel>>,
 }
 
-// TODO: Cleanup (see todo's above loops and such)
-pub fn dominator_tree(
-    cfg: &ControlFlowGraph,
-    blocks: &mut [Block],
-    start: &OrdLabel,
-) -> DominatorTree {
-    for (ord, n) in reverse_postorder(
-        &cfg.paths.iter().map(|(k, v)| (OrdLabel::new(k), v.clone())).collect::<HashMap<_, _>>(),
-        start,
-    )
-    .enumerate()
-    {
+pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> DominatorTree {
+    let start = OrdLabel::entry();
+    let exit = OrdLabel::exit();
+
+    let succs = cfg.paths.iter().map(|(k, v)| (OrdLabel::from_known(k), v.clone())).collect::<HashMap<_, _>>();
+    for (ord, n) in reverse_postorder(&succs, &start).into_iter().enumerate() {
         // Updates the global map that keeps track of a labels order in the graph
         OrdLabel::update(ord as isize, n.as_str());
     }
 
     // We need this to be accurate to the numbering of `succs` below, otherwise
-    // when ralloc needs SSA numbering we crash, since the las value for `start` was the last from
-    // doing RPO based on predecessors and the single exit
+    // when ralloc needs SSA numbering we crash, since the last value for `start` was the
+    // last from doing postorder.
     let start = OrdLabel::from_known(start.as_str());
-
     let succs: HashMap<_, BTreeSet<OrdLabel>> = cfg
         .paths
         .iter()
         .map(|(k, v)| {
-            (OrdLabel::from_known(k), v.iter().map(|l| OrdLabel::from_known(l.as_str())).collect())
+            (
+                OrdLabel::from_known(k),
+                v.iter().map(|l| OrdLabel::from_known(l.as_str())).collect(),
+            )
         })
         .collect();
-
     let mut preds: HashMap<_, BTreeSet<_>> = HashMap::new();
     for (from, set) in &succs {
         for to in set {
@@ -147,8 +153,8 @@ pub fn dominator_tree(
 
     // Build dominator tree
     let mut dom_map = HashMap::with_capacity(blocks.len());
-    let all_nodes: Vec<_> = reverse_postorder(&succs, &start).cloned().collect();
-    dom_map.insert(start, BTreeSet::new());
+    let all_nodes: Vec<_> = reverse_postorder(&succs, &start).into_iter().cloned().collect();
+    dom_map.insert(start.clone(), BTreeSet::new());
     for n in all_nodes.iter().skip(1) {
         dom_map.insert(n.clone(), all_nodes.iter().cloned().collect());
     }
@@ -189,6 +195,9 @@ pub fn dominator_tree(
         }
     }
 
+    // print_maps("dom_map", dom_map.iter());
+    // print_maps("cfg_preds", preds.iter());
+
     // Build dominance predecessor map (AKA find join points)
     let mut dom_tree_pred = HashMap::with_capacity(all_nodes.len());
     for (to, set) in &dom_tree {
@@ -196,6 +205,8 @@ pub fn dominator_tree(
             dom_tree_pred.entry(from.clone()).or_insert_with(BTreeSet::new).insert(to.clone());
         }
     }
+
+    // print_maps("dom_preds", dom_tree_pred.iter());
 
     let mut idom_map = HashMap::with_capacity(all_nodes.len());
     for node in &all_nodes {
@@ -210,20 +221,21 @@ pub fn dominator_tree(
         }
     }
 
-    // println!("tree: {:#?} \ndom_preds: {:#?}\n{:?}", dom_tree, dom_tree_pred, preds);
+    // print_maps("idom", idom_map.iter());
 
     let empty = BTreeSet::new();
     // Keith Cooper/Linda Torczon EaC pg. 499 SSA dominance frontier algorithm
     //
     // This is a mapping of node -> descendent in graph that is join point for this node
-    // (anytime the graph make the lower half of a diamond)
+    // (anytime the graph makes the lower half of a diamond)
     let mut dom_frontier_map: HashMap<OrdLabel, BTreeSet<OrdLabel>> =
         HashMap::with_capacity(all_nodes.len());
     for node in &all_nodes {
         let parents = preds.get(node).unwrap_or(&empty);
         // Node must be a join point (have multiple preds)
         if parents.len() > 1 {
-            // For each previous node find a predecessor of `label` that also dominates `label
+            // For each previous node find a predecessor of `node` that also dominates
+            // `node`
             for p in parents {
                 let mut run = p;
                 // Until we hit an immediate dominator
@@ -239,8 +251,11 @@ pub fn dominator_tree(
         }
     }
 
+    // print_maps("dom_frontier", dom_frontier_map.iter());
+
     // Reorder the numbering on each block so they are reversed
-    let all_nodes: Vec<_> = reverse_postorder(&preds, cfg.exits.first().unwrap())
+    let all_nodes: Vec<_> = postorder(&succs, &start)
+        .into_iter()
         .enumerate()
         .map(|(i, l)| {
             OrdLabel::update(i as isize, l.as_str());
@@ -310,8 +325,12 @@ pub fn dominator_tree(
         }
     }
 
-    // println!("pid {:#?}", post_idom_map);
-    // println!("pdt {:#?}\ndt {:#?}\ndft {:#?}", post_dom_tree, dom_tree, dom_frontier_map);
+    // print_maps("dom_tree", dom_tree.iter());
+    // print_maps("dom_frontier_map", dom_frontier_map.iter());
+
+    // print_maps("post_idom", post_idom_map.iter());
+    // print_maps("post_dom_tree", post_dom_tree.iter());
+
 
     let empty = BTreeSet::new();
     // This is control dependence
@@ -337,37 +356,10 @@ pub fn dominator_tree(
             }
         }
     }
-
     // Carr's isn't the same as post dominator frontier...
     // It misses 1 -> 5 (see above)
-    //
-    // for node in postorder(&post_dom_tree, cfg.exits) {
-    //     println!("{}", node.as_str());
-    //     for c in succs.get(node).unwrap_or(&empty) {
-    //         for m in post_dom_frontier.get(c).cloned().unwrap_or_default() {
-    //             if !post_dom_tree.get(node).map_or(false, |set| set.contains(&m)) {
-    //                 // This is node -> nodes it controls
-    //                 // post_dom_frontier.entry(m.clone()).or_default().insert(node.clone());
 
-    //                 // This is node -> nodes that control it (generally nodes above it)
-    //                 post_dom_frontier.entry(node.clone()).or_default().insert(m.clone());
-    //             }
-    //         }
-    //     }
-    //     for m in preds.get(node).unwrap_or(&empty) {
-    //         // We have to use the updated label orderings or we get duplicates
-    //         let m = OrdLabel::from_known(m.as_str());
-    //         if !post_dom_tree.get(node).map_or(false, |set| set.contains(&m)) {
-    //             // This is node -> nodes it controls
-    //             // post_dom_frontier.entry(m).or_default().insert(node.clone());
-
-    //             // This is node -> nodes that control it (generally nodes above it)
-    //             post_dom_frontier.entry(node.clone()).or_default().insert(m);
-    //         }
-    //     }
-    // }
-
-    // println!("pdf {:#?}", post_dom_frontier);
+    // print_maps("pdf", post_dom_frontier.iter());
 
     DominatorTree {
         dom_frontier_map,
@@ -382,18 +374,21 @@ pub fn dominator_tree(
 pub fn insert_phi_functions(
     func: &mut Function,
     cfg_succs: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
-    start: &OrdLabel,
     dom_front: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
-) -> HashMap<OrdLabel, HashSet<Operand>> {
+) -> BTreeMap<OrdLabel, BTreeSet<Reg>> {
+    let start = OrdLabel::entry();
+
     // All the registers that are used across blocks
     let mut globals = vec![];
     let mut blocks_map = HashMap::new();
-
-    // TODO: now that I do this bottom-up phis could be inserted as each block is encountered since
-    // we know dom frontier
-    for blk in postorder(cfg_succs, start) {
+    let mut varkill = BTreeMap::new();
+    let mut upvar = BTreeMap::new();
+    // TODO: now that I do this bottom-up phis could be inserted as each block is
+    // encountered since we know dom frontier
+    for blk in postorder(cfg_succs, &start) {
         // This represents any redefinitions that are local to the current block
-        let mut varkil = HashSet::new();
+        let mut varkil = BTreeSet::new();
+        let mut upv = BTreeSet::new();
         for inst in func
             .blocks
             .iter()
@@ -401,44 +396,90 @@ pub fn insert_phi_functions(
             .map_or(&[] as &[_], |b| &b.instructions)
         {
             let (a, b) = inst.operands();
-            let dst = inst.target_reg();
-            if let Some(a @ Operand::Register(..)) = a {
+            if let Some(Operand::Register(a)) = a {
                 if !varkil.contains(&a) {
-                    blocks_map.entry(a.clone()).or_insert_with(HashSet::new).insert(blk);
+                    blocks_map.entry(a).or_insert_with(BTreeSet::new).insert(blk.clone());
                     globals.push(a);
+                    upv.insert(a);
                 }
             }
-            if let Some(b @ Operand::Register(..)) = b {
+            if let Some(Operand::Register(b)) = b {
                 if !varkil.contains(&b) {
-                    blocks_map.entry(b.clone()).or_insert_with(HashSet::new).insert(blk);
+                    blocks_map.entry(b).or_insert_with(BTreeSet::new).insert(blk.clone());
                     globals.push(b);
+                    upv.insert(b);
                 }
             }
-            if let Some(dst) = dst {
-                varkil.insert(Operand::Register(*dst));
-                blocks_map.entry(Operand::Register(*dst)).or_insert_with(HashSet::new).insert(blk);
+            if let Some(dst) = inst.target_reg() {
+                varkil.insert(*dst);
+                blocks_map.entry(*dst).or_insert_with(BTreeSet::new).insert(blk.clone());
+            }
+        }
+
+        varkill.insert(blk.clone(), varkil);
+        upvar.insert(blk.clone(), upv);
+    }
+
+    let empty = BTreeSet::new();
+    let mut changed = true;
+    let mut live_in: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
+    let mut live_out: BTreeMap<_, BTreeSet<Reg>> = BTreeMap::new();
+    while changed {
+        changed = false;
+        for label in postorder(cfg_succs, &start) {
+            let live_def_diff = live_out
+                .get(label)
+                .unwrap_or(&empty)
+                .difference(varkill.get(label).unwrap_or(&empty))
+                .copied()
+                .collect();
+
+            // PhiDef(b) ∪ UpExpr(b) ∪ (LiveOut(b) - Defs(b))
+            let new = upvar.get(label).unwrap_or(&empty)
+                .union(&live_def_diff)
+                .copied()
+                .collect();
+            let old = live_in.entry(label.clone()).or_default();
+            if *old != new {
+                *old = new;
+                changed |= true;
+            }
+
+            let mut new = cfg_succs
+                .get(label) // TODO: filter exit node out
+                .unwrap_or(&BTreeSet::new())
+                .iter()
+                .map(|s| live_in.get(s).unwrap_or(&empty))
+                .fold(BTreeSet::new(), |collect, next| collect.union(next).copied().collect());
+
+            let curr = live_out.entry(label.clone()).or_default();
+            if new != *curr {
+                changed = true;
+                *curr = new;
             }
         }
     }
 
-    let empty = HashSet::new();
-    let empty_set = BTreeSet::new();
-    let mut phis: HashMap<_, HashSet<_>> = HashMap::new();
+    // print_maps("liveout", live_out.iter());
+    // print_maps("livein", live_in.iter());
+
+    let empty_label = BTreeSet::new();
+    let mut phis: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     for global_reg in &globals {
         let mut worklist =
-            blocks_map.get(global_reg).unwrap_or(&empty).iter().copied().collect::<VecDeque<_>>();
+            blocks_map.get(global_reg).unwrap_or(&empty_label).iter().collect::<VecDeque<_>>();
         // For every block that this variable is live in
         while let Some(blk) = worklist.pop_front() {
             // The dominance frontier (join point) is the block that needs
             // the 𝛟 added to it
-            for d in dom_front.get(blk).unwrap_or(&empty_set) {
-                // If we have seen this register or it isn't in the current block we are checking
-                // skip it
+            for d in dom_front.get(blk).unwrap_or(&empty_label) {
+                // If we have seen this register or it isn't in the current block we are
+                // checking skip it
                 if !phis.get(d).map_or(false, |set| set.contains(global_reg))
-                    && blocks_map.get(global_reg).map_or(false, |blk_set| blk_set.contains(d))
+                    && live_in.get(d).map_or(false, |set| set.contains(global_reg))
                 {
                     // insert phi func
-                    phis.entry(d.clone()).or_default().insert(global_reg.clone());
+                    phis.entry(d.clone()).or_default().insert(*global_reg);
                     // Add the dom frontier node to the `worklist`
                     worklist.push_back(d);
                 }
@@ -447,11 +488,14 @@ pub fn insert_phi_functions(
     }
 
     for (label, set) in &phis {
+        // if label.as_str() == ".E_exit" {
+        //     continue;
+        // }
         let blk = func.blocks.iter_mut().find(|b| b.label == label.as_str()).unwrap();
         // If the block starts with a frame and label skip it other wise just skip a label
         let index = if let Instruction::Frame { .. } = &blk.instructions[0] { 2 } else { 1 };
         for reg in set {
-            blk.instructions.insert(index, Instruction::new_phi(reg.copy_to_register()));
+            blk.instructions.insert(index, Instruction::new_phi(*reg));
         }
     }
 
@@ -462,14 +506,15 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
     for func in &mut iloc.functions {
         let cfg = build_cfg(func);
 
-        let start = OrdLabel::new_start(&func.label);
-        let dtree = dominator_tree(&cfg, &mut func.blocks, &start);
+        let start = OrdLabel::entry();
+        let dtree = dominator_tree(&cfg, &mut func.blocks);
 
-        // println!("pdtree: {:#?}\npdftree: {:#?}", dtree.post_dom_tree, dtree.post_dom_frontier);
+        // print_maps("cfg_succs", dtree.cfg_succs_map.iter());
+        // print_maps("dom_tree", dtree.dom_tree.iter());
 
         // The `phis` used to fill the `meta` map
         let _phis =
-            insert_phi_functions(func, &dtree.cfg_succs_map, &start, &dtree.dom_frontier_map);
+            insert_phi_functions(func, &dtree.cfg_succs_map, &dtree.dom_frontier_map);
 
         let mut meta = HashMap::new();
         let mut stack = VecDeque::new();
@@ -518,7 +563,7 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
             }
         }
 
-        lazy_code_motion(func, &dtree, cfg.exits.last().unwrap());
+        lazy_code_motion(func, &dtree);
 
         func.blocks.retain(|b| b.label != ".E_exit");
     }
@@ -536,12 +581,12 @@ fn lcm_pre() {
     let iloc = parse_text(&input).unwrap();
     let mut blocks = make_basic_blocks(&make_blks(iloc));
 
-    let start = OrdLabel::new_start(&blocks.functions[0].label);
+    let start = OrdLabel::entry();
 
     let cfg = build_cfg(&mut blocks.functions[0]);
-    let dtree = dominator_tree(&cfg, &mut blocks.functions[0].blocks, &start);
+    let dtree = dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 
-    lazy_code_motion(&mut blocks.functions[0], &dtree, cfg.exits.last().unwrap());
+    lazy_code_motion(&mut blocks.functions[0], &dtree, );
 
     let mut buf = String::new();
     for inst in blocks.instruction_iter() {
@@ -566,13 +611,13 @@ fn ssa_cfg() {
 
     use crate::iloc::{make_basic_blocks, make_blks, parse_text};
 
-    let input = fs::read_to_string("input/while_array.lvn.dbre.dce.pre.il").unwrap();
+    let input = fs::read_to_string("input/partition.il").unwrap();
     let iloc = parse_text(&input).unwrap();
     let mut blocks = make_basic_blocks(&make_blks(iloc));
 
     let cfg = build_cfg(&mut blocks.functions[0]);
     println!("{:?}", cfg);
-    emit_cfg_viz(&cfg, "graphs/while_array.dot");
+    emit_cfg_viz(&cfg, "graphs/partition.dot");
 }
 
 #[test]
@@ -581,17 +626,17 @@ fn ssa_cfg_while() {
 
     use crate::iloc::{make_basic_blocks, make_blks, parse_text};
 
-    let input = fs::read_to_string("input/gcd.il").unwrap();
+    let input = fs::read_to_string("input/hmm.il").unwrap();
     let iloc = parse_text(&input).unwrap();
     let mut blocks = make_basic_blocks(&make_blks(iloc));
 
-    let cfg = build_cfg(&mut blocks.functions[1]);
+    let cfg = build_cfg(&mut blocks.functions[0]);
     // println!("{:?}", cfg);
 
-    emit_cfg_viz(&cfg, "graphs/gcd.dot");
+    emit_cfg_viz(&cfg, "graphs/hmm.dot");
 
-    let name = OrdLabel::new_start(&blocks.functions[1].label);
-    dominator_tree(&cfg, &mut blocks.functions[1].blocks, &name);
+    let name = OrdLabel::entry();
+    dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }
 
 #[test]
@@ -617,15 +662,60 @@ fn ssa_cfg_trap() {
     let mut blocks = make_basic_blocks(&make_blks(iloc));
 
     let cfg = build_cfg(&mut blocks.functions[0]);
-    let name = OrdLabel::new_start(&blocks.functions[0].label);
-    let dom = dominator_tree(&cfg, &mut blocks.functions[0].blocks, &name);
+    let name = OrdLabel::entry();
+    let dom = dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 
     println!("{:#?}", dom);
     // emit_cfg_viz(&cfg, "graphs/turd.dot");
-
     // dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 }
 
+#[test]
+fn lcm_simple() {
+    use std::fs;
+
+    use crate::iloc::{make_basic_blocks, make_blks, parse_text};
+
+    let input = "
+.data
+.text
+.frame pre_example, 8, %vr5, %vr6
+    loadI 0 => %vr7
+    i2i %vr7 => %vr8
+    loadI 0 => %vr7
+    i2i %vr7 => %vr9
+    loadI 5 => %vr10
+    comp %vr8, %vr10 => %vr11
+    testge %vr11 => %vr12
+    cbr %vr12 -> .L1
+.L0: nop
+    add %vr5, %vr6 => %vr13
+    i2i %vr13 => %vr9
+    loadI 1 => %vr14
+    add %vr8, %vr14 => %vr15
+    i2i %vr15 => %vr8
+    loadI 5 => %vr10
+    comp %vr8, %vr10 => %vr11
+    testge %vr11 => %vr12
+    cbrne %vr12 -> .L0
+.L1: nop
+    iwrite %vr9
+    ret
+.frame main, 0
+    loadI 1 => %vr12
+    loadI 2 => %vr13
+    call pre_example, %vr12, %vr13
+    ret
+";
+    let iloc = parse_text(input).unwrap();
+    let mut blocks = make_basic_blocks(&make_blks(iloc));
+
+    let cfg = build_cfg(&mut blocks.functions[0]);
+    let name = OrdLabel::entry();
+    let dom = dominator_tree(&cfg, &mut blocks.functions[0].blocks);
+
+    lazy_code_motion(&mut blocks.functions[0], &dom, );
+}
 #[allow(unused)]
 fn emit_cfg_viz(cfg: &ControlFlowGraph, file: &str) {
     use std::{

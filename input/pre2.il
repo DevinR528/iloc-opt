@@ -1,5 +1,5 @@
 .data
-    .string .str_const_0, "howdy"
+    .string .str_const_0, "howdy\n"
 .text
 .frame main, 16
     loadI 0 => %vr1
@@ -18,6 +18,7 @@
     comp %vr9, %vr7 => %vr10
     testle %vr10 => %vr11
     cbr %vr11 -> .L0
+
     load %vr6 => %vr9
     load %vr6 => %vr9
     add %vr9, %vr9 => %vr12

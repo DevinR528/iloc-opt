@@ -5,8 +5,8 @@ use crate::iloc::{Block, Instruction, Loc, Operand, Reg, Val};
 pub fn number_basic_block(blk: &Block) -> Option<Vec<Instruction>> {
     let mut transformed_block = false;
 
-    // A set of all the register (destinations) that are kept, after some kind of fold/redundancy
-    // elimination, due to a move
+    // A set of all the register (destinations) that are kept, after some kind of
+    // fold/redundancy elimination, due to a move
     let mut special = HashSet::new();
     let mut expr_map: HashMap<_, Reg> = HashMap::new();
     let mut const_map: HashMap<Operand, Val> = HashMap::new();
@@ -443,7 +443,8 @@ fn compress_load_stores(instructions: &mut [Instruction], special: &HashSet<Reg>
             _ => continue,
         };
 
-        // instructions[idx] = Instruction::Skip(format!("[lvn l/s] {}", instructions[idx]));
+        // instructions[idx] = Instruction::Skip(format!("[lvn l/s] {}",
+        // instructions[idx]));
         instructions[idx + 1] = new_instruction;
         modified = true;
     }

@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
-    ops::Range,
+    ops::Range, fmt::Debug,
 };
 
 use crate::{
@@ -11,196 +11,152 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct RenameMeta {
     stack: VecDeque<usize>,
+    last_name: isize,
 }
 impl Default for RenameMeta {
-    fn default() -> Self {
-        Self { stack: VecDeque::from([]) }
-    }
+    fn default() -> Self { Self { stack: VecDeque::from([]), last_name: -1 } }
 }
 
-fn rewrite_name(reg: &mut Reg, meta: &RenameMeta) {
-    // `unwrap_or_default` is ok here since we want a zero if the stack
-    // is empty
-    let phi_id = meta.stack.back().copied().unwrap_or_default();
+fn new_name(reg: Reg, meta: &mut HashMap<Reg, RenameMeta>) {
+    let m = meta.entry(reg).or_default();
+    m.last_name += 1;
+    m.stack.push_front(m.last_name as usize);
+}
+
+fn rewrite_name(reg: &mut Reg, meta: &mut HashMap<Reg, RenameMeta>) {
+    if *reg == Reg::Var(0) {
+        *reg = Reg::Phi(0, 0);
+        return;
+    }
+    let m = meta.entry(*reg).or_default();
+    let phi_id = m.stack.front().copied().unwrap_or_else(|| panic!("{:?}", reg));
     reg.as_phi(phi_id);
 }
-fn phi_range(insts: &[Instruction]) -> Range<usize> {
-    let start = match insts {
-        [Instruction::Frame { .. }, Instruction::Label(..), Instruction::Phi(..) | Instruction::Skip(..), ..] => {
-            2
-        }
-        [Instruction::Label(..), Instruction::Phi(..) | Instruction::Skip(..), ..] => 1,
-        _ => return 0..0,
-    };
-    start
-        ..(start
-            + insts
-                .iter()
-                .skip(start)
-                .take_while(|i| i.is_phi() || matches!(i, Instruction::Skip(..)))
-                .count())
-}
 
-pub type ScopedExprTree = VecDeque<HashMap<(Operand, Option<Operand>, String), Reg>>;
+pub type ScopedExprTree = VecDeque<HashMap<(Operand, Option<Operand>, String), usize>>;
 
 pub fn dom_val_num(
     blks: &mut [Block],
     blk_idx: usize,
-    meta: &mut HashMap<Operand, RenameMeta>,
+    meta: &mut HashMap<Reg, RenameMeta>,
     dtree: &DominatorTree,
     expr_tree: &mut ScopedExprTree,
 ) {
-    let ssa = unsafe { crate::SSA };
+    let blk_label = blks[blk_idx].label.clone();
 
-    let rng = phi_range(&blks[blk_idx].instructions);
-    // The phi instructions must be filled in before their expressions are saved
-    for phi in &mut blks[blk_idx].instructions[rng.clone()] {
-        if let Instruction::Phi(r, set, dst) = phi {
-            // Only when we are actually in the block that contains the phi do we
-            // set the subscript for that phi
-            let m = meta.entry(Operand::Register(*r)).or_default();
-            if let Some(i) = m.stack.back() {
-                let new_val = *i + 1;
-                dst.replace(new_val);
-                m.stack.push_back(new_val);
-                set.insert(new_val);
-            } else {
-                dst.replace(0);
-                m.stack.push_back(0);
-                set.insert(0);
-            }
-        }
-    }
     expr_tree.push_back(HashMap::new());
-
-    // Remove redundant/meaningless phi instructions
-    for phi in &mut blks[blk_idx].instructions[rng] {
-        if let Instruction::Phi(r, set, Some(dst)) = phi {
-            let phi_reg = Reg::Phi(r.as_usize(), *dst);
-            let expr = (Operand::Register(phi_reg), None, "phi".to_string());
-            if expr_tree.iter().find_map(|map| map.get(&expr)).is_some() {
-                *phi = Instruction::Skip(format!("[redundant phi] {}", phi));
-            } else {
-                expr_tree.back_mut().unwrap().insert(expr, phi_reg);
-                if set.len() == 1 {
-                    *phi = Instruction::Skip(format!("[meaningless phi] {}", phi));
-                }
-            }
-        } else {
-            // unreachable!("must be φ(x, y)")
-        }
-    }
-
-    // We need to iter all instructions (the frame instruction was being skipped) so don't use the
-    // phi range end as a start
-    for op in &mut blks[blk_idx].instructions {
-        if let Instruction::Phi(..) = op {
+    for op in &blks[blk_idx].instructions {
+        // Remove redundant/meaningless phi instructions
+        if let Instruction::Phi(r, set, subscript) = op {
+            // We need to update the phi before we check it, Carr does this but all papers
+            // say to update only after we know it is a unique phi, loops may ruin this???
+            new_name(*r, meta);
+            // No more processing for Phi nodes
             continue;
         }
+    }
 
+    let mut dead = BTreeSet::new();
+    // We need to iter all instructions (the frame instruction was being skipped) so don't
+    // use the phi range end as a start
+    for (inst_idx, op) in blks[blk_idx].instructions.iter_mut().enumerate() {
         let (mut a, mut b) = op.operands_mut();
-        if let Some((a, meta)) = a.as_mut().map(|reg| {
-            let cpy = **reg;
-            (reg, meta.entry(Operand::Register(cpy)).or_default())
-        }) {
+        if let Some(a) = a.as_mut() {
             rewrite_name(a, meta);
         }
-        if let Some((b, meta)) = b.as_mut().map(|reg| {
-            let cpy = **reg;
-            (reg, meta.entry(Operand::Register(cpy)).or_default())
-        }) {
+        if let Some(b) = b.as_mut() {
             rewrite_name(b, meta);
         }
 
         // Rename registers that don't fit neatly into the operands category
         match op {
-            Instruction::Call { args, .. } | Instruction::Frame { params: args, .. } => {
+            Instruction::Call { args, .. } => {
                 for arg in args {
-                    let m = meta.entry(Operand::Register(*arg)).or_default();
-                    rewrite_name(arg, m);
+
+                    rewrite_name(arg, meta);
                 }
             }
             Instruction::ImmCall { args, ret, .. } | Instruction::ImmRCall { args, ret, .. } => {
                 for arg in args {
-                    let m = meta.entry(Operand::Register(*arg)).or_default();
-                    rewrite_name(arg, m);
-                }
-                let m = meta.entry(Operand::Register(*ret)).or_default();
-                if let Some(i) = m.stack.back() {
-                    let new_val = *i + 1;
-                    m.stack.push_back(new_val);
-                    ret.as_phi(new_val);
-                } else {
-                    m.stack.push_back(0);
-                    ret.as_phi(0);
+                    let m = meta.entry(*arg).or_default();
+                    rewrite_name(arg, meta);
                 }
             }
             Instruction::Store { dst, .. }
             | Instruction::StoreAdd { dst, .. }
             | Instruction::StoreAddImm { dst, .. } => {
-                let m = meta.entry(Operand::Register(*dst)).or_default();
-                rewrite_name(dst, m);
+                let m = meta.entry(*dst).or_default();
+                rewrite_name(dst, meta);
             }
             _ => {}
         }
 
         if let (Some(a), b) = op.operands() {
-            // This needs to run before we bail out for calls/stores, stuff like that...
-            if let Some(dst) = op.target_reg_mut() {
-                // When we see a new definition of a register we increment it's phi value
-                let m = meta.entry(Operand::Register(*dst)).or_default();
-                if let Some(i) = m.stack.back() {
-                    let new_val = *i + 1;
-                    m.stack.push_back(new_val);
-                    dst.as_phi(new_val);
-                } else {
-                    m.stack.push_back(0);
-                    dst.as_phi(0);
-                }
-            }
+            let is_expr = op.is_tmp_expr();
+            let is_commutative = op.is_commutative();
+            let inst_name = op.inst_name().to_string();
 
-            let expr = (a.clone(), b.clone(), op.inst_name().to_string());
-            // TODO: if expr can be simplified to expr' then replace assign with `x <- expr'`
-            if let Some(prev_reg) = expr_tree.iter().find_map(|map| map.get(&expr)) {
-                if !op.is_tmp_expr() || op.is_call_instruction() || ssa {
+            let expr = (a.clone(), b.clone(), inst_name.clone());
+            if let Some(subs) = expr_tree.iter().rev().find_map(|map| map.get(&expr)) {
+                if !is_expr || op.is_call_instruction() {
+                    // We need all registers to be converted
+                    if let Some(dst) = op.target_reg() {
+                        // When we see a new definition of a register we increment it's phi value
+                        new_name(*dst, meta);
+                    }
                     continue;
                 }
 
-                println!("{:?} {:?}", expr, prev_reg);
-
                 if let Some(dst) = op.target_reg() {
-                    if dst == prev_reg {
-                        *op = Instruction::Skip(format!("[ssadbre] {op}"));
-                    } else {
-                        op.as_new_move_instruction(*prev_reg, *dst);
+                    // If the expression has been seen before and is equivalently ssa
+                    // numbered we know it is an equal expression so we can reuse the
+                    // ssa value number for this dst register
+                    let m = meta.entry(*dst).or_default();
+                    m.stack.push_front(*subs);
+                    dead.insert(inst_idx);
+                }
+
+            } else if let Some(dst) = op.target_reg() {
+                // When we see a new definition of a register we increment it's phi value
+                new_name(*dst, meta);
+
+                let m = meta.get(dst).unwrap();
+                if is_expr {
+                    let expr_tree = expr_tree.back_mut().unwrap();
+                    expr_tree.insert(expr, *m.stack.front().unwrap());
+
+                    if is_commutative {
+                        expr_tree.insert(
+                            (b.clone().unwrap(), Some(a.clone()), inst_name),
+                            *m.stack.front().unwrap(),
+                        );
                     }
                 }
-            } else if let Some(dst) = op.target_reg() && op.is_tmp_expr() {
-                expr_tree.back_mut().unwrap().insert(expr, *dst);
             }
+        // Non-ssa expression instruction
+        // There are a few instructions that have no operands but have registers
+        } else if let Some(dst) = op.target_reg() {
+            // When we see a new definition of a register we increment it's phi value
+            new_name(*dst, meta);
+        } else if let Instruction::Frame {  params, .. } = op {
+            for dst in params { new_name(*dst, meta); }
         }
     }
 
     let empty = BTreeSet::new();
-    let blk_label = &blks[blk_idx].label;
-
     for blk in dtree.cfg_succs_map.get(blk_label.as_str()).unwrap_or(&empty) {
         // TODO: make block -> index map
         let idx = blks.iter().position(|b| b.label == blk.as_str()).unwrap();
-        let rng = phi_range(&blks[idx].instructions);
-
-        for phi in &mut blks[idx].instructions[rng] {
-            if let Instruction::Phi(r, set, _dst) = phi {
+        for phi in &mut blks[idx].instructions {
+            if let Instruction::Phi(r, set, subscript) = phi {
                 // When looking forward into successor blocks we transfer the current phi
                 // number since we know this is the correct number to cross the block
                 //
-                // We are adding the number to the set of incoming subscripts that makes up the phi
-                let m = meta.entry(Operand::Register(*r)).or_default();
-                if let Some(&i) = m.stack.back() {
+                // We are adding the number to the set of incoming subscripts that makes
+                // up the phi
+                let m = meta.entry(*r).or_default();
+                if let Some(&i) = m.stack.front() {
                     set.insert(i);
-                } else {
-                    // m.stack.push_back(0);
-                    // set.insert(0);
                 }
             }
         }
@@ -208,17 +164,46 @@ pub fn dom_val_num(
 
     // This is what drives the rename algorithm
     for blk in dtree.dom_tree.get(blk_label.as_str()).unwrap_or(&empty) {
+        // println!("{blk_label} -> {blk}");
+
         // TODO: make block -> index map
         let idx = blks.iter().position(|b| b.label == blk.as_str()).unwrap();
         dom_val_num(blks, idx, meta, dtree, expr_tree);
     }
 
-    for op in &blks[blk_idx].instructions {
-        if let Some(dst) = op.target_reg() {
-            if let Some(meta) = meta.get_mut(&Operand::Register(*dst)) {
-                meta.stack.pop_back();
+    for (i, op) in blks[blk_idx].instructions.iter_mut().enumerate().rev() {
+        if let Some(dst) = op.target_reg_mut() {
+            if let Some(meta) = meta.get_mut(dst) {
+                let subscript = meta.stack.pop_front().unwrap();
+
+                // println!("{blk_label} {:?} -> {subscript}", dst);
+
+                if dead.contains(&i) {
+                    *op = Instruction::Skip(format!("[ssadbvn] {}", op));
+                } else {
+                    dst.as_phi(subscript);
+                }
+            }
+        } else if let Instruction::Frame { params, .. } = op {
+            // There is no check for `dead` since a frame instruction can't ever be unused code
+            for dst in params {
+                if let Some(meta) = meta.get_mut(dst) {
+                    let subscript = meta.stack.pop_front().unwrap();
+                    dst.as_phi(subscript);
+                }
             }
         }
     }
+    for op in &mut blks[blk_idx].instructions {
+        if let Instruction::Phi(r, set, subs) = op {
+            if let Some(meta) = meta.get_mut(r) {
+                let subscript = meta.stack.pop_front().unwrap();
+                subs.replace(subscript);
+            } else { unreachable!() }
+        }
+    }
+
+    // Pop scope since we are leaving
     expr_tree.pop_back();
+
 }

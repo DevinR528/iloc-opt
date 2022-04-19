@@ -1,4 +1,14 @@
-#![feature(let_else, map_first_last, once_cell, stmt_expr_attributes, let_chains, try_blocks)]
+#![feature(
+    let_else,
+    map_first_last,
+    once_cell,
+    stmt_expr_attributes,
+    let_chains,
+    try_blocks,
+    drain_filter,
+    default_free_fn,
+    if_let_guard
+)]
 #![allow(unused)]
 
 use std::{
@@ -29,8 +39,8 @@ mod lcm;
 mod ssa;
 
 /// ## Register Allocation
-/// Using live ranges, an interference graph, and coloring of that graph we allocate registers
-/// for our currently infinite set.
+/// Using live ranges, an interference graph, and coloring of that graph we allocate
+/// registers for our currently infinite set.
 mod ralloc;
 
 use iloc::{make_blks, parse_text};
@@ -117,19 +127,16 @@ fn main() {
             let mut blocks = make_basic_blocks(&make_blks(iloc));
             for func in &mut blocks.functions {
                 let cfg = build_cfg(func);
-                let start = OrdLabel::new_start(&func.label);
-
-                let dtree = dominator_tree(&cfg, &mut func.blocks, &start);
+                let dtree = dominator_tree(&cfg, &mut func.blocks);
                 let phis = ssa::insert_phi_functions(
                     func,
                     &dtree.cfg_succs_map,
-                    &start,
                     &dtree.dom_frontier_map,
                 );
 
                 let mut meta = HashMap::new();
                 for (_blk_label, register_set) in phis {
-                    meta.extend(register_set.iter().map(|op| (op.clone(), RenameMeta::default())));
+                    meta.extend(register_set.iter().map(|op| (*op, RenameMeta::default())));
                 }
                 let mut stack = VecDeque::new();
                 // Label but don't remove any with the `SSA` flag on

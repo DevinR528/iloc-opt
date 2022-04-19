@@ -28,16 +28,18 @@ pub struct Interpreter {
     functions: HashMap<Loc, Vec<(usize, Instruction)>>,
     /// A map of function names to stack size and parameter list.
     fn_decl: HashMap<Loc, (usize, Vec<Reg>)>,
-    /// A mapping of labels names to the index of the first instruction to execute after the label.
+    /// A mapping of labels names to the index of the first instruction to execute after
+    /// the label.
     label_map: HashMap<Loc, usize>,
     /// The index of which instruction we are on within a block.
     inst_idx: usize,
     /// The function call stack.
     ///
-    /// A tuple of function name and any smashed registers that will need to be restored on return.
+    /// A tuple of function name and any smashed registers that will need to be restored
+    /// on return.
     call_stack: Vec<CallStackEntry>,
-    /// The program stack, this includes the `.data` segment so we can refer to labels like
-    /// pointers.
+    /// The program stack, this includes the `.data` segment so we can refer to labels
+    /// like pointers.
     stack: Vec<Val>,
     /// The index of the instruction to return to after a call returns.
     ret_idx: Vec<usize>,
@@ -86,10 +88,11 @@ impl Interpreter {
                 }
 
                 if func.label == "main" {
-                    // This is the data stack pointer, in a real program it would be a pointer to
-                    // the memory address of the beginning of the program
-                    // itself, since our stack is separate it's just the end
-                    // index of the stack since it grows towards index 0 from index (length)
+                    // This is the data stack pointer, in a real program it would be a
+                    // pointer to the memory address of the beginning
+                    // of the program itself, since our stack is
+                    // separate it's just the end index of the stack
+                    // since it grows towards index 0 from index (length)
                     registers.insert(Reg::Var(0), Val::Integer((STACK_SIZE - 1) as isize));
                 }
 
@@ -115,9 +118,7 @@ impl Interpreter {
         self.fn_decl.get(&Loc(name.to_string())).unwrap().0 as isize
     }
 
-    fn registers(&self) -> &HashMap<Reg, Val> {
-        &self.call_stack.last().unwrap().registers
-    }
+    fn registers(&self) -> &HashMap<Reg, Val> { &self.call_stack.last().unwrap().registers }
 
     pub fn run_next_instruction(&mut self) -> Option<bool> {
         if self.call_stack.is_empty() {
@@ -183,6 +184,13 @@ impl Interpreter {
                 let b = self.registers().get(src_b)?;
 
                 let val = a.modulus(b)?;
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
+            }
+            Instruction::Div { src_a, src_b, dst } => {
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
+
+                let val = a.divide(b)?;
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::And { src_a, src_b, dst } => {
@@ -556,11 +564,12 @@ impl Interpreter {
                     .insert(*dst, Val::Integer(int_from_float));
             }
             Instruction::I2F { src, dst } => {
-                let float_from_int = if let Val::Integer(i) = self.registers().get(src).cloned()? {
-                    i as f64
-                } else {
-                    todo!("integer error")
-                };
+                let float_from_int =
+                    if let Val::Integer(i) = self.registers().get(src).cloned().unwrap() {
+                        i as f64
+                    } else {
+                        todo!("integer error")
+                    };
                 self.call_stack
                     .last_mut()
                     .unwrap()
@@ -634,10 +643,22 @@ impl Interpreter {
                 stack[stack_idx.to_int().unwrap() as usize] =
                     Val::Integer(buf.trim().parse().unwrap());
             }
-            Instruction::FWrite(r) => println!("{:?}", self.registers().get(r)?.to_float()?),
-            Instruction::IWrite(r) => println!("{:?}", self.registers().get(r)?.to_int()?),
+            Instruction::FWrite(r) => {
+                println!("{}", self.registers().get(r)?.to_float()?)
+            }
+            Instruction::IWrite(r) => {
+                println!("{}", self.registers().get(r)?.to_int()?)
+            }
+            Instruction::PutChar(r) => {
+                print!("{}", char::from_u32(self.registers().get(r)?.to_int()? as u32).unwrap())
+            }
             Instruction::SWrite(r) => {
-                println!("{}", stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize])
+                let text = &stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize];
+                let Val::String(text) = text else { return None; };
+                let text = text.trim_start_matches('"');
+                let text = text.trim_end_matches('"');
+                let text = text.replace("\\n", "\n");
+                print!("{}", text)
             }
             _ => todo!("{:?}", instrs[self.inst_idx]),
         }

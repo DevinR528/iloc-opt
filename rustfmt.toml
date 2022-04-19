@@ -1,5 +1,10 @@
 comment_width = 100
+max_width = 100
 imports_granularity = "Crate"
 newline_style = "Unix"
 use_small_heuristics = "Max"
 wrap_comments = true
+format_macro_bodies = true
+format_macro_matchers = true
+unstable_features = true
+fn_single_line = true

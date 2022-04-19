@@ -154,10 +154,7 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
                     // post dominance
                     // Which blocks will for sure run next (so we can jump to it)
                     if let Some(label) = domtree.post_idom_map.get(blk.label.as_str()) {
-                        println!(
-                            "rewrite branch {} jumpI -> {:?} {:#?} {:#?}",
-                            inst, label, domtree.post_idom_map, domtree.post_dom_frontier
-                        );
+                        println!("rewrite branch to jump {} -> {:?}", inst, label);
 
                         jumps.push((b, i, Instruction::ImmJump(Loc(label.to_string()))));
                     }
@@ -180,13 +177,27 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
 }
 
 pub fn cleanup(func: &mut Function, start: &OrdLabel) {
+    let exit = OrdLabel::exit();
+
     let mut cfg_map = build_stripped_cfg(func);
 
     let mut to_jump = vec![];
     let mut changed = true;
     while changed {
+        let mut cfg_preds: HashMap<_, BTreeSet<_>> = HashMap::new();
+        for (from, tos) in &cfg_map {
+            for to in tos {
+                cfg_preds.entry(to.clone()).or_default().insert(from.clone());
+            }
+        }
+
         changed = false;
         for blk in postorder(&cfg_map, start) {
+            // TODO: this should be ok...
+            // Ignore code motion moved blocks...
+            if blk.as_str().starts_with(".pre.") {
+                continue;
+            }
             let Some((idx, block)) = func.blocks.iter()
                 .enumerate()
                 .find(|(_, b)| b.label == blk.as_str())
@@ -199,8 +210,8 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
             let fall_through = func.blocks.get(idx + 1).map(|b| b.label.to_string());
             let fall_through = fall_through.as_deref();
 
-            let cond_branch = block.ends_with_cond_branch();
-            if let Some(loc) = cond_branch {
+            // Fallthrough and branch go to the same place
+            if let Some(loc) = block.ends_with_cond_branch() {
                 if Some(loc) == fall_through {
                     changed = true;
                     to_jump.push((idx, Instruction::ImmJump(Loc(loc.to_string()))));
@@ -209,26 +220,39 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
 
             // i (in "Engineering a Compiler" book pg. 548)
             if let Some(loc) = block.ends_with_jump() {
+                // TODO: this should be ok...
+                // Ignore code motion moved blocks...
+                if loc.starts_with(".pre.") {
+                    continue;
+                }
                 // j (in "Engineering a Compiler" book pg. 548)
                 let Some(jump_to) = func.blocks.iter().find(|b| b.label == loc).cloned() else {
                     // We removed a block (loc) this block (blk) has as an only child
                     continue;
                 };
 
-                // The `all()` method defaults to true if no iteration happens!!
-                if block.instructions.iter().all(|i| matches!(i, Instruction::Skip(..))) {
+                // The `all()` method defaults to true if no iteration happens
+                if block.instructions.iter().all(|i| {
+                    matches!(i, Instruction::Skip(..) | Instruction::Label(..) | Instruction::Phi(..))
+                }) {
                     changed = true;
                     println!("transfer {blk} to {loc}");
                     replace_transfer(func, blk.as_str(), loc, idx);
                     // TODO: also check the `jump_to` list for renamed labels
                 }
-                if cfg_map.get(loc).map_or(false, |set| set.len() == 1) {
+
+                // Since this block ends with a jumpI (blk) and the location (loc) only
+                // has one successor (so we aren't altering any dominator relations)
+                // we remove the jump in blk and move `loc`'s instructions into `blk`
+                if cfg_preds.get(&OrdLabel::new(loc)).map_or(false, |set| set.len() == 1) {
                     changed = true;
                     println!("combine {loc} into {blk}");
                     combine(func, loc, blk.as_str());
                 }
                 // The `all()` method defaults to true if no iteration happens!!
-                if jump_to.instructions.iter().all(|i| matches!(i, Instruction::Skip(..))) {
+                if jump_to.instructions.iter().all(|i| {
+                    matches!(i, Instruction::Skip(..) | Instruction::Label(..) | Instruction::Phi(..))
+                }) {
                     changed = true;
                     println!("overwrite {blk} to {loc}");
                 }
@@ -243,7 +267,7 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
         }
 
         let all: HashSet<_> = func.blocks.iter().map(|b| OrdLabel::new(&b.label)).collect();
-        let used: HashSet<_> = reverse_postorder(&cfg_map, start).cloned().collect();
+        let used: HashSet<_> = reverse_postorder(&cfg_map, start).into_iter().cloned().collect();
         for unused in all.difference(&used) {
             changed = true;
             let pos = func.blocks.iter().position(|b| b.label == unused.as_str()).unwrap();
@@ -252,9 +276,7 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
 
         if changed {
             cfg_map = build_stripped_cfg(func);
-            // for (i, l) in func.blocks.iter().map(|b| b.label).enumerate() {
-            //     *func.block_map.get_mut(&l).unwrap() = i;
-            // }
+
         }
     }
 }
@@ -268,6 +290,9 @@ pub fn build_stripped_cfg(func: &Function) -> HashMap<OrdLabel, BTreeSet<OrdLabe
         let b_label = &block.label;
         for inst in &block.instructions {
             if inst.is_return() {
+                cfg.entry(OrdLabel::from_known(b_label))
+                    .or_default()
+                    .insert(OrdLabel::from_known(".E_exit"));
                 continue 'blk;
             }
 
@@ -318,8 +343,17 @@ fn combine(func: &mut Function, from: &str, into: &str) {
     let Some(from) = fr else { return; };
     let Some(into) = to else { return; };
 
-    let from_blk = func.blocks.remove(from);
-    func.blocks[into].instructions.extend(from_blk.instructions);
+    let mut from_blk = func.blocks.remove(from);
+
+    if let Some(instruction) = func.blocks[into].instructions.last_mut() {
+        *instruction = Instruction::Skip(format!("{}", instruction));
+    }
+
+    func.blocks[into].instructions.extend(
+        from_blk
+            .instructions
+            .drain_filter(|i| !matches!(i, Instruction::Label(..) | Instruction::Frame { .. })),
+    );
 }
 
 fn replace_transfer(func: &mut Function, to: &str, with: &str, idx: usize) {

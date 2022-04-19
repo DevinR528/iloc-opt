@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt, vec,
 };
 
@@ -27,21 +27,17 @@ pub fn print_maps<K: fmt::Debug, V: fmt::Debug>(name: &str, map: impl Iterator<I
 //        C
 //
 
-pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &OrdLabel) {
-    let start = OrdLabel::new_start(&func.label);
+pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
+    let start = OrdLabel::entry();
+    let exit = OrdLabel::exit();
 
     let mut use_map: HashMap<_, Vec<_>> = HashMap::new();
     let mut dst_map: HashMap<_, _> = HashMap::new();
     for blk in &func.blocks {
         for inst in &blk.instructions {
+            if let Instruction::I2I { .. } = inst { continue; }
             if let Some(dst) = inst.target_reg() {
-                if dst_map
-                    .insert((OrdLabel::from_known(&blk.label.replace(':', "")), *dst), inst.clone())
-                    .is_some()
-                {
-                    // println!("I think we want later instructions anyways {} {:?}", blk.label,
-                    // inst)
-                }
+                dst_map.insert((OrdLabel::from_known(&blk.label), *dst), inst.clone());
             }
             for operand in inst.operand_iter() {
                 let Some(dst) = inst.target_reg() else { continue; };
@@ -54,39 +50,46 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
 
     let mut changed = true;
 
-    let mut universe: HashMap<_, HashSet<Reg>> = HashMap::new();
-    let mut dexpr: HashMap<_, HashSet<Reg>> = HashMap::new();
-    let mut uexpr: HashMap<_, HashSet<Reg>> = HashMap::new();
-    let mut transparent: HashMap<_, HashSet<Reg>> = HashMap::new();
-    let mut kill: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
+    // Build:
+    //  - down-exposed = variables that are eval'ed in `b` and no operand is defined between the
+    //    last eval and the end of the block
+    //  - upward-exposed = variables that are used in `b` before any redefinition
+    //  - transparent =
+    
+    let mut use_map: HashMap<Reg, Vec<(&String, Reg)>> = HashMap::new();
+    let mut universe: HashMap<_, BTreeSet<Reg>> = HashMap::new();
+    let mut dexpr: HashMap<_, BTreeSet<Reg>> = HashMap::new();
+    let mut transparent: HashMap<_, BTreeSet<Reg>> = HashMap::new();
+    let mut av_kill: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
-        for (label, blk) in reverse_postorder(&domtree.cfg_succs_map, &start).filter_map(|label| {
-            #[rustfmt::skip]
-            Some((
-                label,
-                func.blocks.iter().find(|b| b.label == label.as_str())?
-            ))
-        }) {
+        for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
+            let Some(blk) = func.blocks.iter().find(|b| b.label == label.as_str()) else { continue; };
+
             let uni = universe.entry(label.clone()).or_default();
-
             let dloc = dexpr.entry(label.clone()).or_default();
-            let uloc = uexpr.entry(label.clone()).or_default();
+            let k_loc = av_kill.entry(label.clone()).or_default();
 
-            let k_loc = kill.entry(label.clone()).or_default();
             for inst in &blk.instructions {
-                let dst = inst.target_reg();
-
-                if let Some(t) = dst {
+                for operand in inst.operand_iter() {
+                    let Some(t) = inst.target_reg() else { continue; };
+                    use_map.entry(operand).or_default().push((&blk.label, *t));
+                }
+                if let Instruction::I2I { dst, .. } = inst {
+                    for (b, kdst) in use_map.get(dst).unwrap_or(&vec![]) {
+                        if b.as_str() == label.as_str() {
+                            dloc.remove(kdst);
+                        }
+                    }
+                    continue;
+                }
+                if let Some(t) = inst.target_reg() {
                     uni.insert(*t);
                     dloc.insert(*t);
-                    if !k_loc.contains(t) {
-                        changed |= uloc.insert(*t);
-                        // `t ∉ anticipated_local` is implicit in any sets behavior
-                    }
+
                     for (b, kdst) in use_map.get(t).unwrap_or(&vec![]) {
-                        changed |= k_loc.insert(*kdst);
                         if b.as_str() == label.as_str() {
+                            changed |= k_loc.insert(*kdst);
                             dloc.remove(kdst);
                         }
                     }
@@ -101,21 +104,62 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
+    changed = true;
+    // let mut dexpr: HashMap<_, BTreeSet<Reg>> = HashMap::new();
+    let mut uexpr: HashMap<_, BTreeSet<Reg>> = HashMap::new();
+    let mut ant_kill: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
+    while changed {
+        changed = false;
+        for label in postorder(&domtree.cfg_succs_map, &start) {
+            let Some(blk) = func.blocks.iter().find(|b| b.label == label.as_str()) else { continue; };
+
+            let uni = universe.entry(label.clone()).or_default();
+            let uloc = uexpr.entry(label.clone()).or_default();
+            let k_loc = ant_kill.entry(label.clone()).or_default();
+
+            for inst in blk.instructions.iter().rev() {
+                for operand in inst.operand_iter() {
+                    let Some(t) = inst.target_reg() else { continue; };
+                    use_map.entry(operand).or_default().push((&blk.label, *t));
+                }
+                if let Instruction::I2I { dst, .. } = inst {
+                    for (b, kdst) in use_map.get(dst).unwrap_or(&vec![]) {
+                        if b.as_str() == label.as_str() {
+                            uloc.remove(kdst);
+                        }
+                    }
+                    continue;
+                }
+                if let Some(t) = inst.target_reg() {
+                    uni.insert(*t);
+                    uloc.insert(*t);
+
+                    for (b, kdst) in use_map.get(t).unwrap_or(&vec![]) {
+                        if b.as_str() == label.as_str() {
+                            changed |= k_loc.insert(*kdst);
+                            uloc.remove(kdst);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // print_maps("universe", universe.iter());
-    // print_maps("dexpr", dexpr.iter());
-    // print_maps("uexpr", uexpr.iter());
-    // print_maps("trans", transparent.iter());
-    // print_maps("kill", kill.iter());
+    print_maps("dexpr", dexpr.iter());
+    print_maps("uexpr", uexpr.iter());
+    print_maps("av kill", av_kill.iter());
+    print_maps("ANTkill", ant_kill.iter());
     // println!();
 
-    let empty = HashSet::new();
+    let empty = BTreeSet::new();
 
     // AVAILABLE
-    // The expression is used in every predecessor (this is inherited so as long as it is not
-    // killed it could be a non direct predecessor)
+    // The expression is used in every predecessor (this is inherited so as long as it is
+    // not killed it could be a non direct predecessor)
     changed = true;
-    let mut avail_out: HashMap<OrdLabel, HashSet<_>> = HashMap::new();
-    let mut avail_in: HashMap<OrdLabel, HashSet<_>> = HashMap::new();
+    let mut avail_out: HashMap<OrdLabel, BTreeSet<_>> = HashMap::new();
+    let mut avail_in: HashMap<OrdLabel, BTreeSet<_>> = HashMap::new();
     while changed {
         changed = false;
         for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
@@ -123,10 +167,11 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             // AVAILABLE-IN (only used to compute `avail_out`)
             // Empty set for anticipated-out exit block
             if label == &start {
-                avail_in.insert(label.clone(), HashSet::new());
+                avail_in.insert(label.clone(), BTreeSet::new());
             } else {
-                // Available In is all predecessors of `label`s available-out sets intersected
-                // (elements common in all parents/predecessors)
+                // Available In is all predecessors of `label`s available-out sets
+                // intersected (elements common in all
+                // parents/predecessors)
                 let mut sets = domtree
                     .cfg_preds_map
                     .get(label)
@@ -158,7 +203,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                     &avail_in
                         .get(label)
                         .unwrap_or(&empty)
-                        .difference(kill.get(label).unwrap_or(&empty))
+                        .difference(av_kill.get(label).unwrap_or(&empty))
                         .cloned()
                         .collect(),
                 )
@@ -171,19 +216,16 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("avail_in", avail_in.iter());
-    // print_maps("avail_out", avail_out.iter());
-    // println!();
+    print_maps("avail_out", avail_out.iter());
+    print_maps("avail_in", avail_in.iter());
+    println!();
 
     changed = true;
     // ANTICIPATED
     // The expression is used in all successors (this is inherited so as long as it is not
     // killed it could be a non direct successor)
-    let mut anti_out: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
-    // for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
-    //     anti_out.insert(label.clone(), universe.get(label).cloned().unwrap_or_default());
-    // }
-    let mut anti_in: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
+    let mut anti_out: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
+    let mut anti_in: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
         for label in postorder(&domtree.cfg_succs_map, &start) {
@@ -198,7 +240,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                     &anti_out
                         .get(label)
                         .unwrap_or(&empty)
-                        .difference(kill.get(label).unwrap_or(&empty))
+                        .difference(ant_kill.get(label).unwrap_or(&empty))
                         .cloned()
                         .collect(),
                 )
@@ -212,11 +254,12 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
 
             // ANTICIPATED-OUT
             // Empty set for anticipated-out exit block
-            if label == exit {
-                anti_out.insert(label.clone(), HashSet::new());
+            if *label == exit {
+                anti_out.insert(label.clone(), BTreeSet::new());
             } else {
-                // anticipated-out is all successors of `label`s anticipated-in sets intersected
-                // (elements common in all `label`s successors siblings)
+                // anticipated-out is all successors of `label`s anticipated-in sets
+                // intersected (elements common in all `label`s successors
+                // siblings)
                 let mut sets = domtree
                     .cfg_succs_map
                     .get(label) // TODO: filter exit node out
@@ -238,16 +281,17 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("ant_in", anti_in.iter());
-    // print_maps("ant_out", anti_out.iter());
-    // println!();
+    print_maps("ant_in", anti_in.iter());
+    print_maps("ant_out", anti_out.iter());
+    println!();
 
     // EARLIEST
-    // Based on availability (is it above me) and anticipation (is it below me) we compute the
-    // furthest point this expression can be moved up to. Available is our upper limit and
-    // anticipated is our lower limit so earliest gets us as close to the upper limit as we can.
+    // Based on availability (is it above me) and anticipation (is it below me) we compute
+    // the furthest point this expression can be moved up to. Available is our upper
+    // limit and anticipated is our lower limit so earliest gets us as close to the
+    // upper limit as we can.
     changed = true;
-    let mut earliest: HashMap<(OrdLabel, OrdLabel), HashSet<Reg>> = HashMap::new();
+    let mut earliest: HashMap<(OrdLabel, OrdLabel), BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
         for succ in reverse_postorder(&domtree.cfg_succs_map, &start) {
@@ -270,33 +314,35 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 } else {
                     // Ant_in(s) ∩ !Av_out(p) ∩ (!Trans(p) ∪ !Ant_out(p))
                     // Is equivalent to
-                    // Ant_in(s) - Av_out(p) ∪ (Trans(p) ∩ Ant_out(p))
-                    let inout: HashSet<_> = anti_in
+                    // Ant_in(s) - Av_out(p) - (Trans(p) ∩ Ant_out(p))
+                    let inout: BTreeSet<_> = anti_in
                         .get(succ)
                         .unwrap_or(&empty)
                         .difference(avail_out.get(pred).unwrap_or(&empty))
+                        .copied()
                         .collect();
-                    let transout: HashSet<_> = transparent
+                    let transout: BTreeSet<_> = transparent
                         .get(pred)
                         .unwrap_or(&empty)
                         .intersection(anti_out.get(pred).unwrap_or(&empty))
+                        .copied()
                         .collect();
 
-                    for new in inout.union(&transout) {
-                        changed |= old.insert(**new);
+                    for new in inout.difference(&transout) {
+                        changed |= old.insert(*new);
                     }
                 }
             }
         }
     }
 
-    // print_maps("earliest", &earliest);
-    // println!();
+    print_maps("earliest", earliest.iter());
+    println!();
 
     // LATEST
     changed = true;
-    let mut later: HashMap<(OrdLabel, OrdLabel), HashSet<Reg>> = HashMap::new();
-    let mut later_in: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
+    let mut later: HashMap<(OrdLabel, OrdLabel), BTreeSet<Reg>> = HashMap::new();
+    let mut later_in: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
         for b_label in reverse_postorder(&domtree.cfg_succs_map, &start) {
@@ -309,7 +355,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 // Earliest(p, s) ∪ (LaterIn(p) ∩ !Uexpr(p))
                 // Is equivalent to
                 // Earliest(p, s) ∪ (LaterIn(p) - Uexpr(p))
-                let inloc: HashSet<_> = later_in
+                let inloc: BTreeSet<_> = later_in
                     .get(pred)
                     .unwrap_or(&empty)
                     .difference(uexpr.get(pred).unwrap_or(&empty))
@@ -325,8 +371,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             if b_label == &start {
                 later_in.entry(b_label.clone()).or_default();
             } else {
-                // Available In is all predecessors of `label`s available-out sets intersected
-                // (elements common in all parents/predecessors)
+                // Available In is all predecessors of `label`s available-out sets
+                // intersected (elements common in all
+                // parents/predecessors)
                 let mut sets =
                     preds.iter().filter_map(|l| later.get(&(l.clone(), b_label.clone())));
 
@@ -343,14 +390,14 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("later_in", later_in.iter());
-    // print_maps("later", later.iter());
-    // println!();
+    print_maps("later_in", later_in.iter());
+    print_maps("later", later.iter());
+    println!();
 
     // INSERT and DELETE
     changed = true;
-    let mut insert: HashMap<(OrdLabel, OrdLabel), HashSet<Reg>> = HashMap::new();
-    let mut delete: HashMap<OrdLabel, HashSet<Reg>> = HashMap::new();
+    let mut insert: BTreeMap<(OrdLabel, OrdLabel), BTreeSet<Reg>> = BTreeMap::new();
+    let mut delete: BTreeMap<OrdLabel, BTreeSet<Reg>> = BTreeMap::new();
     while changed {
         changed = false;
         for b_label in reverse_postorder(&domtree.cfg_succs_map, &start) {
@@ -359,7 +406,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
 
             // DELETE
             let old = delete.entry(b_label.clone()).or_default();
-            let set: HashSet<_> = uexpr
+            let set: BTreeSet<_> = uexpr
                 .get(b_label)
                 .unwrap_or(&empty)
                 .difference(later_in.get(b_label).unwrap_or(&empty))
@@ -382,33 +429,45 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
         }
     }
 
-    // print_maps("insert", insert.iter());
-    // print_maps("delete", delete.iter());
-    // println!();
+    print_maps("insert", insert.iter());
+    print_maps("delete", delete.iter());
+    println!();
 
-    let loop_analysis = find_loops(func, domtree);
-
-    // print_maps("loops", loop_analysis.loop_map().iter());
-
-    let mut deleted = HashSet::new();
-    for ((pred, succ), registers) in insert.into_iter().filter(|(_, regs)| !regs.is_empty()) {
+    // These are the instructions that we know are in the delete set and we deleted them during insertion
+    // (we just moved the instruction from one `Vec<Instruction>` to another)
+    let mut deleted = BTreeSet::new();
+    // The insert instructions that have a `pred` (or move to, aka this is the edge to insert on)
+    // and the instruction itself in common
+    let mut common_insert = BTreeSet::<Reg>::new();
+    for ((pred, succ), registers) in insert.iter().filter(|(_, regs)| !regs.is_empty()) {
+        if common_insert.is_superset(registers) { continue; }
         let mut to_move = vec![];
-        for r in &registers {
-            if delete.get(&pred).map_or(false, |dset| dset.contains(r)) {
+        for r in registers {
+            let Some(inst) = dst_map.get(&(succ.clone(), *r)) else {
+                continue;
+            };
+
+            if is_invalid_move(inst) {
+                // println!("[cannot move] {}", inst);
+                continue;
+            }
+
+            if delete.get(pred).map_or(false, |dset| dset.contains(r)) {
                 deleted.insert((pred.clone(), *r));
                 continue;
             }
 
-            let Some(inst) = dst_map.get(&(succ.clone(), *r)) else {
-                continue;
-            };
+
+
+
             let Some(b) = func.blocks.iter().position(|b| b.label == succ.as_str()) else {
                 unreachable!("{:?}", succ)
             };
             let Some(i) = func.blocks[b].instructions.iter().position(|i| i == inst) else {
                 unreachable!("{:?}", (succ, &func.blocks[b]))
             };
-            let can_delete = delete.get(&succ).map_or(false, |dset| dset.contains(r));
+
+            let can_delete = delete.get(succ).map_or(false, |dset| dset.contains(r));
             to_move.push(if can_delete {
                 deleted.insert((succ.clone(), *r));
                 let inst = func.blocks[b].instructions[i].clone();
@@ -424,10 +483,20 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             continue;
         }
 
+        let preds_succs = domtree.cfg_succs_map.get(pred).unwrap();
+        let is_insert_on_all_succs_edges = preds_succs.iter()
+            .all(|s| {
+                insert.get(&(pred.clone(), s.clone())).map_or(false, |insert_set| {
+                    insert_set.is_subset(registers) && insert_set.is_superset(registers)
+                })
+            });
+        if is_insert_on_all_succs_edges {
+            common_insert.extend(registers);
+        }
         // If pred has only one successor insert at end of pred
         // If succ has only one predecessor insert at entry to succ
         // Else edge is critical so insert block into middle of edge
-        if domtree.cfg_succs_map.get(&pred).unwrap().len() == 1 {
+        if preds_succs.len() <= 1 || is_insert_on_all_succs_edges {
             let Some(pred_blk) = func.blocks
                 .iter_mut()
                 .find(|b| b.label == pred.as_str()) else { unreachable!() };
@@ -442,7 +511,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             for inst in to_move.into_iter().rev() {
                 pred_blk.instructions.insert(end_idx, inst);
             }
-        } else if domtree.cfg_preds_map.get(&succ).unwrap().len() == 1 {
+        } else if domtree.cfg_preds_map.get(succ).unwrap().len() == 1 {
             let Some(succ_blk) = func.blocks
                 .iter_mut()
                 .find(|b| b.label == succ.as_str()) else { unreachable!() };
@@ -460,25 +529,30 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             for inst in to_move.into_iter().rev() {
                 succ_blk.instructions.insert(start_idx, inst);
             }
-        // This is to guard against a move of instructions from succ into pred's edge  actually
-        // being a move into a more nested loop
-        } else if loop_analysis.is_nested(&pred) {
-            // TODO: move up to loop header of parent loop?
-            // maybe move to successor if this is a back edge successor may actually execute less???
-            // todo!()
         } else {
+            // println!(
+            //     "p {} s {}\ns: {:#?}\np: {:#?}",
+            //     pred, succ, domtree.cfg_succs_map, domtree.cfg_preds_map
+            // );
             let label = format!(".pre{}{}", pred.as_str(), succ.as_str());
             let mut instructions = vec![Instruction::Label(label.clone())];
             instructions.extend(to_move);
             instructions.push(Instruction::ImmJump(Loc(succ.as_str().to_string())));
-            let new_block = Block { label, instructions };
+            let new_block = Block { label: label.clone(), instructions };
 
             let Some(pred_idx) = func.blocks
                 .iter()
                 .position(|b| b.label == pred.as_str()) else { unreachable!() };
 
-            let pred_idx = if pred == succ { pred_idx } else { pred_idx + 1 };
+            // We need to fix the label in the predecessor and add a "fallthrough" `jumpI`
+            // for the case when the same edge gets more than one insertion
+            if let Some(cnd_br) = func.blocks[pred_idx].instructions.last_mut() && cnd_br.uses_label() == Some(succ.as_str()) {
+                *cnd_br.label_mut().unwrap() = Loc(label);
+            } else {
+                func.blocks[pred_idx].instructions.push(Instruction::ImmJump(Loc(label)));
+            }
 
+            let pred_idx = if pred == succ { pred_idx } else { pred_idx + 1 };
             func.blocks.insert(pred_idx, new_block);
         }
     }
@@ -489,6 +563,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
                 let Some(inst) = dst_map.get(&(label.clone(), del)) else {
                     unreachable!("{:?}", label)
                 };
+
+                if is_invalid_move(inst) { continue; }
+
                 let Some(b) = func.blocks.iter().position(|b| b.label == label.as_str()) else {
                     unreachable!("{:?}", label)
                 };
@@ -500,4 +577,19 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree, exit: &Ord
             }
         }
     }
+}
+
+fn is_invalid_move(inst: &Instruction) -> bool {
+    matches!(
+        inst,
+        Instruction::Call { .. }
+            | Instruction::ImmCall { .. }
+            | Instruction::ImmRCall { .. }
+            | Instruction::Load { .. }
+            // | Instruction::I2I { .. }
+            | Instruction::I2F { .. }
+            | Instruction::F2I { .. }
+            | Instruction::F2F { .. }
+        )
+        || matches!(inst, Instruction::I2I { src, .. } if *src != Reg::Var(0))
 }
