@@ -677,28 +677,35 @@ fn lcm_simple() {
     use crate::iloc::{make_basic_blocks, make_blks, parse_text};
 
     let input = "
-    .data
+.data
 .text
-.frame pre_example, 4, %vr100, %vr200, %vr300
-	loadI 4 => %vr4
-	i2i %vr4 => %vr5
-	loadI 5 => %vr6
-	comp %vr100, %vr6 => %vr7
-	testge %vr7 => %vr8
-	cbr %vr8 -> .L1
+.frame pre_example, 8, %vr5, %vr6
+    loadI 0 => %vr7
+    i2i %vr7 => %vr8
+    loadI 0 => %vr7
+    i2i %vr7 => %vr9
+    loadI 5 => %vr10
+    comp %vr8, %vr10 => %vr11
+    testge %vr11 => %vr12
+    cbr %vr12 -> .L1
 .L0: nop
-	add %vr200, %vr5 => %vr9
-	i2i %vr9 => %vr300
-	loadI 1 => %vr10
-	add %vr100, %vr10 => %vr11
-	i2i %vr11 => %vr100
-	loadI 5 => %vr6
-	comp %vr100, %vr6 => %vr7
-	testge %vr7 => %vr8
-	cbrne %vr8 -> .L0
+    add %vr5, %vr6 => %vr13
+    i2i %vr13 => %vr9
+    loadI 1 => %vr14
+    add %vr8, %vr14 => %vr15
+    i2i %vr15 => %vr8
+    loadI 5 => %vr10
+    comp %vr8, %vr10 => %vr11
+    testge %vr11 => %vr12
+    cbrne %vr12 -> .L0
 .L1: nop
-	iwrite %vr300
-	ret
+    iwrite %vr9
+    ret
+.frame main, 0
+    loadI 1 => %vr12
+    loadI 2 => %vr13
+    call pre_example, %vr12, %vr13
+    ret
 ";
     let iloc = parse_text(input).unwrap();
     let mut blocks = make_basic_blocks(&make_blks(iloc));

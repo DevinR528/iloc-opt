@@ -35,6 +35,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     let mut dst_map: HashMap<_, _> = HashMap::new();
     for blk in &func.blocks {
         for inst in &blk.instructions {
+            if let Instruction::I2I { .. } = inst { continue; }
             if let Some(dst) = inst.target_reg() {
                 dst_map.insert((OrdLabel::from_known(&blk.label), *dst), inst.clone());
             }
@@ -54,11 +55,12 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
     //    last eval and the end of the block
     //  - upward-exposed = variables that are used in `b` before any redefinition
     //  - transparent =
+    
+    let mut use_map: HashMap<Reg, Vec<(&String, Reg)>> = HashMap::new();
     let mut universe: HashMap<_, BTreeSet<Reg>> = HashMap::new();
     let mut dexpr: HashMap<_, BTreeSet<Reg>> = HashMap::new();
-    let mut uexpr: HashMap<_, BTreeSet<Reg>> = HashMap::new();
     let mut transparent: HashMap<_, BTreeSet<Reg>> = HashMap::new();
-    let mut kill: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
+    let mut av_kill: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
     while changed {
         changed = false;
         for label in reverse_postorder(&domtree.cfg_succs_map, &start) {
@@ -66,20 +68,28 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
 
             let uni = universe.entry(label.clone()).or_default();
             let dloc = dexpr.entry(label.clone()).or_default();
-            let uloc = uexpr.entry(label.clone()).or_default();
-            let k_loc = kill.entry(label.clone()).or_default();
+            let k_loc = av_kill.entry(label.clone()).or_default();
 
             for inst in &blk.instructions {
+                for operand in inst.operand_iter() {
+                    let Some(t) = inst.target_reg() else { continue; };
+                    use_map.entry(operand).or_default().push((&blk.label, *t));
+                }
+                if let Instruction::I2I { dst, .. } = inst {
+                    for (b, kdst) in use_map.get(dst).unwrap_or(&vec![]) {
+                        if b.as_str() == label.as_str() {
+                            dloc.remove(kdst);
+                        }
+                    }
+                    continue;
+                }
                 if let Some(t) = inst.target_reg() {
                     uni.insert(*t);
                     dloc.insert(*t);
-                    if !k_loc.contains(t) {
-                        changed |= uloc.insert(*t);
-                        // `t ∉ anticipated_local` is implicit in any sets behavior
-                    }
+
                     for (b, kdst) in use_map.get(t).unwrap_or(&vec![]) {
-                        changed |= k_loc.insert(*kdst);
                         if b.as_str() == label.as_str() {
+                            changed |= k_loc.insert(*kdst);
                             dloc.remove(kdst);
                         }
                     }
@@ -94,10 +104,52 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
         }
     }
 
+    changed = true;
+    // let mut dexpr: HashMap<_, BTreeSet<Reg>> = HashMap::new();
+    let mut uexpr: HashMap<_, BTreeSet<Reg>> = HashMap::new();
+    let mut ant_kill: HashMap<OrdLabel, BTreeSet<Reg>> = HashMap::new();
+    while changed {
+        changed = false;
+        for label in postorder(&domtree.cfg_succs_map, &start) {
+            let Some(blk) = func.blocks.iter().find(|b| b.label == label.as_str()) else { continue; };
+
+            let uni = universe.entry(label.clone()).or_default();
+            let uloc = uexpr.entry(label.clone()).or_default();
+            let k_loc = ant_kill.entry(label.clone()).or_default();
+
+            for inst in blk.instructions.iter().rev() {
+                for operand in inst.operand_iter() {
+                    let Some(t) = inst.target_reg() else { continue; };
+                    use_map.entry(operand).or_default().push((&blk.label, *t));
+                }
+                if let Instruction::I2I { dst, .. } = inst {
+                    for (b, kdst) in use_map.get(dst).unwrap_or(&vec![]) {
+                        if b.as_str() == label.as_str() {
+                            uloc.remove(kdst);
+                        }
+                    }
+                    continue;
+                }
+                if let Some(t) = inst.target_reg() {
+                    uni.insert(*t);
+                    uloc.insert(*t);
+
+                    for (b, kdst) in use_map.get(t).unwrap_or(&vec![]) {
+                        if b.as_str() == label.as_str() {
+                            changed |= k_loc.insert(*kdst);
+                            uloc.remove(kdst);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // print_maps("universe", universe.iter());
-    // print_maps("dexpr", dexpr.iter());
-    // print_maps("uexpr", uexpr.iter());
-    // print_maps("kill", kill.iter());
+    print_maps("dexpr", dexpr.iter());
+    print_maps("uexpr", uexpr.iter());
+    print_maps("av kill", av_kill.iter());
+    print_maps("ANTkill", ant_kill.iter());
     // println!();
 
     let empty = BTreeSet::new();
@@ -151,7 +203,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
                     &avail_in
                         .get(label)
                         .unwrap_or(&empty)
-                        .difference(kill.get(label).unwrap_or(&empty))
+                        .difference(av_kill.get(label).unwrap_or(&empty))
                         .cloned()
                         .collect(),
                 )
@@ -164,8 +216,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
         }
     }
 
-    // print_maps("avail_out", avail_out.iter());
-    // println!();
+    print_maps("avail_out", avail_out.iter());
+    print_maps("avail_in", avail_in.iter());
+    println!();
 
     changed = true;
     // ANTICIPATED
@@ -187,7 +240,7 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
                     &anti_out
                         .get(label)
                         .unwrap_or(&empty)
-                        .difference(kill.get(label).unwrap_or(&empty))
+                        .difference(ant_kill.get(label).unwrap_or(&empty))
                         .cloned()
                         .collect(),
                 )
@@ -228,9 +281,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
         }
     }
 
-    // print_maps("ant_in", anti_in.iter());
-    // print_maps("ant_out", anti_out.iter());
-    // println!();
+    print_maps("ant_in", anti_in.iter());
+    print_maps("ant_out", anti_out.iter());
+    println!();
 
     // EARLIEST
     // Based on availability (is it above me) and anticipation (is it below me) we compute
@@ -283,8 +336,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
         }
     }
 
-    // print_maps("earliest", earliest.iter());
-    // println!();
+    print_maps("earliest", earliest.iter());
+    println!();
 
     // LATEST
     changed = true;
@@ -337,9 +390,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
         }
     }
 
-    // print_maps("later_in", later_in.iter());
-    // print_maps("later", later.iter());
-    // println!();
+    print_maps("later_in", later_in.iter());
+    print_maps("later", later.iter());
+    println!();
 
     // INSERT and DELETE
     changed = true;
@@ -376,9 +429,9 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
         }
     }
 
-    // print_maps("insert", insert.iter());
-    // print_maps("delete", delete.iter());
-    // println!();
+    print_maps("insert", insert.iter());
+    print_maps("delete", delete.iter());
+    println!();
 
     // These are the instructions that we know are in the delete set and we deleted them during insertion
     // (we just moved the instruction from one `Vec<Instruction>` to another)
