@@ -18,12 +18,14 @@ mod color;
 
 use color::ColorNode;
 
-pub const K_DEGREE: usize = 16;
+pub const K_DEGREE: usize = 8;
 
 #[derive(Debug)]
 pub enum Spill {
     Store { stack_size: usize, reg: Reg, blk_idx: usize, inst_idx: usize },
     Load { stack_size: usize, reg: Reg, blk_idx: usize, inst_idx: usize },
+    ImmLoad { src: Val, reg: Reg, blk_idx: usize, inst_idx: usize },
+    Remove { blk_idx: usize, inst_idx: usize },
 }
 impl PartialEq for Spill {
     fn eq(&self, other: &Self) -> bool {
@@ -52,12 +54,16 @@ impl Spill {
         match self {
             Self::Store { blk_idx, .. } => *blk_idx,
             Self::Load { blk_idx, .. } => *blk_idx,
+            Self::ImmLoad { blk_idx, .. } => *blk_idx,
+            Self::Remove { blk_idx, .. } => *blk_idx,
         }
     }
     pub fn inst_idx(&self) -> usize {
         match self {
             Self::Store { inst_idx, .. } => *inst_idx,
             Self::Load { inst_idx, .. } => *inst_idx,
+            Self::ImmLoad { inst_idx, .. } => *inst_idx,
+            Self::Remove { inst_idx, .. } => *inst_idx,
         }
     }
 }
@@ -98,10 +104,25 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                     println!("SPILLED {:?}", insert_spills);
 
                     let mut spills = BTreeSet::new();
-                    for blk in &func.blocks {
+                    for (b, blk) in func.blocks.iter().enumerate() {
                         let mut count = 0;
                         for (i, inst) in blk.instructions.iter().enumerate() {
-                            if let Some(dst) = inst.target_reg()
+                            // Rematerialize loadI's (this is an easy no work win)
+                            if let Instruction::ImmLoad { src, dst } = inst
+                                && insert_spills.contains(&dst.to_register())
+                            {
+                                spills.insert(Spill::Remove { blk_idx: b, inst_idx: i });
+                                for &(blk_idx, mut inst_idx) in uses.get(&dst.to_register()).unwrap_or(&BTreeSet::new()) {
+                                    if inst_idx == 0 {
+                                        match &func.blocks[blk_idx].instructions[0..2] {
+                                            [Instruction::Frame {.. }, Instruction::Label(..)] => inst_idx += 2,
+                                            [Instruction::Label(..), _] => inst_idx += 1,
+                                            _ => {},
+                                        }
+                                    }
+                                    spills.insert(Spill::ImmLoad { src: src.clone(), reg: *dst, blk_idx, inst_idx });
+                                }
+                            } else if let Some(dst) = inst.target_reg()
                                 && insert_spills.contains(&dst.to_register())
                             {
                                 stack_size += (4 * count);
@@ -136,8 +157,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                         match spill {
                             Spill::Store { stack_size, reg, blk_idx, inst_idx } => {
                                 // We don't need to store the phi again this was already
-                                // taken care
-                                // of on all paths above us
+                                // taken care of on all paths above us
                                 if matches!(
                                     &func.blocks[blk_idx].instructions[inst_idx],
                                     Instruction::Phi(..)
@@ -156,9 +176,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                         dst: Reg::Phi(0, 0),
                                     },
                                 );
-                                if blk_idx == curr_blk_idx {
-                                    add += 1;
-                                }
+                                add += 1;
                             }
                             Spill::Load { stack_size, reg, blk_idx, inst_idx } => {
                                 if blk_idx != curr_blk_idx {
@@ -166,8 +184,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                     add = 0;
                                 }
 
-                                let inst = &mut func.blocks[blk_idx].instructions;
-                                inst.insert(
+                                func.blocks[blk_idx].instructions.insert(
                                     (inst_idx + add),
                                     Instruction::LoadAddImm {
                                         src: Reg::Phi(0, 0),
@@ -175,24 +192,34 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                         dst: reg,
                                     },
                                 );
-                                if blk_idx == curr_blk_idx {
-                                    add += 1;
+                                add += 1;
+                            }
+                            Spill::ImmLoad { src, reg, blk_idx, inst_idx } => {
+                                if blk_idx != curr_blk_idx {
+                                    curr_blk_idx = blk_idx;
+                                    add = 0;
                                 }
+
+                                func.blocks[blk_idx].instructions.insert(
+                                    (inst_idx + add),
+                                    Instruction::ImmLoad { src, dst: reg },
+                                );
+                                add += 1;
+                            }
+                            Spill::Remove { blk_idx, inst_idx } => {
+                                func.blocks[blk_idx].instructions[inst_idx + add] =
+                                    Instruction::Skip(format!("[rematerial] {}", func.blocks[blk_idx].instructions[inst_idx + add]));
                             }
                         }
                     }
-
+                    dump_to(
+                        &IlocProgram { preamble: vec![], functions: vec![func.clone()] },
+                        &format!("{}ra", func.label)
+                    );
                     std::io::stdin().read_line(&mut String::new());
                 }
             }
         };
-
-        dump_to(
-            &IlocProgram { preamble: vec![], functions: vec![func.clone()] },
-            &format!("{}ra", func.label)
-        );
-
-// return;
 
         func.stack_size = stack_size;
 
@@ -278,105 +305,6 @@ fn ralloc_simple() {
     }
 }
 
-fn emit_good_ralloc_viz(
-    cfg_succs: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
-    start: &OrdLabel,
-    blocks: &[Block],
-    colored: &BTreeMap<Reg, ColorNode>,
-    interfere: &BTreeMap<Reg, BTreeSet<Reg>>,
-    definitions: &BTreeMap<Reg, Vec<(usize, usize)>>,
-    file: &str,
-) {
-    use std::{
-        collections::hash_map::DefaultHasher,
-        fmt::Write,
-        fs,
-        hash::{Hash, Hasher},
-    };
-    fn str_id<T: Hash>(s: &T) -> u64 {
-        let mut state = DefaultHasher::default();
-        s.hash(&mut state);
-        state.finish()
-    }
-
-    let mut defs: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
-    for (d, locations) in definitions {
-        for loc in locations {
-            defs.entry(d.to_register()).or_default().insert(loc);
-        }
-    }
-    let interfere_portion: usize = interfere.last_key_value().unwrap().0.as_usize();
-
-    let mut seen_nodes = BTreeSet::new();
-    let mut seen_edges = BTreeSet::new();
-    let mut buf = String::new();
-    writeln!(buf, "digraph cfg {{").unwrap();
-    for n in reverse_postorder(cfg_succs, start) {
-        let blk_idx = blocks.iter().position(|b| b.label == n.as_str()).unwrap();
-        let blk = &blocks[blk_idx];
-        for (i_idx, inst) in blk.instructions.iter().enumerate() {
-            if matches!(inst, Instruction::Skip(..) | Instruction::Phi(..)) {
-                continue;
-            }
-
-            let mut wires = String::new();
-            let mut rank = String::new();
-            write!(rank, "{{rank=same; ");
-            for reg in inst.registers_iter() {
-                let reg = reg.to_register();
-
-                let hue = (reg.as_usize() as f32) * (360.0 / interfere_portion as f32) / 360.0;
-
-                if !seen_nodes.contains(&(reg, blk_idx, i_idx)) {
-                    seen_nodes.insert((reg, blk_idx, i_idx));
-
-                    writeln!(
-                        buf,
-                        "\"{}{}{}\" [label=\" {} {} \" shape=box color=\"{} 1 1\"]",
-                        blk_idx,
-                        i_idx,
-                        str_id(&reg),
-                        inst.inst_name(),
-                        reg,
-                        hue,
-                    );
-                    write!(rank, "\"{}{}{}\";", blk_idx, i_idx, str_id(&reg));
-                }
-
-                for live in interfere.get(&reg).unwrap_or(&BTreeSet::new()) {
-                    for (bi, ii) in defs.get(&live.to_register()).unwrap_or(&BTreeSet::new()).iter()
-                    // .filter(|(b, _)| *b == blk_idx)
-                    {
-                        if !seen_edges.contains(&(*live, reg)) {
-                            seen_edges.insert((*live, reg));
-
-                            writeln!(
-                                wires,
-                                "\"{}{}{}\" -> \"{}{}{}\" [color=\"{} 1 1\"]",
-                                blk_idx,
-                                i_idx,
-                                str_id(&reg),
-                                bi,
-                                ii,
-                                str_id(&live),
-                                hue
-                            );
-                        }
-                    }
-                }
-            }
-            writeln!(rank, "}}");
-            if !wires.is_empty() {
-                buf.push_str(&rank);
-                buf.push_str(&wires);
-            }
-        }
-    }
-
-    writeln!(buf, "}}").unwrap();
-    fs::write(&format!("{}.dot", file), buf).unwrap();
-}
-
 fn emit_ralloc_viz(
     cfg_succs: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     start: &OrdLabel,
@@ -403,15 +331,15 @@ fn emit_ralloc_viz(
 
     let mut buf = String::new();
     writeln!(buf, "digraph cfg {{").unwrap();
-    for n in reverse_postorder(cfg_succs, start) {
-        let blk = blocks.iter().find(|b| b.label == n.as_str()).unwrap();
+    for block in reverse_postorder(cfg_succs, start) {
+        let blk = blocks.iter().find(|b| b.label == block.as_str()).unwrap();
         writeln!(
             buf,
             "{} [shape = none, label = <\n<table border=\"0\" cellborder=\"1\" cellspacing=\"0\" cellpadding=\"4\">",
             blk.label.replace('.', "_")
         ).unwrap();
 
-        writeln!(buf, "<tr><td>instruction</td><td colspan=\"3\">operands</td>");
+        writeln!(buf, "<tr><td>{block}</td><td colspan=\"3\">operands</td>");
         let mut last = 1;
         for reg in interfere.keys() {
             let s = reg.as_usize();
@@ -490,8 +418,8 @@ fn emit_ralloc_viz(
         }
         writeln!(buf, "</table>>]");
 
-        for e in cfg_succs.get(n).unwrap_or(&BTreeSet::new()) {
-            writeln!(buf, "{} -> {}", n.as_str().replace('.', "_"), e.as_str().replace('.', "_"))
+        for e in cfg_succs.get(block).unwrap_or(&BTreeSet::new()) {
+            writeln!(buf, "{} -> {}", block.as_str().replace('.', "_"), e.as_str().replace('.', "_"))
                 .unwrap();
         }
     }

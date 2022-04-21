@@ -7,7 +7,7 @@ use std::{
 use crate::{
     iloc::{Block, Function, Instruction, Operand, Reg},
     lcm::{print_maps, LoopAnalysis},
-    ralloc::{emit_good_ralloc_viz, emit_ralloc_viz, K_DEGREE},
+    ralloc::{emit_ralloc_viz, K_DEGREE},
     ssa::{postorder, reverse_postorder, DominatorTree, OrdLabel},
 };
 
@@ -494,22 +494,22 @@ pub fn build_interference(
         }
     }
 
-    // emit_ralloc_viz(
-    //     &domtree.cfg_succs_map,
-    //     &start,
-    //     blocks,
-    //     &graph,
-    //     &interference,
-    //     "boo",
-    // );
-    // Command::new("dot")
-    //     .args(["-Tpdf", "boo.dot", "-o", "boo.pdf"])
-    //     .spawn()
-    //     .expect("failed to execute process");
-    // Command::new("firefox")
-    //     .arg("boo.pdf")
-    //     .spawn()
-    //     .expect("failed to execute process");
+    emit_ralloc_viz(
+        &domtree.cfg_succs_map,
+        &start,
+        blocks,
+        &graph,
+        &interference,
+        "boo",
+    );
+    Command::new("dot")
+        .args(["-Tpdf", "boo.dot", "-o", "boo.pdf"])
+        .spawn()
+        .expect("failed to execute process");
+    Command::new("firefox")
+        .arg("boo.pdf")
+        .spawn()
+        .expect("failed to execute process");
 
     if need_to_spill.is_empty() {
         print!("{} ", start);
