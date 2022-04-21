@@ -53,7 +53,18 @@ impl Interpreter {
             .preamble
             .into_iter()
             .flat_map(|inst| match inst {
-                Instruction::Global { name, size: _, align: _ } => {
+                Instruction::Array { name, size, mut content } => {
+                    content.reverse();
+                    let mut c = vec![];
+                    for el in content {
+                        c.extend(vec![Val::Null; 3]);
+                        c.push(el);
+
+                    }
+                    stack.extend(c);
+                    Some((Loc(name), Val::Integer(4 + (stack.len() - 1) as isize)))
+                }
+                Instruction::Global { name, size, align: _ } => {
                     stack.push(Val::Null);
                     Some((Loc(name), Val::Integer((stack.len() - 1) as isize)))
                 }

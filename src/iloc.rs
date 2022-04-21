@@ -457,6 +457,7 @@ pub enum Instruction {
     Text,
     Frame { name: String, size: usize, params: Vec<Reg> },
     Global { name: String, size: usize, align: usize },
+    Array { name: String, size: usize, content: Vec<Val> },
     String { name: String, content: String },
     Float { name: String, content: f64 },
 
@@ -553,6 +554,7 @@ impl Hash for Instruction {
             Instruction::PushR(s) => (s, variant).hash(state),
             Instruction::Frame { name, size, params } => (name, size, params, variant).hash(state),
             Instruction::Global { name, size, align } => (name, size, align, variant).hash(state),
+            Instruction::Array { name, size, content } => (name, size, content).hash(state),
             Instruction::String { name, content } => (name, content, variant).hash(state),
             Instruction::Float { name, content } => (name, content.to_bits(), variant).hash(state),
             Instruction::Label(s) => (variant, s).hash(state),
@@ -806,6 +808,10 @@ impl PartialEq for Instruction {
                 Self::Global { name: r_name, size: r_size, align: r_align },
             ) => l_name == r_name && l_size == r_size && l_align == r_align,
             (
+                Self::Array { name: l_name, size: l_size, content: l_content },
+                Self::Array { name: r_name, size: r_size, content: r_content },
+            ) => l_name == r_name && l_size == r_size && l_content == r_content,
+            (
                 Self::String { name: l_name, content: l_content },
                 Self::String { name: r_name, content: r_content },
             ) => l_name == r_name && l_content == r_content,
@@ -961,6 +967,11 @@ impl fmt::Display for Instruction {
             }
             Self::Global { name, size, align } => {
                 writeln!(f, "    .{} {}, {}, {}", self.inst_name(), name, size, align)
+            }
+            Self::Array { name, size, content } => {
+                write!(f, "    .{} {}, {}, [", self.inst_name(), name, size)?;
+                write!(f, "{}", content.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", "))?;
+                writeln!(f, "]")
             }
             Self::String { name, content } => {
                 writeln!(f, "    .{} {}, {}", self.inst_name(), name, content)
@@ -1155,12 +1166,14 @@ impl Instruction {
                     arg.remove_phi();
                 }
             }
-            Self::Global { .. } => {}
-            Self::String { .. } => {}
-            Self::Float { .. } => {}
-            Self::Label(..) => {}
-            Self::Text | Self::Data => {}
-            Self::Skip(..) => {}
+            Self::Global { .. }
+                | Self::Array { .. }
+                | Self::String { .. }
+                | Self::Float { .. }
+                | Self::Label(..)
+                | Self::Text
+                | Self::Data
+                | Self::Skip(..) => {},
             Self::Phi(..) => {
                 *self = Self::Skip(format!("{}", self));
             }
@@ -1682,6 +1695,7 @@ impl Instruction {
             Self::Text => "text",
             Self::Frame { .. } => "frame",
             Self::Global { .. } => "global",
+            Self::Array { .. } => "array",
             Self::String { .. } => "string",
             Self::Float { .. } => "float",
             Self::Label(_) => "label",
@@ -2557,6 +2571,19 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 size: size.parse().map_err(|_| "failed to parse .global size")?,
                 align: align.parse().map_err(|_| "failed to parse .global align")?,
             }),
+            [".array", name, size, content_str @ ..] => {
+                let mut content = vec![];
+                let mut cstr = content_str.join(" ");
+                cstr = cstr.trim_start_matches('[').trim_end_matches(']').to_string();
+                for c in cstr.split(' ') {
+                    content.push(Val::from_str(c)?);
+                }
+                instructions.push(Instruction::Array {
+                    name: name.to_string(),
+                    size: size.parse().map_err(|_| "failed to parse .array size")?,
+                    content,
+                });
+            },
             [".string", name, str_lit @ ..] => {
                 let text = str_lit.join(" ");
                 instructions.push(Instruction::String {
