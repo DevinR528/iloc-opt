@@ -502,14 +502,15 @@ pub fn insert_phi_functions(
     phis
 }
 
-pub fn ssa_optimization(iloc: &mut IlocProgram) {
+pub fn ssa_optimization(iloc: &mut IlocProgram) -> HashMap<String, DominatorTree> {
+    let mut dom_trees = HashMap::new();
     for func in &mut iloc.functions {
         let cfg = build_cfg(func);
 
         let start = OrdLabel::entry();
         let dtree = dominator_tree(&cfg, &mut func.blocks);
 
-        // print_maps("cfg_succs", dtree.cfg_succs_map.iter());
+        // print_maps("cfg_succs", dtree.cfg_preds_map.iter());
         // print_maps("dom_tree", dtree.dom_tree.iter());
 
         // The `phis` used to fill the `meta` map
@@ -557,16 +558,10 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) {
 
         dead_code(func, &dtree, &start);
 
-        for blk in &mut func.blocks {
-            for inst in &mut blk.instructions {
-                inst.remove_phis();
-            }
-        }
-
-        lazy_code_motion(func, &dtree);
-
-        func.blocks.retain(|b| b.label != ".E_exit");
+        dom_trees.insert(func.label.clone(), dtree);
     }
+
+    dom_trees
 }
 
 #[test]

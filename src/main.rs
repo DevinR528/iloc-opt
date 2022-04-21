@@ -45,6 +45,7 @@ mod ralloc;
 
 use iloc::{make_blks, parse_text};
 use label::OrdLabel;
+use lcm::lazy_code_motion;
 #[allow(unused)]
 use ssa::{build_cfg, dominator_tree, ssa_optimization};
 
@@ -97,7 +98,15 @@ fn main() {
                 }
             }
             let mut blocks = make_basic_blocks(&blocks);
-            ssa::ssa_optimization(&mut blocks);
+            let func_domtree = ssa::ssa_optimization(&mut blocks);
+            for func in &mut blocks.functions {
+                for blk in &mut func.blocks {
+                    for inst in &mut blk.instructions {
+                        inst.remove_phis();
+                    }
+                }
+                lazy_code_motion(func, func_domtree.get(&func.label).unwrap());
+            }
 
             ralloc::allocate_registers(&mut blocks);
             println!("optimization done {}ms", now.elapsed().as_millis());
@@ -107,7 +116,6 @@ fn main() {
                 if matches!(inst, Instruction::Skip(..)) {
                     // continue;
                 }
-                // println!("{:?}", inst);
                 buf.push_str(&inst.to_string())
             }
 
