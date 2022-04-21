@@ -407,7 +407,7 @@ pub fn build_interference(
     let (def_map, use_map) = build_use_def_map(domtree, &*blocks);
 
     // print_maps("phi_map", phi_map.iter());
-    print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
+    // print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
     // println!();
 
     // let mut still_good = true;
@@ -416,24 +416,29 @@ pub fn build_interference(
     graph_degree.sort_by(|a, b| a.1.len().cmp(&b.1.len()));
     let mut graph_degree: VecDeque<_> = graph_degree.into();
     while let Some((register, edges)) = graph_degree.pop_front() {
-        if matches!(register, Reg::Phi(0, _)) { continue; }
+        // if matches!(register, Reg::Phi(0, _)) { continue; }
+
         // // TODO: is `still_good` how it works
         // if edges.len() < K_DEGREE && still_good {
         //     let reg = register;
         //     for (_, es) in &mut graph_degree {
         //         es.remove(&reg);
         //     }
-        //     color_hard_first
-        //         .push_front((reg,
-        //     edges.into_iter().map(ColoredReg::Uncolored).collect()));
+        //     color_hard_first.push_front((
+        //         reg,
+        //         edges.into_iter().map(|r| (r, ColoredReg::Uncolored(r))).collect()
+        //     ));
         // } else {
         //     still_good = false;
-        graph_degree.push_front((register, edges));
-        let (reg, edges) = find_cheap_spill(&mut graph_degree, blocks, &def_map, &use_map, loop_map);
-        for (_, es) in &mut graph_degree {
-            es.remove(&reg);
-        }
-        color_hard_first.push_front((reg, edges.into_iter().map(|r| (r, ColoredReg::Uncolored(r))).collect()));
+            graph_degree.push_front((register, edges));
+            let (reg, edges) = find_cheap_spill(&mut graph_degree, blocks, &def_map, &use_map, loop_map);
+            for (_, es) in &mut graph_degree {
+                es.remove(&reg);
+            }
+            color_hard_first.push_front((
+                reg,
+                edges.into_iter().map(|r| (r, ColoredReg::Uncolored(r))).collect()
+            ));
         // }
     }
 
@@ -441,7 +446,7 @@ pub fn build_interference(
     // println!();
 
     let mut curr_color = WrappingInt::default();
-    // We have nodes to color or we don't and return.
+    // We have nodes to color or we don't and return
     let Some((reg, node)) = color_hard_first.pop_front().map(|(reg, edges)| {
         (reg, ColorNode { color: curr_color, edges })
     }) else {
@@ -512,16 +517,16 @@ pub fn build_interference(
         .expect("failed to execute process");
 
     if need_to_spill.is_empty() {
-        print!("{} ", start);
-        print_maps(
-            "colored",
-            graph.iter().map(|(r, map)| (r, map.edges.values().collect::<Vec<_>>())),
-        );
-        println!();
+        // print!("{} ", start);
+        // print_maps(
+        //     "colored",
+        //     graph.iter().map(|(r, map)| (r, map.edges.values().collect::<Vec<_>>())),
+        // );
+        // println!();
 
         Ok(ColoredGraph { graph, interference, defs: def_map, })
     } else {
-        print_maps("colored", graph.iter());
+        // print_maps("colored", graph.iter());
 
         let mut insert_load_store = BTreeSet::new();
         for spilled in need_to_spill.drain(..) {
@@ -532,6 +537,11 @@ pub fn build_interference(
     }
 }
 
+/// Return the cheapest spill.
+///
+/// Cost is based on number of uses/defs to the power of loop depth of the instruction,
+/// a use right after a def is more expensive than a spread out use and loads/stores
+/// are considered cheap to spill (since they are already loads/stores).
 fn find_cheap_spill(
     graph: &mut VecDeque<(Reg, BTreeSet<Reg>)>,
     blocks: &[Block],
@@ -561,6 +571,12 @@ fn find_cheap_spill(
                 {
                     INFINITY
                 }
+                ([(def_block, def_inst)], [(use_block, use_inst), ..])
+                    if blocks[*def_block].instructions[*def_inst..].len() < 3
+                        && blocks[*use_block].instructions[0..*use_inst].len() < 3 =>
+                {
+                    INFINITY
+                }
                 _ => {
                     let loop_costs: usize = uses
                         .iter()
@@ -576,7 +592,8 @@ fn find_cheap_spill(
             }
         };
 
-        // Just remove the fact that we multiplied by out degree
+println!("    {:?} => {} / {}", r, cost, degree);
+
         let curr = cost / degree;
 
         if curr < best {
@@ -584,6 +601,8 @@ fn find_cheap_spill(
             best = curr;
         }
     }
+
+println!("{:?} => {}", graph.get(best_idx).unwrap().0, best);
 
     graph.remove(best_idx).unwrap()
 }

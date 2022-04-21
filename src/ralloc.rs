@@ -1,17 +1,18 @@
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
-    default::default,
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque, HashSet},
+    default::default, borrow::Borrow,
 };
 
 use crate::{
     iloc::{Block, IlocProgram, Instruction, Reg, Val},
     lcm::{print_maps, LoopAnalysis},
+    ralloc::color::{ColoredGraph, FailedColoring},
     ssa::{
         build_cfg,
         dce::{build_stripped_cfg, dead_code},
         dom_val_num, dominator_tree, find_loops, insert_phi_functions, reverse_postorder, OrdLabel,
-    }, ralloc::color::{ColoredGraph, FailedColoring},
+    },
 };
 
 mod color;
@@ -20,7 +21,7 @@ use color::ColorNode;
 
 pub const K_DEGREE: usize = 8;
 
-#[derive(Debug)]
+#[derive(Debug, Hash)]
 pub enum Spill {
     Store { stack_size: usize, reg: Reg, blk_idx: usize, inst_idx: usize },
     Load { stack_size: usize, reg: Reg, blk_idx: usize, inst_idx: usize },
@@ -73,6 +74,10 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
         let start = OrdLabel::entry();
         let exit = OrdLabel::exit();
 
+        // Don't double the number of entry and exit blocks added, caused entry and
+        // exit to become loops (now that we compute self loops in `loop_info::find_loops`)
+        func.blocks.retain(|blk| blk.label != ".E_exit" && blk.label != ".E_entry");
+
         let cfg = build_cfg(func);
         let mut dtree = dominator_tree(&cfg, &mut func.blocks);
         insert_phi_functions(func, &dtree.cfg_succs_map, &dtree.dom_frontier_map);
@@ -83,36 +88,41 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
         // WARNING THIS IS EXPENSIVE-ISH
         // Sneaky sneaky
         //
-        // This removes dead phi nodes that otherwise complicate the interference graph
+        // This removes dead phi nodes that otherwise complicate the interference graph,
+        // also cleans up code motion blocks that could just be fallthrough
         dead_code(func, &dtree, &start);
+        // We now have to clean up the cfg graph... YET AGAIN
         dtree.cfg_succs_map = build_stripped_cfg(func);
+        dtree.cfg_preds_map.clear();
+        for (from, set) in &dtree.cfg_succs_map {
+            for to in set {
+                dtree.cfg_preds_map.entry(to.clone()).or_default().insert(from.clone());
+            }
+        }
 
         let loop_map = find_loops(func, &dtree);
-
-        dump_to(
-            &IlocProgram { preamble: vec![], functions: vec![func.clone()] },
-            &format!("{}ssa", func.label)
-        );
 
         let mut stack_size = func.stack_size;
         // TODO: Move/copy coalesce instructions in `build_interference`
         // TODO: Move/copy coalesce instructions in `build_interference`
         let (graph, interfere, defs) = loop {
             match color::build_interference(&mut func.blocks, &dtree, &loop_map) {
-                Ok(ColoredGraph { graph, interference, defs }) => break (graph, interference, defs),
+                Ok(ColoredGraph { graph, interference, defs }) => {
+                    break (graph, interference, defs)
+                }
                 Err(FailedColoring { insert_spills, uses, defs }) => {
                     println!("SPILLED {:?}", insert_spills);
 
-                    let mut spills = BTreeSet::new();
+                    let mut spills = HashSet::new();
                     for (b, blk) in func.blocks.iter().enumerate() {
-                        let mut count = 0;
+                        let mut count = 1;
                         for (i, inst) in blk.instructions.iter().enumerate() {
                             // Rematerialize loadI's (this is an easy no work win)
                             if let Instruction::ImmLoad { src, dst } = inst
-                                && insert_spills.contains(&dst.to_register())
+                                && insert_spills.contains(dst)
                             {
                                 spills.insert(Spill::Remove { blk_idx: b, inst_idx: i });
-                                for &(blk_idx, mut inst_idx) in uses.get(&dst.to_register()).unwrap_or(&BTreeSet::new()) {
+                                for &(blk_idx, mut inst_idx) in uses.get(dst).unwrap_or(&BTreeSet::new()) {
                                     if inst_idx == 0 {
                                         match &func.blocks[blk_idx].instructions[0..2] {
                                             [Instruction::Frame {.. }, Instruction::Label(..)] => inst_idx += 2,
@@ -122,48 +132,64 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                     }
                                     spills.insert(Spill::ImmLoad { src: src.clone(), reg: *dst, blk_idx, inst_idx });
                                 }
-                            } else if let Some(dst) = inst.target_reg()
-                                && insert_spills.contains(&dst.to_register())
+                            } else if let Instruction::Frame { params, .. } = inst
+                                && params.iter().any(|p| insert_spills.contains(p))
                             {
-                                stack_size += (4 * count);
-                                count += 1;
-                                for &(blk_idx, mut inst_idx) in defs.get(&dst.to_register()).unwrap_or(&BTreeSet::new()) {
+                                for param in params.iter().filter(|p| insert_spills.contains(p)) {
+                                    for &(blk_idx, mut inst_idx) in defs.get(param).unwrap_or(&BTreeSet::new()) {
+                                        if inst_idx == 0 {
+                                            if let [Instruction::Frame {.. }, Instruction::Label(..)] = &func.blocks[blk_idx].instructions[0..2] {
+                                                inst_idx += 1;
+                                            }
+                                        }
+
+                                        spills.insert(Spill::Store { stack_size, reg: *param, blk_idx, inst_idx });
+                                    }
+                                    for &(blk_idx, mut inst_idx) in uses.get(param).unwrap_or(&BTreeSet::new()) {
+                                        if inst_idx == 0 {
+                                            if let [Instruction::Frame {.. }, Instruction::Label(..)] = &func.blocks[blk_idx].instructions[0..2] {
+                                                inst_idx += 1;
+                                            }
+                                        }
+                                        spills.insert(Spill::Load { stack_size, reg: *param, blk_idx, inst_idx });
+                                    }
+                                    stack_size += (4 * count);
+                                    count += 1;
+                                }
+                            } else if let Some(dst) = inst.target_reg()
+                                && insert_spills.contains(dst)
+                            {
+                                for &(blk_idx, mut inst_idx) in defs.get(dst).unwrap_or(&BTreeSet::new()) {
                                     if inst_idx == 0 {
-                                        match &func.blocks[blk_idx].instructions[0..2] {
-                                            [Instruction::Frame {.. }, Instruction::Label(..)] => inst_idx += 2,
-                                            [Instruction::Label(..), _] => inst_idx += 1,
-                                            _ => {},
+                                        if let [Instruction::Frame {.. }, Instruction::Label(..)] = &func.blocks[blk_idx].instructions[0..2] {
+                                            inst_idx += 1;
                                         }
                                     }
                                     spills.insert(Spill::Store { stack_size, reg: *dst, blk_idx, inst_idx });
                                 }
-                                for &(blk_idx, mut inst_idx) in uses.get(&dst.to_register()).unwrap_or(&BTreeSet::new()) {
+                                for &(blk_idx, mut inst_idx) in uses.get(dst).unwrap_or(&BTreeSet::new()) {
                                     if inst_idx == 0 {
-                                        match &func.blocks[blk_idx].instructions[0..2] {
-                                            [Instruction::Frame {.. }, Instruction::Label(..)] => inst_idx += 2,
-                                            [Instruction::Label(..), _] => inst_idx += 1,
-                                            _ => {},
+                                        if let [Instruction::Frame {.. }, Instruction::Label(..)] = &func.blocks[blk_idx].instructions[0..2] {
+                                            inst_idx += 1;
                                         }
                                     }
                                     spills.insert(Spill::Load { stack_size, reg: *dst, blk_idx, inst_idx });
                                 }
+
+                                stack_size += (4 * count);
+                                count += 1;
                             }
                         }
                     }
+
+                    let mut spills = spills.into_iter().collect::<Vec<_>>();
+                    spills.sort();
 
                     let mut curr_blk_idx = 0;
                     let mut add = 0;
                     for spill in spills {
                         match spill {
                             Spill::Store { stack_size, reg, blk_idx, inst_idx } => {
-                                // We don't need to store the phi again this was already
-                                // taken care of on all paths above us
-                                if matches!(
-                                    &func.blocks[blk_idx].instructions[inst_idx],
-                                    Instruction::Phi(..)
-                                ) {
-                                    continue;
-                                }
                                 if blk_idx != curr_blk_idx {
                                     curr_blk_idx = blk_idx;
                                     add = 0;
@@ -194,6 +220,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                 );
                                 add += 1;
                             }
+                            // Rematerialize instead of load/store
                             Spill::ImmLoad { src, reg, blk_idx, inst_idx } => {
                                 if blk_idx != curr_blk_idx {
                                     curr_blk_idx = blk_idx;
@@ -208,20 +235,27 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                             }
                             Spill::Remove { blk_idx, inst_idx } => {
                                 func.blocks[blk_idx].instructions[inst_idx + add] =
-                                    Instruction::Skip(format!("[rematerial] {}", func.blocks[blk_idx].instructions[inst_idx + add]));
+                                    Instruction::Skip(format!(
+                                        "[rematerial] {}",
+                                        func.blocks[blk_idx].instructions[inst_idx + add]
+                                    ));
                             }
                         }
                     }
+
+                    // We need to keep up with all the variables on the stack
+                    //
+                    // Was doing this outside th loop but that won't keep track of were
+                    // we are if we need to spill 2 times
+                    func.stack_size = stack_size;
+
                     dump_to(
                         &IlocProgram { preamble: vec![], functions: vec![func.clone()] },
-                        &format!("{}ra", func.label)
+                        &format!("{}ra", func.label),
                     );
-                    std::io::stdin().read_line(&mut String::new());
                 }
             }
         };
-
-        func.stack_size = stack_size;
 
         for blk in &mut func.blocks {
             for inst in &mut blk.instructions {
@@ -266,7 +300,7 @@ fn dump_to(prog: &IlocProgram, name: &str) {
 
     let mut path = std::path::PathBuf::from(&format!("./input/{}.il", name));
     let file = path.file_stem().unwrap().to_string_lossy().to_string();
-    path.set_file_name(&format!("{}{}.pre.ssa.il", file, cnt));
+    path.set_file_name(&format!("{}{}.ralloc.il", file, cnt));
     let mut fd =
         std::fs::OpenOptions::new().create(true).truncate(true).write(true).open(&path).unwrap();
     // Call the trait so I don't import stuff that will just be deleted
@@ -344,7 +378,7 @@ fn emit_ralloc_viz(
         for reg in interfere.keys() {
             let s = reg.as_usize();
             for i in last..s - 1 {
-                writeln!(buf, "<td>%vr{}</td>", i + 1);
+                writeln!(buf, "<td colspan=\"3\">%vr{}</td>", i + 1);
             }
             last = s;
             writeln!(buf, "<td>{}</td>", reg);
@@ -389,25 +423,34 @@ fn emit_ralloc_viz(
                 for (live, because) in map {
                     // only start coloring when we actually have defined the register
                     if !seen.contains(&live) {
-                        // continue;
+                        continue;
                     }
                     let curr = live.as_usize();
 
+                    // All the blocks before `curr` that are empty
                     for _ in start..curr - 1 {
                         writeln!(buf, "<td></td>");
                     }
 
+                    // The registers that are used in the instruction and mark who interferes with
+                    // them
                     let mut inner = String::new();
-                    writeln!(inner, "<table><tr>");
-                    for b in because {
+                    writeln!(inner, "<table><tr colspan = \"3\">");
+                    for b in &because {
                         let num = b.as_usize();
                         let hue = (num as f32) * (360.0 / interfere_portion as f32) / 360.0;
                         writeln!(inner, "    <td bgcolor = \"{} 1 1\">{}</td>", hue, b);
                     }
+                    for _ in 0..(3 - because.len()) {
+                        writeln!(inner, "<td></td>");
+                    }
                     writeln!(inner, "</tr></table>");
 
+                    // Background (the register that is interfering)
                     let hue = (curr as f32) * (360.0 / interfere_portion as f32) / 360.0;
                     writeln!(buf, "    <td  bgcolor = \"{} 1 1\">{}</td>", hue, inner);
+
+                    // Reset start so we don't erase colored nodes
                     start = curr;
                 }
                 for _ in start..interfere_portion {
@@ -419,8 +462,13 @@ fn emit_ralloc_viz(
         writeln!(buf, "</table>>]");
 
         for e in cfg_succs.get(block).unwrap_or(&BTreeSet::new()) {
-            writeln!(buf, "{} -> {}", block.as_str().replace('.', "_"), e.as_str().replace('.', "_"))
-                .unwrap();
+            writeln!(
+                buf,
+                "{} -> {}",
+                block.as_str().replace('.', "_"),
+                e.as_str().replace('.', "_")
+            )
+            .unwrap();
         }
     }
 
