@@ -1,7 +1,10 @@
 use std::{
+    borrow::Borrow,
     cmp::Ordering,
-    collections::{BTreeMap, BTreeSet, HashMap, VecDeque, HashSet},
-    default::default, borrow::Borrow,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+    hash::{Hash, Hasher},
+    mem::discriminant,
+    process::Command,
 };
 
 use crate::{
@@ -19,21 +22,55 @@ mod color;
 
 use color::ColorNode;
 
-pub const K_DEGREE: usize = 8;
+pub const K_DEGREE: usize = 3;
 
-#[derive(Debug, Hash)]
+#[derive(Debug, Eq)]
 pub enum Spill {
     Store { stack_size: usize, reg: Reg, blk_idx: usize, inst_idx: usize },
     Load { stack_size: usize, reg: Reg, blk_idx: usize, inst_idx: usize },
     ImmLoad { src: Val, reg: Reg, blk_idx: usize, inst_idx: usize },
     Remove { blk_idx: usize, inst_idx: usize },
 }
-impl PartialEq for Spill {
-    fn eq(&self, other: &Self) -> bool {
-        self.blk_idx() == other.blk_idx() && self.inst_idx() == other.inst_idx()
+impl Hash for Spill {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let disc = discriminant(self);
+        match self {
+            Spill::Store { reg, blk_idx, inst_idx, .. } => {
+                (reg, blk_idx, inst_idx, disc).hash(state)
+            }
+            Spill::Load { reg, blk_idx, inst_idx, .. } => {
+                (reg, blk_idx, inst_idx, disc).hash(state)
+            }
+            Spill::ImmLoad { src, reg, blk_idx, inst_idx } => {
+                (src, reg, blk_idx, inst_idx, disc).hash(state)
+            }
+            Spill::Remove { blk_idx, inst_idx } => (blk_idx, inst_idx, disc).hash(state),
+        }
     }
 }
-impl Eq for Spill {}
+impl PartialEq for Spill {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Spill::Store { reg: reg_a, blk_idx: b_idx_a, inst_idx: i_idx_a, .. },
+                Spill::Store { reg: reg_b, blk_idx: b_idx_b, inst_idx: i_idx_b, .. },
+            ) => reg_a == reg_b && b_idx_a == b_idx_b && i_idx_a == i_idx_b,
+            (
+                Spill::Load { reg: reg_a, blk_idx: b_idx_a, inst_idx: i_idx_a, .. },
+                Spill::Load { reg: reg_b, blk_idx: b_idx_b, inst_idx: i_idx_b, .. },
+            ) => reg_a == reg_b && b_idx_a == b_idx_b && i_idx_a == i_idx_b,
+            (
+                Spill::ImmLoad { src: src_a, reg: reg_a, blk_idx: b_idx_a, inst_idx: i_idx_a },
+                Spill::ImmLoad { src: src_b, reg: reg_b, blk_idx: b_idx_b, inst_idx: i_idx_b },
+            ) => src_a == src_b && reg_a == reg_b && b_idx_a == b_idx_b && i_idx_a == i_idx_b,
+            (
+                Spill::Remove { blk_idx: b_idx_a, inst_idx: i_idx_a },
+                Spill::Remove { blk_idx: b_idx_b, inst_idx: i_idx_b },
+            ) => b_idx_a == b_idx_b && i_idx_a == i_idx_b,
+            _ => false,
+        }
+    }
+}
 impl PartialOrd for Spill {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(match self.blk_idx().cmp(&other.blk_idx()) {
@@ -91,6 +128,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
         // This removes dead phi nodes that otherwise complicate the interference graph,
         // also cleans up code motion blocks that could just be fallthrough
         dead_code(func, &dtree, &start);
+
         // We now have to clean up the cfg graph... YET AGAIN
         dtree.cfg_succs_map = build_stripped_cfg(func);
         dtree.cfg_preds_map.clear();
@@ -185,6 +223,12 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                     let mut spills = spills.into_iter().collect::<Vec<_>>();
                     spills.sort();
 
+                    println!("[");
+                    for s in &spills {
+                        println!("    {:?}", s);
+                    }
+                    println!("]");
+
                     let mut curr_blk_idx = 0;
                     let mut add = 0;
                     for spill in spills {
@@ -209,6 +253,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                     curr_blk_idx = blk_idx;
                                     add = 0;
                                 }
+                                println!("{:?}\n\n{} {}", func.blocks[blk_idx], inst_idx, add);
 
                                 func.blocks[blk_idx].instructions.insert(
                                     (inst_idx + add),
@@ -243,12 +288,6 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                         }
                     }
 
-                    // We need to keep up with all the variables on the stack
-                    //
-                    // Was doing this outside th loop but that won't keep track of were
-                    // we are if we need to spill 2 times
-                    func.stack_size = stack_size;
-
                     dump_to(
                         &IlocProgram { preamble: vec![], functions: vec![func.clone()] },
                         &format!("{}ra", func.label),
@@ -256,6 +295,8 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                 }
             }
         };
+
+        func.stack_size = stack_size;
 
         for blk in &mut func.blocks {
             for inst in &mut blk.instructions {
@@ -321,9 +362,11 @@ fn ralloc_simple() {
     loadI 8 => %vr1
     add %vr1, %vr4 => %vr5
     mult %vr42, %vr4 => %vr7
-    add %vr1, %vr7 => %vr7
+    add %vr1, %vr7 => %vr10
+    i2i %vr10 => %vr7
     mult %vr5, %vr7 => %vr8
     add %vr4, %vr8 => %vr9
+    iwrite %vr9
     ret
 ";
     let iloc = parse_text(input).unwrap();
@@ -339,6 +382,7 @@ fn ralloc_simple() {
     }
 }
 
+static mut CNT_VIZ: usize = 0;
 fn emit_ralloc_viz(
     cfg_succs: &HashMap<OrdLabel, BTreeSet<OrdLabel>>,
     start: &OrdLabel,
@@ -347,17 +391,12 @@ fn emit_ralloc_viz(
     interfere: &BTreeMap<Reg, BTreeSet<Reg>>,
     file: &str,
 ) {
-    use std::{
-        collections::hash_map::DefaultHasher,
-        fmt::Write,
-        fs,
-        hash::{Hash, Hasher},
-    };
+    use std::{fmt::Write, fs};
 
-    fn str_id(s: &Reg) -> u64 {
-        let mut state = DefaultHasher::default();
-        s.hash(&mut state);
-        state.finish()
+    let cnt: usize;
+    unsafe {
+        CNT += 1;
+        cnt = CNT;
     }
 
     let interfere_portion: usize = interfere.last_key_value().unwrap().0.as_usize();
@@ -423,7 +462,7 @@ fn emit_ralloc_viz(
                 for (live, because) in map {
                     // only start coloring when we actually have defined the register
                     if !seen.contains(&live) {
-                        continue;
+                        // continue;
                     }
                     let curr = live.as_usize();
 
@@ -473,5 +512,15 @@ fn emit_ralloc_viz(
     }
 
     writeln!(buf, "}}").unwrap();
-    fs::write(&format!("{}.dot", file), buf).unwrap();
+    let name = &format!("{}{}", file, cnt);
+    fs::write(&format!("{}.dot", name), buf).unwrap();
+
+    Command::new("dot")
+        .args(["-Tpdf", &format!("{}.dot", name), "-o", &format!("{}.pdf", name)])
+        .spawn()
+        .expect("failed to execute process");
+    Command::new("firefox")
+        .arg(&format!("{}.pdf", name))
+        .spawn()
+        .expect("failed to execute process");
 }

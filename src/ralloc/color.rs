@@ -270,6 +270,7 @@ pub fn build_interference(
                     let len = map.len() + 1;
                     *map.entry(*dst).or_insert(Reg::Var(len))
                 };
+
                 if def_loc.remove(dst) { def_loc.insert(dst_new_name); }
                 *dst = dst_new_name;
             } else if let Instruction::Frame { params, .. } = inst {
@@ -281,6 +282,7 @@ pub fn build_interference(
                         let len = map.len() + 1;
                         *map.entry(*dst).or_insert(Reg::Var(len))
                     };
+
                     if def_loc.remove(dst) { def_loc.insert(dst_new_name); }
                     *dst = dst_new_name;
                 }
@@ -367,9 +369,7 @@ pub fn build_interference(
         let livenow = live_out.get_mut(block).unwrap();
         let blk_idx = blocks.iter().position(|b| b.label == block.as_str()).unwrap();
         for inst in blocks[blk_idx].instructions.iter_mut().rev() {
-            if matches!(inst, Instruction::Skip(..)) {
-                continue;
-            }
+            if matches!(inst, Instruction::Skip(..)) { continue; }
 
             if let Some(dst) = inst.target_reg() {
                 for reg in &*livenow {
@@ -407,13 +407,13 @@ pub fn build_interference(
     let (def_map, use_map) = build_use_def_map(domtree, &*blocks);
 
     // print_maps("phi_map", phi_map.iter());
-    // print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
-    // println!();
+    print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
+    println!();
 
     // let mut still_good = true;
     let mut color_hard_first: VecDeque<(_, BTreeMap<_, ColoredReg>)> = VecDeque::new();
     let mut graph_degree = interference.clone().into_iter().collect::<Vec<_>>();
-    graph_degree.sort_by(|a, b| a.1.len().cmp(&b.1.len()));
+    graph_degree.sort_by(|(_reg, edges_a), (_regb, edges_b)| edges_a.len().cmp(&edges_b.len()));
     let mut graph_degree: VecDeque<_> = graph_degree.into();
     while let Some((register, edges)) = graph_degree.pop_front() {
         // if matches!(register, Reg::Phi(0, _)) { continue; }
@@ -507,14 +507,6 @@ pub fn build_interference(
         &interference,
         "boo",
     );
-    Command::new("dot")
-        .args(["-Tpdf", "boo.dot", "-o", "boo.pdf"])
-        .spawn()
-        .expect("failed to execute process");
-    Command::new("firefox")
-        .arg("boo.pdf")
-        .spawn()
-        .expect("failed to execute process");
 
     if need_to_spill.is_empty() {
         // print!("{} ", start);
@@ -526,7 +518,7 @@ pub fn build_interference(
 
         Ok(ColoredGraph { graph, interference, defs: def_map, })
     } else {
-        // print_maps("colored", graph.iter());
+        print_maps("colored", graph.iter());
 
         let mut insert_load_store = BTreeSet::new();
         for spilled in need_to_spill.drain(..) {
@@ -554,7 +546,7 @@ fn find_cheap_spill(
 
     let empty = BTreeSet::new();
     for (idx, (r, set)) in graph.iter().enumerate() {
-        let degree = usize::max(1, set.len()) as isize;
+        let mut degree = usize::max(1, set.len()) as isize;
         let defs: Vec<_> = defs.get(r).unwrap_or(&empty).iter().collect();
         let r_defs = defs.iter().map(|(b, i)| &blocks[*b].instructions[*i]).collect::<Vec<_>>();
         let uses: Vec<_> = uses.get(r).unwrap_or(&empty).iter().collect();
@@ -563,6 +555,7 @@ fn find_cheap_spill(
         let cost: isize = if (!r_defs.is_empty() && !r_uses.is_empty())
             && (r_defs.iter().all(|i| i.is_load()) && r_uses.iter().all(|i| i.is_store()))
         {
+            degree = 1;
             -1
         } else {
             match (defs.as_slice(), uses.as_slice()) {
@@ -573,7 +566,7 @@ fn find_cheap_spill(
                 }
                 ([(def_block, def_inst)], [(use_block, use_inst), ..])
                     if blocks[*def_block].instructions[*def_inst..].len() < 3
-                        && blocks[*use_block].instructions[0..*use_inst].len() < 3 =>
+                        && blocks[*use_block].instructions[0..*use_inst].len() <= 3 =>
                 {
                     INFINITY
                 }
@@ -592,7 +585,7 @@ fn find_cheap_spill(
             }
         };
 
-println!("    {:?} => {} / {}", r, cost, degree);
+// println!("    {:?} => {} / {}", r, cost, degree);
 
         let curr = cost / degree;
 
@@ -602,7 +595,7 @@ println!("    {:?} => {} / {}", r, cost, degree);
         }
     }
 
-println!("{:?} => {}", graph.get(best_idx).unwrap().0, best);
+// println!("{:?} => {}", graph.get(best_idx).unwrap().0, best);
 
     graph.remove(best_idx).unwrap()
 }
