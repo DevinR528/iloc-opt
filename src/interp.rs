@@ -726,6 +726,12 @@ fn debug_loop(
                         .join(", ")
                 );
             }
+            ["prints" | "ps"] => {
+                for (idx, slot) in interpreter.stack.iter().enumerate() {
+                    if matches!(slot, Val::Null | Val::Integer(0)) { continue; }
+                    println!("{}: {:?}", idx, slot);
+                }
+            }
             ["prints" | "ps", idx] => {
                 println!("{:?}", interpreter.stack[idx.parse::<usize>().unwrap()]);
             }
