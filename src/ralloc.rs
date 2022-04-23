@@ -22,7 +22,7 @@ mod color;
 
 use color::ColorNode;
 
-pub const K_DEGREE: usize = 3;
+pub const K_DEGREE: usize = 8;
 
 #[derive(Debug, Eq)]
 pub enum Spill {
@@ -74,7 +74,16 @@ impl PartialEq for Spill {
 impl PartialOrd for Spill {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(match self.blk_idx().cmp(&other.blk_idx()) {
-            Ordering::Equal => self.inst_idx().cmp(&other.inst_idx()),
+            Ordering::Equal => match self.inst_idx().cmp(&other.inst_idx()) {
+                Ordering::Equal => match (self, other) {
+                    (Spill::Load { .. } | Spill::ImmLoad { .. }, Spill::Store { .. }) => Ordering::Less,
+                    (Spill::Store { .. }, Spill::ImmLoad { .. } | Spill::Load { .. }) => {
+                        Ordering::Greater
+                    }
+                    _ => Ordering::Equal,
+                },
+                res => res,
+            },
             res => res,
         })
     }
@@ -140,16 +149,29 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
 
         let loop_map = find_loops(func, &dtree);
 
+        // dump_to(
+        //     &IlocProgram { preamble: vec![], functions: vec![func.clone()] },
+        //     &format!("{}ssa", func.label),
+        // );
+
+        let mut spilled_start = BTreeSet::new();
         let mut stack_size = func.stack_size;
         // TODO: Move/copy coalesce instructions in `build_interference`
         // TODO: Move/copy coalesce instructions in `build_interference`
         let (graph, interfere, defs) = loop {
-            match color::build_interference(&mut func.blocks, &dtree, &loop_map) {
+            match color::build_interference(
+                &mut func.blocks,
+                &dtree,
+                &loop_map,
+                &spilled_start
+            ) {
                 Ok(ColoredGraph { graph, interference, defs }) => {
                     break (graph, interference, defs)
                 }
                 Err(FailedColoring { insert_spills, uses, defs }) => {
                     println!("SPILLED {:?}", insert_spills);
+                    // Make sure we don't spill these again...
+                    spilled_start = insert_spills.clone();
 
                     let mut spills = HashSet::new();
                     for (b, blk) in func.blocks.iter().enumerate() {
@@ -173,6 +195,9 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                             } else if let Instruction::Frame { params, .. } = inst
                                 && params.iter().any(|p| insert_spills.contains(p))
                             {
+                                stack_size += (4 * count);
+                                count += 1;
+
                                 for param in params.iter().filter(|p| insert_spills.contains(p)) {
                                     for &(blk_idx, mut inst_idx) in defs.get(param).unwrap_or(&BTreeSet::new()) {
                                         if inst_idx == 0 {
@@ -191,12 +216,13 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                         }
                                         spills.insert(Spill::Load { stack_size, reg: *param, blk_idx, inst_idx });
                                     }
-                                    stack_size += (4 * count);
-                                    count += 1;
                                 }
                             } else if let Some(dst) = inst.target_reg()
                                 && insert_spills.contains(dst)
                             {
+                                stack_size += (4 * count);
+                                count += 1;
+
                                 for &(blk_idx, mut inst_idx) in defs.get(dst).unwrap_or(&BTreeSet::new()) {
                                     if inst_idx == 0 {
                                         if let [Instruction::Frame {.. }, Instruction::Label(..)] = &func.blocks[blk_idx].instructions[0..2] {
@@ -213,21 +239,12 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                     }
                                     spills.insert(Spill::Load { stack_size, reg: *dst, blk_idx, inst_idx });
                                 }
-
-                                stack_size += (4 * count);
-                                count += 1;
                             }
                         }
                     }
 
                     let mut spills = spills.into_iter().collect::<Vec<_>>();
                     spills.sort();
-
-                    println!("[");
-                    for s in &spills {
-                        println!("    {:?}", s);
-                    }
-                    println!("]");
 
                     let mut curr_blk_idx = 0;
                     let mut add = 0;
@@ -253,7 +270,6 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                     curr_blk_idx = blk_idx;
                                     add = 0;
                                 }
-                                println!("{:?}\n\n{} {}", func.blocks[blk_idx], inst_idx, add);
 
                                 func.blocks[blk_idx].instructions.insert(
                                     (inst_idx + add),
@@ -288,10 +304,10 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                         }
                     }
 
-                    dump_to(
-                        &IlocProgram { preamble: vec![], functions: vec![func.clone()] },
-                        &format!("{}ra", func.label),
-                    );
+                    // dump_to(
+                    //     &IlocProgram { preamble: vec![], functions: vec![func.clone()] },
+                    //     &format!("{}ra", func.label),
+                    // );
                 }
             }
         };
