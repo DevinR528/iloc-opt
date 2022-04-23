@@ -150,6 +150,7 @@ pub fn build_interference(
     blocks: &mut [Block],
     domtree: &DominatorTree,
     loop_map: &LoopAnalysis,
+    spilled: &BTreeSet<Reg>,
 ) -> InterfereResult {
 
     let start = OrdLabel::entry();
@@ -368,7 +369,8 @@ pub fn build_interference(
     for block in postorder(&domtree.cfg_succs_map, &start) {
         let livenow = live_out.get_mut(block).unwrap();
         let blk_idx = blocks.iter().position(|b| b.label == block.as_str()).unwrap();
-        for inst in blocks[blk_idx].instructions.iter_mut().rev() {
+
+        for inst in blocks[blk_idx].instructions.iter().rev() {
             if matches!(inst, Instruction::Skip(..)) { continue; }
 
             if let Some(dst) = inst.target_reg() {
@@ -383,6 +385,7 @@ pub fn build_interference(
                     interference.entry(*dst).or_default().insert(*reg);
                     interference.entry(*reg).or_default().insert(*dst);
                 }
+
                 // Incase there is a register that has no overlapping live ranges
                 interference.entry(*dst).or_default();
                 livenow.remove(dst);
@@ -407,29 +410,36 @@ pub fn build_interference(
     let (def_map, use_map) = build_use_def_map(domtree, &*blocks);
 
     // print_maps("phi_map", phi_map.iter());
-    print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
-    println!();
+    // print_maps("interference", interference.iter().collect::<BTreeMap<_, _>>().iter());
+    // println!();
 
-    // let mut still_good = true;
-    let mut color_hard_first: VecDeque<(_, BTreeMap<_, ColoredReg>)> = VecDeque::new();
     let mut graph_degree = interference.clone().into_iter().collect::<Vec<_>>();
-    graph_degree.sort_by(|(_reg, edges_a), (_regb, edges_b)| edges_a.len().cmp(&edges_b.len()));
+    let mut color_hard_first: VecDeque<(_, BTreeMap<_, ColoredReg>)> = VecDeque::new();
+    let spilled_cannot_spill: VecDeque<(_, BTreeMap<_, _>)> = graph_degree
+        .drain_filter(|(r, _)| spilled.contains(r))
+        .map(|(r, edges)| (
+            r,
+            edges.into_iter().map(|r| (r, ColoredReg::Uncolored(r))).collect(),
+        ))
+        .collect();
+    graph_degree.sort_by(|(_reg, edges_a), (_regb, edges_b)| {
+        edges_a.len().cmp(&edges_b.len())
+    });
     let mut graph_degree: VecDeque<_> = graph_degree.into();
     while let Some((register, edges)) = graph_degree.pop_front() {
         // if matches!(register, Reg::Phi(0, _)) { continue; }
 
         // // TODO: is `still_good` how it works
-        // if edges.len() < K_DEGREE && still_good {
-        //     let reg = register;
-        //     for (_, es) in &mut graph_degree {
-        //         es.remove(&reg);
-        //     }
-        //     color_hard_first.push_front((
-        //         reg,
-        //         edges.into_iter().map(|r| (r, ColoredReg::Uncolored(r))).collect()
-        //     ));
-        // } else {
-        //     still_good = false;
+        if edges.len() < K_DEGREE {
+            let reg = register;
+            for (_, es) in &mut graph_degree {
+                es.remove(&reg);
+            }
+            color_hard_first.push_front((
+                reg,
+                edges.into_iter().map(|r| (r, ColoredReg::Uncolored(r))).collect()
+            ));
+        } else {
             graph_degree.push_front((register, edges));
             let (reg, edges) = find_cheap_spill(&mut graph_degree, blocks, &def_map, &use_map, loop_map);
             for (_, es) in &mut graph_degree {
@@ -439,7 +449,11 @@ pub fn build_interference(
                 reg,
                 edges.into_iter().map(|r| (r, ColoredReg::Uncolored(r))).collect()
             ));
-        // }
+        }
+    }
+
+    for h in spilled_cannot_spill {
+        color_hard_first.push_front(h);
     }
 
     // print_maps("hard first", color_hard_first.iter().cloned());
@@ -447,14 +461,14 @@ pub fn build_interference(
 
     let mut curr_color = WrappingInt::default();
     // We have nodes to color or we don't and return
-    let Some((reg, node)) = color_hard_first.pop_front().map(|(reg, edges)| {
+    let Some((reg, edges)) = color_hard_first.pop_front().map(|(reg, edges)| {
         (reg, ColorNode { color: curr_color, edges })
     }) else {
         return Ok(ColoredGraph::default())
     };
 
     let mut need_to_spill = vec![];
-    let mut graph = BTreeMap::from_iter(std::iter::once((reg, node)));
+    let mut graph = BTreeMap::from_iter(std::iter::once((reg, edges)));
     // Color the graph
     while let Some((r, mut edges)) = color_hard_first.pop_front() {
         if edges.is_empty() {
@@ -499,14 +513,14 @@ pub fn build_interference(
         }
     }
 
-    emit_ralloc_viz(
-        &domtree.cfg_succs_map,
-        &start,
-        blocks,
-        &graph,
-        &interference,
-        "boo",
-    );
+    // emit_ralloc_viz(
+    //     &domtree.cfg_succs_map,
+    //     &start,
+    //     blocks,
+    //     &graph,
+    //     &interference,
+    //     "boo",
+    // );
 
     if need_to_spill.is_empty() {
         // print!("{} ", start);
@@ -518,7 +532,7 @@ pub fn build_interference(
 
         Ok(ColoredGraph { graph, interference, defs: def_map, })
     } else {
-        print_maps("colored", graph.iter());
+        // print_maps("colored", graph.iter());
 
         let mut insert_load_store = BTreeSet::new();
         for spilled in need_to_spill.drain(..) {
