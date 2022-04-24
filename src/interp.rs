@@ -37,6 +37,7 @@ pub struct Interpreter {
     ///
     /// This is a cheap way of implementing malloc...
     heap: Vec<Val>,
+    heap_meta: HashMap<isize, usize>,
     /// Instructions broken up into functions and blocks.
     functions: HashMap<Loc, Vec<(usize, Instruction)>>,
     /// A map of function names to stack size and parameter list.
@@ -65,14 +66,14 @@ impl Interpreter {
         let data = iloc
             .preamble
             .into_iter()
-            .flat_map(|inst| match inst {
+            .flat_map(|inst| {
+                match inst {
                 Instruction::Array { name, size, mut content } => {
                     content.reverse();
                     let mut c = vec![];
                     for el in content {
                         c.extend(vec![Val::Null; 3]);
                         c.push(el);
-
                     }
                     stack.extend(c);
                     Some((Loc(name), Val::Integer(4 + (stack.len() - 1) as isize)))
@@ -128,6 +129,7 @@ impl Interpreter {
         Self {
             data,
             heap: vec![],
+            heap_meta: HashMap::new(),
             functions,
             fn_decl: fn_decl_map,
             label_map,
@@ -728,23 +730,45 @@ impl Interpreter {
             }
             Instruction::Malloc { size, dst } => {
                 let addr = (self.heap.len().max(1) - 1) as isize;
-                let size = self.call_stack.last()?.registers.get(size)?;
-                self.heap.append(&mut vec![Val::Null; size.to_int()? as usize]);
+                let size = self.call_stack.last()?.registers.get(size)?.to_int()? as usize;
+
+                self.heap_meta.insert(addr, size);
+                self.heap.append(&mut vec![Val::Null; size]);
                 self.call_stack
                     .last_mut()
                     .unwrap()
                     .registers
                     .insert(*dst, Val::Integer(addr | HEAP_MASK));
             },
-            Instruction::Free(reg) => {},
+            Instruction::Free(reg) => {
+                let addr = self.call_stack.last()?.registers.get(reg)?.to_int()?;
+                assert!(is_heap(addr));
+                let index = remove_heap_mask(addr);
+                let size = self.heap_meta.remove(&index)?;
+                if self.heap_meta.is_empty() {
+                    self.heap.clear();
+                } else {
+                    let index = index as usize;
+                    for slot in &mut self.heap[index..(index + size)] {
+                        *slot = Val::Null;
+                    }
+                }
+            },
             Instruction::Realloc { src, size, dst } => {
                 let old_addr = self.call_stack.last()?.registers.get(src)?.to_int()?;
                 // Check that this was, in fact, allocated from the heap
                 assert!(is_heap(old_addr));
+                let old_idx = remove_heap_mask(old_addr);
+
+                let old_size = self.heap_meta.get(&old_idx)?;
+                let size = self.call_stack.last()?.registers.get(size)?.to_int()? as usize;
+
+                let old_idx = old_idx as usize;
+                let mut copy_of_old_bytes = self.heap[old_idx..(old_idx + old_size)].to_vec();
+                copy_of_old_bytes.extend(vec![Val::Null; size - old_size]);
 
                 let addr = (self.heap.len() - 1) as isize;
-                let size = self.call_stack.last()?.registers.get(size)?;
-                self.heap.extend(vec![Val::Null; size.to_int()? as usize]);
+                self.heap.extend(copy_of_old_bytes);
                 self.call_stack
                     .last_mut()
                     .unwrap()
