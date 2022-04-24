@@ -90,6 +90,8 @@ fn main() {
             let now = Instant::now();
             let iloc = parse_text(&input).unwrap();
             let mut blocks = make_blks(iloc);
+
+            // LVN (local value numbering)
             for func in &mut blocks.functions {
                 for blk in &mut func.blocks {
                     if let Some(insts) = loc_val_num::number_basic_block(blk) {
@@ -97,8 +99,12 @@ fn main() {
                     }
                 }
             }
+
+            // SSA (dominator based value numbering redundancy elimination and dead code elimination)
             let mut blocks = make_basic_blocks(&blocks);
             let func_domtree = ssa::ssa_optimization(&mut blocks);
+
+            // PRE/LCM (partial redundancy elimination/lazy code motion)
             for func in &mut blocks.functions {
                 for blk in &mut func.blocks {
                     for inst in &mut blk.instructions {
@@ -108,7 +114,9 @@ fn main() {
                 lazy_code_motion(func, func_domtree.get(&func.label).unwrap());
             }
 
+            // REGISTER ALLOCATION
             ralloc::allocate_registers(&mut blocks);
+
             println!("optimization done {}ms", now.elapsed().as_millis());
 
             let mut buf = String::new();

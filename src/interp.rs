@@ -5,6 +5,15 @@ use std::{
 
 use crate::iloc::{IlocProgram, Instruction, Loc, Reg, Val};
 
+const HEAP_MASK: isize = 1 << 32;
+
+pub fn is_heap(addr: isize) -> bool {
+    (addr & HEAP_MASK) == HEAP_MASK
+}
+pub fn remove_heap_mask(addr: isize) -> isize {
+    addr & !HEAP_MASK
+}
+
 const STACK_SIZE: usize = 4096 * 4 * 4;
 
 struct CallStackEntry {
@@ -24,6 +33,10 @@ pub struct Interpreter {
     ///
     /// Name to index into the stack.
     data: HashMap<Loc, Val>,
+    /// The heap of a program.
+    ///
+    /// This is a cheap way of implementing malloc...
+    heap: Vec<Val>,
     /// Instructions broken up into functions and blocks.
     functions: HashMap<Loc, Vec<(usize, Instruction)>>,
     /// A map of function names to stack size and parameter list.
@@ -114,6 +127,7 @@ impl Interpreter {
 
         Self {
             data,
+            heap: vec![],
             functions,
             fn_decl: fn_decl_map,
             label_map,
@@ -264,42 +278,72 @@ impl Interpreter {
                 self.call_stack.last_mut()?.registers.insert(*dst, src);
             }
             Instruction::Load { src, dst } => {
-                let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int()?;
-                let val = stack[stack_idx as usize].clone();
+                let index = self.call_stack.last()?.registers.get(src)?.to_int()?;
+                let val = if is_heap(index) {
+                    let index = remove_heap_mask(index);
+                    self.heap[index as usize].clone()
+                } else {
+                    stack[index as usize].clone()
+                };
 
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::LoadAddImm { src, add, dst } => {
                 let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int()?;
-                let val = stack[(stack_idx + add.to_int()?) as usize].clone();
+                let index = stack_idx + add.to_int()?;
+                let val = if is_heap(index) {
+                    let index = remove_heap_mask(index);
+                    self.heap[index as usize].clone()
+                } else {
+                    stack[index as usize].clone()
+                };
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::LoadAdd { src, add, dst } => {
                 let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int()?;
                 let add_amt = self.call_stack.last()?.registers.get(add)?.to_int()?;
-
-                let val = stack[(stack_idx + add_amt) as usize].clone();
+                let index = stack_idx + add_amt;
+                let val = if is_heap(index) {
+                    let index = remove_heap_mask(index);
+                    self.heap[index as usize].clone()
+                } else {
+                    stack[index as usize].clone()
+                };
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::Store { src, dst } => {
                 let val = self.call_stack.last()?.registers.get(src)?.clone();
-                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()?;
-
-                stack[stack_idx as usize] = val;
+                let index = self.call_stack.last()?.registers.get(dst)?.to_int()?;
+                if is_heap(index) {
+                    let index = remove_heap_mask(index);
+                    self.heap[index as usize] = val;
+                } else {
+                    stack[index as usize] = val;
+                }
             }
             Instruction::StoreAddImm { src, add, dst } => {
                 let val = self.call_stack.last()?.registers.get(src)?.clone();
                 let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()?;
-
-                stack[(stack_idx + add.to_int()?) as usize] = val;
+                let index = stack_idx + add.to_int()?;
+                if is_heap(index) {
+                    let index = remove_heap_mask(index);
+                    self.heap[index as usize] = val;
+                } else {
+                    stack[index as usize] = val;
+                }
             }
             Instruction::StoreAdd { src, add, dst } => {
                 let val = self.call_stack.last()?.registers.get(src)?.clone();
 
                 let add = self.call_stack.last()?.registers.get(add)?.to_int()?;
                 let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()?;
-
-                stack[(stack_idx + add) as usize] = val;
+                let index = stack_idx + add;
+                if is_heap(index) {
+                    let index = remove_heap_mask(index);
+                    self.heap[index as usize] = val;
+                } else {
+                    stack[index as usize] = val;
+                }
             }
             Instruction::CmpLT { a, b, dst } => {
                 let a = self.registers().get(a)?;
@@ -628,7 +672,13 @@ impl Interpreter {
             }
             Instruction::FLoad { src, dst } => {
                 let stack_idx = self.call_stack.last()?.registers.get(src)?;
-                let val = stack[stack_idx.to_int()? as usize].clone();
+                let index = stack_idx.to_int()?;
+                let val = if is_heap(index) {
+                    let index = remove_heap_mask(index);
+                    self.heap[index as usize].clone()
+                } else {
+                    stack[index as usize].clone()
+                };
 
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
@@ -651,8 +701,13 @@ impl Interpreter {
                 handle.read_line(&mut buf).unwrap();
 
                 let stack_idx = self.call_stack.last()?.registers.get(r)?;
-                stack[stack_idx.to_int().unwrap() as usize] =
-                    Val::Integer(buf.trim().parse().unwrap());
+                let index = stack_idx.to_int().unwrap();
+                if is_heap(index) {
+                    let index = remove_heap_mask(index);
+                    self.heap[index as usize] = Val::Integer(buf.trim().parse().unwrap());
+                } else {
+                    stack[index as usize] = Val::Integer(buf.trim().parse().unwrap());
+                }
             }
             Instruction::FWrite(r) => {
                 println!("{}", self.registers().get(r)?.to_float()?)
@@ -671,6 +726,31 @@ impl Interpreter {
                 let text = text.replace("\\n", "\n");
                 print!("{}", text)
             }
+            Instruction::Malloc { size, dst } => {
+                let addr = (self.heap.len().max(1) - 1) as isize;
+                let size = self.call_stack.last()?.registers.get(size)?;
+                self.heap.append(&mut vec![Val::Null; size.to_int()? as usize]);
+                self.call_stack
+                    .last_mut()
+                    .unwrap()
+                    .registers
+                    .insert(*dst, Val::Integer(addr | HEAP_MASK));
+            },
+            Instruction::Free(reg) => {},
+            Instruction::Realloc { src, size, dst } => {
+                let old_addr = self.call_stack.last()?.registers.get(src)?.to_int()?;
+                // Check that this was, in fact, allocated from the heap
+                assert!(is_heap(old_addr));
+
+                let addr = (self.heap.len() - 1) as isize;
+                let size = self.call_stack.last()?.registers.get(size)?;
+                self.heap.extend(vec![Val::Null; size.to_int()? as usize]);
+                self.call_stack
+                    .last_mut()
+                    .unwrap()
+                    .registers
+                    .insert(*dst, Val::Integer(addr | HEAP_MASK));
+            },
             _ => todo!("{:?}", instrs[self.inst_idx]),
         }
         self.inst_idx += 1;
@@ -734,6 +814,12 @@ fn debug_loop(
             }
             ["prints" | "ps", idx] => {
                 println!("{:?}", interpreter.stack[idx.parse::<usize>().unwrap()]);
+            }
+            ["printh" | "ph"] => {
+                for (idx, slot) in interpreter.heap.iter().enumerate() {
+                    if matches!(slot, Val::Null) { continue; }
+                    println!("{}: {:?}", idx, slot);
+                }
             }
             ["print" | "p", reg] => {
                 let reg =

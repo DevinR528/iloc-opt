@@ -445,6 +445,16 @@ pub enum Instruction {
     /// `putchar %r` where r is a int but written as ascii.
     PutChar(Reg),
 
+    // Malloc - Free - Realloc
+    /// `malloc %r => %r` where arg `r` is an int for the size and return `r` is the
+    /// register that hold the address.
+    Malloc { size: Reg, dst: Reg },
+    /// `free %r` where `r` is the register to be freed, must be valid.
+    Free(Reg),
+    /// `realloc %r, %r => %r` where first `r` is the old address, second `r` is an int for the size
+    /// and `r` is the register that hold the address.
+    Realloc { src: Reg, size: Reg, dst: Reg },
+
     // Stack operations
     /// `push`
     Push(Val),
@@ -550,6 +560,9 @@ impl Hash for Instruction {
             | Instruction::IWrite(s)
             | Instruction::PutChar(s)
             | Instruction::SWrite(s) => (s, variant).hash(state),
+            Instruction::Malloc { size, dst } => (size, dst, variant).hash(state),
+            Instruction::Free(src) => (src, variant).hash(state),
+            Instruction::Realloc { src, size, dst } => (src, size, dst, variant).hash(state),
             Instruction::Push(s) => (s, variant).hash(state),
             Instruction::PushR(s) => (s, variant).hash(state),
             Instruction::Frame { name, size, params } => (name, size, params, variant).hash(state),
@@ -797,6 +810,15 @@ impl PartialEq for Instruction {
             (Self::IWrite(l0), Self::IWrite(r0)) => l0 == r0,
             (Self::SWrite(l0), Self::SWrite(r0)) => l0 == r0,
             (Self::PutChar(l0), Self::PutChar(r0)) => l0 == r0,
+            (
+                Self::Malloc { size: size_a, dst: dst_a },
+                Self::Malloc { size: size_b, dst: dst_b },
+            ) => size_a == size_b && dst_a == dst_b,
+            (Self::Free(a), Self::Free(b)) => a == b,
+            (
+                Self::Realloc { src: src_a, size: size_a, dst: dst_a },
+                Self::Realloc { src: src_b, size: size_b, dst: dst_b },
+            ) => src_a == src_b && size_a == size_b && dst_a == dst_b,
             (Self::Push(l0), Self::Push(r0)) => l0 == r0,
             (Self::PushR(l0), Self::PushR(r0)) => l0 == r0,
             (
@@ -951,7 +973,15 @@ impl fmt::Display for Instruction {
             | Self::IWrite(reg)
             | Self::SWrite(reg)
             | Self::PutChar(reg)
+            | Self::Free(reg)
             | Self::PushR(reg) => writeln!(f, "    {} {}", self.inst_name(), reg),
+
+            Self::Malloc { size, dst } => {
+                writeln!(f, "    {} {} => {}", self.inst_name(), size, dst)
+            }
+            Self::Realloc { src, size, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, size, dst)
+            }
 
             Self::Push(val) => writeln!(f, "    {} {}", self.inst_name(), val),
             Self::Frame { name, size, params } => {
@@ -970,7 +1000,11 @@ impl fmt::Display for Instruction {
             }
             Self::Array { name, size, content } => {
                 write!(f, "    .{} {}, {}, [", self.inst_name(), name, size)?;
-                write!(f, "{}", content.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", "))?;
+                write!(
+                    f,
+                    "{}",
+                    content.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", ")
+                )?;
                 writeln!(f, "]")
             }
             Self::String { name, content } => {
@@ -1158,7 +1192,14 @@ impl Instruction {
             | Self::IWrite(reg)
             | Self::SWrite(reg)
             | Self::PutChar(reg)
+            | Self::Free(reg)
+            | Self::Malloc { dst: reg, .. }
             | Self::PushR(reg) => reg.remove_phi(),
+
+            Self::Realloc { src, dst, .. } => {
+                src.remove_phi();
+                dst.remove_phi();
+            }
 
             Self::Push(..) => {}
             Self::Frame { params, .. } => {
@@ -1167,13 +1208,13 @@ impl Instruction {
                 }
             }
             Self::Global { .. }
-                | Self::Array { .. }
-                | Self::String { .. }
-                | Self::Float { .. }
-                | Self::Label(..)
-                | Self::Text
-                | Self::Data
-                | Self::Skip(..) => {},
+            | Self::Array { .. }
+            | Self::String { .. }
+            | Self::Float { .. }
+            | Self::Label(..)
+            | Self::Text
+            | Self::Data
+            | Self::Skip(..) => {}
             Self::Phi(..) => {
                 *self = Self::Skip(format!("{}", self));
             }
@@ -1238,7 +1279,10 @@ impl Instruction {
             | Self::FLoadAddImm { dst, .. }
             | Self::FLoadAdd { dst, .. } => Some(dst),
             // Call with return `call arg, arg => ret`
-            Self::ImmCall { ret, .. } | Self::ImmRCall { ret, .. } => Some(ret),
+            Self::ImmCall { ret, .. }
+            | Self::ImmRCall { ret, .. }
+            | Self::Malloc { dst: ret, .. }
+            | Self::Realloc { dst: ret, .. } => Some(ret),
             _ => None,
         }
     }
@@ -1296,7 +1340,10 @@ impl Instruction {
             | Self::FLoadAddImm { dst, .. }
             | Self::FLoadAdd { dst, .. } => Some(dst),
             // Call with return `call arg, arg => ret`
-            Self::ImmCall { ret, .. } | Self::ImmRCall { ret, .. } => Some(ret),
+            Self::ImmCall { ret, .. }
+            | Self::ImmRCall { ret, .. }
+            | Self::Malloc { dst: ret, .. }
+            | Self::Realloc { dst: ret, .. } => Some(ret),
             _ => None,
         }
     }
@@ -1348,6 +1395,8 @@ impl Instruction {
             | Self::SWrite(r)
             | Self::IRead(r)
             | Self::PutChar(r)
+            | Self::Free(r)
+            | Self::Realloc { src: r, .. }
             | Self::FRead(r) => vec![r],
 
             Self::CmpLT { a, b, .. }
@@ -1427,6 +1476,8 @@ impl Instruction {
             | Self::SWrite(r)
             | Self::IRead(r)
             | Self::PutChar(r)
+            | Self::Free(r)
+            | Self::Realloc { src: r, .. }
             | Self::FRead(r) => vec![*r],
 
             Self::CmpLT { a, b, .. }
@@ -1502,10 +1553,14 @@ impl Instruction {
             Self::StoreAdd { src, add, .. } => {
                 (Some(Operand::Register(*src)), Some(Operand::Register(*add)))
             }
-            Self::IWrite(r) | Self::FWrite(r) | Self::SWrite(r) | Self::PutChar(r) => {
-                (Some(Operand::Register(*r)), None)
-            }
+            Self::IWrite(r)
+            | Self::FWrite(r)
+            | Self::SWrite(r)
+            | Self::PutChar(r)
+            | Self::Free(r)
+            | Self::Realloc { src: r, .. } => (Some(Operand::Register(*r)), None),
             Self::IRead(r) | Self::FRead(r) => (Some(Operand::Register(*r)), None),
+
             Self::CmpLT { a, b, .. }
             | Self::CmpLE { a, b, .. }
             | Self::CmpGT { a, b, .. }
@@ -1583,7 +1638,10 @@ impl Instruction {
             | Self::SWrite(r)
             | Self::FWrite(r)
             | Self::IRead(r)
+            | Self::Free(r)
+            | Self::Realloc { src: r, .. }
             | Self::FRead(r) => (Some(r), None),
+
             Self::CmpLT { a, b, .. }
             | Self::CmpLE { a, b, .. }
             | Self::CmpGT { a, b, .. }
@@ -1688,6 +1746,9 @@ impl Instruction {
             Self::IWrite(_) => "iwrite",
             Self::SWrite(_) => "swrite",
             Self::PutChar(_) => "putchar",
+            Self::Free(_) => "free",
+            Self::Malloc { .. } => "malloc",
+            Self::Realloc { .. } => "realloc",
             Self::Push(_) => "push",
             Self::PushR(_) => "pushr",
             Self::Pop => "pop",
@@ -2045,7 +2106,15 @@ impl Instruction {
     }
 
     pub fn is_call_instruction(&self) -> bool {
-        matches!(self, Self::Call { .. } | Self::ImmCall { .. } | Self::ImmRCall { .. })
+        matches!(
+            self,
+            Self::Call { .. }
+                | Self::ImmCall { .. }
+                | Self::ImmRCall { .. }
+                | Self::Malloc { .. }
+                | Self::Free(..)
+                | Self::Realloc { .. }
+        )
     }
 
     pub fn is_load_imm(&self) -> bool {
@@ -2133,7 +2202,11 @@ impl Instruction {
             | Self::SWrite(r)
             | Self::IRead(r)
             | Self::PutChar(r)
-            | Self::FRead(r) => vec![r],
+            | Self::FRead(r)
+            | Self::Free(r) => vec![r],
+
+            Self::Malloc { dst, .. } => vec![dst],
+            Self::Realloc { src, dst, .. } => vec![src, dst],
 
             Self::CmpLT { a, b, dst }
             | Self::CmpLE { a, b, dst }
@@ -2215,7 +2288,11 @@ impl Instruction {
             | Self::SWrite(r)
             | Self::IRead(r)
             | Self::PutChar(r)
-            | Self::FRead(r) => vec![r],
+            | Self::FRead(r)
+            | Self::Free(r) => vec![r],
+
+            Self::Malloc { dst, .. } => vec![dst],
+            Self::Realloc { src, dst, .. } => vec![src, dst],
 
             Self::CmpLT { a, b, dst }
             | Self::CmpLE { a, b, dst }
@@ -2469,6 +2546,15 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             ["swrite", src] => instructions.push(Instruction::SWrite(Reg::from_str(src)?)),
             ["putchar", src] => instructions.push(Instruction::PutChar(Reg::from_str(src)?)),
 
+            ["free", src] => instructions.push(Instruction::Free(Reg::from_str(src)?)),
+            ["malloc", size, "=>", dst] => instructions
+                .push(Instruction::Malloc { size: Reg::from_str(size)?, dst: Reg::from_str(dst)? }),
+            ["realloc", src, size, "=>", dst] => instructions.push(Instruction::Realloc {
+                src: Reg::from_str(src)?,
+                size: Reg::from_str(size)?,
+                dst: Reg::from_str(dst)?,
+            }),
+
             // Branch operations
             ["jumpI", "->", label] => {
                 instructions.push(Instruction::ImmJump(Loc::from_str(label)?))
@@ -2583,14 +2669,11 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                     size: size.parse().map_err(|_| "failed to parse .array size")?,
                     content,
                 });
-            },
+            }
             [".string", name, str_lit @ ..] => {
                 let text = str_lit.join(" ");
-                instructions.push(Instruction::String {
-                    name: name.to_string(),
-                    content: text
-                });
-            },
+                instructions.push(Instruction::String { name: name.to_string(), content: text });
+            }
             [".float", name, val] => instructions.push(Instruction::Float {
                 name: name.to_string(),
                 content: val.parse().map_err(|_| "failed to parse .float value")?,
@@ -2619,13 +2702,13 @@ impl Block {
     pub fn enter() -> Self {
         Self {
             label: ".E_entry".to_string(),
-            instructions: vec![Instruction::Label(".E_entry".to_string())]
+            instructions: vec![Instruction::Label(".E_entry".to_string())],
         }
     }
     pub fn exit() -> Self {
         Self {
             label: ".E_exit".to_string(),
-            instructions: vec![Instruction::Label(".E_exit".to_string())]
+            instructions: vec![Instruction::Label(".E_exit".to_string())],
         }
     }
 
