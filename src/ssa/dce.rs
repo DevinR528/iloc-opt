@@ -154,8 +154,7 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
                     // post dominance
                     // Which blocks will for sure run next (so we can jump to it)
                     if let Some(label) = domtree.post_idom_map.get(blk.label.as_str()) {
-                        println!("rewrite branch to jump {} -> {:?}", inst, label);
-
+                        // println!("rewrite branch to jump {} -> {:?}", inst, label);
                         jumps.push((b, i, Instruction::ImmJump(Loc(label.to_string()))));
                     }
                 } else if !matches!(inst, Instruction::ImmJump(..) | Instruction::Label(..)) {
@@ -236,7 +235,7 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
                     matches!(i, Instruction::Skip(..) | Instruction::Label(..) | Instruction::Phi(..))
                 }) {
                     changed = true;
-                    println!("transfer {blk} to {loc}");
+                    // println!("transfer {blk} to {loc}");
                     replace_transfer(func, blk.as_str(), loc, idx);
                     // TODO: also check the `jump_to` list for renamed labels
                 }
@@ -246,7 +245,7 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
                 // we remove the jump in blk and move `loc`'s instructions into `blk`
                 if cfg_preds.get(&OrdLabel::new(loc)).map_or(false, |set| set.len() == 1) {
                     changed = true;
-                    println!("combine {loc} into {blk}");
+                    // println!("combine {loc} into {blk}");
                     combine(func, loc, blk.as_str());
                 }
                 // The `all()` method defaults to true if no iteration happens!!

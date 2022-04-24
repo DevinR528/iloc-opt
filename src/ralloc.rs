@@ -326,6 +326,10 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                     let node = graph.get(&reg.to_register()).unwrap_or_else(|| panic!("{:?}", reg));
                     *reg = Reg::Var((*node.color.int()) as usize);
                 }
+
+                if matches!(inst, Instruction::I2I { src, dst } if src == dst) {
+                    *inst = Instruction::Skip(format!("[cheap coalesce] {}", inst));
+                }
             }
         }
     }
