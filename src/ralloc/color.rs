@@ -247,7 +247,7 @@ pub fn build_interference(
     // println!();
 
     let connected_phis: BTreeMap<Reg, Reg> = phi_map.iter()
-        .flat_map(|(k, set)| set.iter().copied().chain(Some(*k)).map(|r| (r, *k)))
+        .flat_map(|(k, set)| set.iter().copied().map(|r| (r, *k)))
         .collect();
     let mut map = BTreeMap::new();
     for block in postorder(&domtree.cfg_succs_map, &start) {
