@@ -1,6 +1,6 @@
     .data
     .array foo, 3, [0, 1, 2]
-    .string .string_const_0, "SUCCESS"
+    .string .string_const_0, "SUCCESS\n"
     .text
 .frame main, 0
     loadI 1 => %vr6
