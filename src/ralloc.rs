@@ -22,7 +22,7 @@ mod color;
 
 use color::ColorNode;
 
-pub const K_DEGREE: usize = 8;
+pub static mut K_DEGREE: usize = 8;
 
 #[derive(Debug, Eq)]
 pub enum Spill {
@@ -169,7 +169,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                     break (graph, interference, defs)
                 }
                 Err(FailedColoring { insert_spills, uses, defs }) => {
-                    println!("SPILLED {:?}", insert_spills);
+                    // println!("SPILLED {:?}", insert_spills);
                     // Make sure we don't spill these again...
                     spilled_start = insert_spills.clone();
 
@@ -334,7 +334,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
         }
     }
 
-    println!("NUMBER OF REGS {}", K_DEGREE);
+    println!("NUMBER OF REGS {}", unsafe { K_DEGREE });
 }
 
 static mut CNT: usize = 0;

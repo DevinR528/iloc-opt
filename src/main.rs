@@ -46,6 +46,7 @@ mod ralloc;
 use iloc::{make_blks, parse_text};
 use label::OrdLabel;
 use lcm::lazy_code_motion;
+use ralloc::K_DEGREE;
 #[allow(unused)]
 use ssa::{build_cfg, dominator_tree, ssa_optimization};
 
@@ -70,12 +71,18 @@ fn main() {
             files
         }
         ["ssa", files @ ..] => {
-            unsafe {
-                SSA = true;
-            }
+            unsafe { SSA = true; }
+            files
+        }
+        ["opt", reg_count, files @ ..] if let Ok(number_registers) = reg_count.parse::<usize>() => {
+            unsafe { K_DEGREE = number_registers; }
+            optimize = true;
             files
         }
         ["opt", files @ ..] => {
+            // Defaults to 12 real registers for register allocation
+            unsafe { K_DEGREE = 12; }
+
             optimize = true;
             files
         }

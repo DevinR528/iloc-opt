@@ -14,7 +14,8 @@ use crate::{
 const INFINITY: isize = isize::MAX;
 
 fn all_colors() -> BTreeSet<WrappingInt> {
-    (1..(K_DEGREE + 1)).into_iter().map(|i| WrappingInt::Valid(i as u8)).collect()
+    let degree = unsafe { K_DEGREE };
+    (1..(degree + 1)).into_iter().map(|i| WrappingInt::Valid(i as u8)).collect()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -37,10 +38,11 @@ impl Default for WrappingInt {
 }
 impl AddAssign<u8> for WrappingInt {
     fn add_assign(&mut self, rhs: u8) {
-        if usize::from(*self.int()) == K_DEGREE + 1 {
+        let degree = unsafe { K_DEGREE };
+        if usize::from(*self.int()) == degree + 1 {
             *self.int_mut() = 1;
         } else {
-            debug_assert!((usize::from(*self.int())) < K_DEGREE + 1);
+            debug_assert!((usize::from(*self.int())) < degree + 1);
             *self.int_mut() += 1;
         }
     }
@@ -152,6 +154,8 @@ pub fn build_interference(
     loop_map: &LoopAnalysis,
     spilled: &BTreeSet<Reg>,
 ) -> InterfereResult {
+
+    let degree = unsafe { K_DEGREE };
 
     let start = OrdLabel::entry();
     let exit = OrdLabel::exit();
@@ -430,7 +434,7 @@ pub fn build_interference(
         // if matches!(register, Reg::Phi(0, _)) { continue; }
 
         // // TODO: is `still_good` how it works
-        if edges.len() < K_DEGREE {
+        if edges.len() < degree {
             let reg = register;
             for (_, es) in &mut graph_degree {
                 es.remove(&reg);
