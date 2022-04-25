@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, BTreeMap},
     str::FromStr,
 };
 
@@ -37,7 +37,7 @@ pub struct Interpreter {
     ///
     /// This is a cheap way of implementing malloc...
     heap: Vec<Val>,
-    heap_meta: HashMap<isize, usize>,
+    heap_meta: BTreeMap<isize, usize>,
     /// Instructions broken up into functions and blocks.
     functions: HashMap<Loc, Vec<(usize, Instruction)>>,
     /// A map of function names to stack size and parameter list.
@@ -66,8 +66,7 @@ impl Interpreter {
         let data = iloc
             .preamble
             .into_iter()
-            .flat_map(|inst| {
-                match inst {
+            .flat_map(|inst| match inst {
                 Instruction::Array { name, size, mut content } => {
                     content.reverse();
                     let mut c = vec![];
@@ -82,8 +81,19 @@ impl Interpreter {
                     stack.push(Val::Null);
                     Some((Loc(name), Val::Integer((stack.len() - 1) as isize)))
                 }
-                Instruction::String { name, content } => {
-                    stack.push(Val::String(content));
+                Instruction::String { name, mut content } => {
+                    content = content.replace("\\n", "\n");
+
+                    let flipped = content.chars().rev();
+                    let mut c = vec![];
+                    for el in flipped {
+                        c.extend(vec![Val::Null; 3]);
+                        c.push(Val::Integer(el as isize));
+                    }
+                    stack.extend(c);
+                    stack.extend(vec![Val::Null; 3]);
+                    // Push the size of the incoming string
+                    stack.push(Val::Integer(content.len() as isize));
                     Some((Loc(name), Val::Integer((stack.len() - 1) as isize)))
                 }
                 Instruction::Float { name, content } => {
@@ -128,8 +138,8 @@ impl Interpreter {
 
         Self {
             data,
-            heap: vec![],
-            heap_meta: HashMap::new(),
+            heap: vec![Val::Null; STACK_SIZE],
+            heap_meta: BTreeMap::new(),
             functions,
             fn_decl: fn_decl_map,
             label_map,
@@ -151,6 +161,7 @@ impl Interpreter {
         if self.call_stack.is_empty() {
             return Some(false);
         }
+
 
         let CallStackEntry { name: func, .. } = self.call_stack.last()?;
         let stack = &mut self.stack;
@@ -718,22 +729,33 @@ impl Interpreter {
                 println!("{}", self.registers().get(r)?.to_int()?)
             }
             Instruction::PutChar(r) => {
-                print!("{}", char::from_u32(self.registers().get(r)?.to_int()? as u32).unwrap())
+                let ch = char::from_u32(self.registers().get(r)?.to_int()? as u32)?;
+                print!("{}", ch)
             }
             Instruction::SWrite(r) => {
-                let text = &stack[self.call_stack.last()?.registers.get(r)?.to_int()? as usize];
-                let Val::String(text) = text else { return None; };
+                let s_idx = self.call_stack.last()?.registers.get(r)?.to_int()? as usize;
+                let start = &stack[s_idx];
+
+                let Val::Integer(size) = start else { return None; };
+                let size = (size * 4) as usize;
+                // Skip the size int we read and read some chars
+                let char_idx = s_idx - 4;
+
+                let mut text = String::new();
+                for i in (0..size).step_by(4) {
+                    let Val::Integer(ch) = stack[char_idx - i] else { return None; };
+                    text.push(char::from_u32(ch as u32)?);
+                }
                 let text = text.trim_start_matches('"');
                 let text = text.trim_end_matches('"');
                 let text = text.replace("\\n", "\n");
                 print!("{}", text)
             }
             Instruction::Malloc { size, dst } => {
-                let addr = (self.heap.len().max(1) - 1) as isize;
-                let size = self.call_stack.last()?.registers.get(size)?.to_int()? as usize;
+                let addr = self.heap_meta.first_entry().map(|e| *e.key()).unwrap_or(STACK_SIZE as isize);
+                let size = self.call_stack.last()?.registers.get(size)?.to_int()? as isize;
 
-                self.heap_meta.insert(addr, size);
-                self.heap.append(&mut vec![Val::Null; size]);
+                self.heap_meta.insert(addr, size as usize);
                 self.call_stack
                     .last_mut()
                     .unwrap()
@@ -742,33 +764,35 @@ impl Interpreter {
             },
             Instruction::Free(reg) => {
                 let addr = self.call_stack.last()?.registers.get(reg)?.to_int()?;
-                assert!(is_heap(addr));
+                if !is_heap(addr) { return None; }
                 let index = remove_heap_mask(addr);
                 let size = self.heap_meta.remove(&index)?;
-                if self.heap_meta.is_empty() {
-                    self.heap.clear();
-                } else {
-                    let index = index as usize;
-                    for slot in &mut self.heap[index..(index + size)] {
-                        *slot = Val::Null;
-                    }
+
+                let index = index as usize;
+                for slot in &mut self.heap[index - size..index] {
+                    *slot = Val::Null;
                 }
             },
             Instruction::Realloc { src, size, dst } => {
                 let old_addr = self.call_stack.last()?.registers.get(src)?.to_int()?;
                 // Check that this was, in fact, allocated from the heap
-                assert!(is_heap(old_addr));
+                if !is_heap(old_addr) { return None; }
+
                 let old_idx = remove_heap_mask(old_addr);
 
-                let old_size = self.heap_meta.get(&old_idx)?;
+                let old_size = *self.heap_meta.get(&old_idx)?;
                 let size = self.call_stack.last()?.registers.get(size)?.to_int()? as usize;
 
                 let old_idx = old_idx as usize;
-                let mut copy_of_old_bytes = self.heap[old_idx..(old_idx + old_size)].to_vec();
-                copy_of_old_bytes.extend(vec![Val::Null; size - old_size]);
+                let mut copy_of_old_bytes = self.heap[old_idx - old_size..old_idx].to_vec();
 
-                let addr = (self.heap.len() - 1) as isize;
-                self.heap.extend(copy_of_old_bytes);
+                let addr = self.heap_meta.first_entry().map(|e| *e.key()).unwrap_or(STACK_SIZE as isize);
+                let index = addr as usize;
+                for (i, slot) in self.heap[index - size..index].iter_mut().enumerate() {
+                    if i >= (copy_of_old_bytes.len() - 1) {
+                        *slot = copy_of_old_bytes.remove(i);
+                    } else { break; }
+                }
                 self.call_stack
                     .last_mut()
                     .unwrap()
@@ -932,6 +956,17 @@ pub fn run_interpreter(iloc: IlocProgram, debug: bool) -> Result<(), &'static st
                         .map(|n| n.to_string())
                         .unwrap_or_else(|| "<unknown line>".to_string())
                 );
+                println!("heap: [");
+                for (idx, slot) in interpreter.heap.iter().enumerate() {
+                    if matches!(slot, Val::Null) { continue; }
+                    println!("  {}: {:?}", idx as isize | HEAP_MASK, slot);
+                }
+                println!("]\nstack: [");
+                for (idx, slot) in interpreter.stack.iter().enumerate() {
+                    if matches!(slot, Val::Null | Val::Integer(0)) { continue; }
+                    println!("  {}: {:?}", idx, slot);
+                }
+                println!("]");
                 return Err("failed at the above instruction");
             }
         }
