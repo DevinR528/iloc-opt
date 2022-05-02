@@ -1,29 +1,29 @@
 .data
 
 .text
-.frame pre_example, 4, %vr1, %vr2, %vr3
-    loadI 4 => %vr4
-    i2i %vr4 => %vr5
-    loadI 5 => %vr6
-    comp %vr1, %vr6 => %vr7
-    testge %vr7 => %vr8
-    cbr %vr8 -> .L1
+.frame pre_example, 4, %vr5, %vr6
+    loadI 0 => %vr7
+    i2i %vr7 => %vr8
+    loadI 5 => %vr9
+    comp %vr8, %vr9 => %vr10
+    testge %vr10 => %vr11
+    cbr %vr11 -> .L1
 .L0: nop
-    add %vr2, %vr5 => %vr9
-    i2i %vr9 => %vr3
-    loadI 1 => %vr10
-    add %vr1, %vr10 => %vr11
-    i2i %vr11 => %vr1
-    loadI 5 => %vr6
-    comp %vr1, %vr6 => %vr7
-    testge %vr7 => %vr8
-    cbrne %vr8 -> .L0
+    loadI 7 => %vr12
+    add %vr5, %vr12 => %vr13
+    i2i %vr13 => %vr6
+    loadI 1 => %vr14
+    add %vr8, %vr14 => %vr15
+    i2i %vr15 => %vr8
+    loadI 5 => %vr9
+    comp %vr8, %vr9 => %vr10
+    testge %vr10 => %vr11
+    cbrne %vr11 -> .L0
 .L1: nop
-    iwrite %vr3
+    iwrite %vr6
     ret
 .frame main, 0
-    loadI 1 => %vr12
-    loadI 2 => %vr13
-    loadI 0 => %vr14
-    call pre_example, %vr12, %vr13, %vr14
+    loadI 3 => %vr16
+    loadI 2 => %vr17
+    call pre_example, %vr16, %vr17
     ret

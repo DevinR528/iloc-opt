@@ -8,9 +8,12 @@ use std::{
     usize,
 };
 
+pub const NEGATIVE_UINT: u32 = 0xffffffff;
+
 #[derive(Clone, Debug)]
 pub enum Val {
-    Integer(isize),
+    Integer(i32),
+    UInteger(u32),
     Float(f64),
     Location(String),
     String(String),
@@ -18,12 +21,13 @@ pub enum Val {
 }
 
 impl Val {
-    pub fn to_int(&self) -> Option<isize> {
+    pub fn to_int_32(&self) -> Option<i32> {
         if let Self::Integer(int) = self {
-            return Some(*int);
+            return Some(*int as i32);
         }
         None
     }
+
     pub fn to_float(&self) -> Option<f64> {
         if let Self::Float(fl) = self {
             return Some(*fl);
@@ -31,40 +35,79 @@ impl Val {
         None
     }
 
+    pub fn to_uint_32(&self) -> Option<u32> {
+        if let Self::UInteger(uint) = self {
+            return Some(*uint);
+        } else if let Self::Integer(int) = self {
+            return Some(*int as u32)
+        }
+        None
+    }
+
     pub fn add(&self, other: &Self) -> Option<Self> {
-        Some(Self::Integer(self.to_int()? + other.to_int()?))
+        if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+            return Some(Self::UInteger(a.wrapping_add(b.to_uint_32()?)));
+        }
+        Some(Self::Integer(self.to_int_32()?.wrapping_add(other.to_int_32()?)))
     }
 
     pub fn sub(&self, other: &Self) -> Option<Self> {
-        Some(Self::Integer(self.to_int()? - other.to_int()?))
+        if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+            return Some(Self::UInteger(a.wrapping_sub(b.to_uint_32()?)));
+        }
+        Some(Self::Integer(self.to_int_32()?.wrapping_sub(other.to_int_32()?)))
     }
 
     pub fn mult(&self, other: &Self) -> Option<Self> {
-        Some(Self::Integer(self.to_int()? * other.to_int()?))
+        if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+            return Some(Self::UInteger(a.wrapping_mul(b.to_uint_32()?)));
+        }
+        Some(Self::Integer(self.to_int_32()?.wrapping_mul(other.to_int_32()?)))
     }
 
+    /// Left shift `<<`
     pub fn lshift(&self, other: &Self) -> Option<Self> {
-        Some(Self::Integer(self.to_int()? << other.to_int()?))
+        if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+            return Some(Self::UInteger(a.wrapping_shl(b.to_uint_32()?)));
+        }
+        Some(Self::Integer(self.to_int_32()?.rotate_left(other.to_int_32()? as u32)))
     }
 
+    /// Right shift `>>`
     pub fn rshift(&self, other: &Self) -> Option<Self> {
-        Some(Self::Integer(self.to_int()? >> other.to_int()?))
+        Some(Self::Integer(self.to_int_32()?.rotate_right(other.to_int_32()? as u32)))
+    }
+
+    pub fn rshiftu(&self, other: &Self) -> Option<Self> {
+        Some(Self::UInteger(self.to_uint_32()?.rotate_right(other.to_uint_32()?)))
     }
 
     pub fn modulus(&self, other: &Self) -> Option<Self> {
-        Some(Self::Integer(self.to_int()? % other.to_int()?))
+        if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+            return Some(Self::UInteger(a % b.to_uint_32()?));
+        }
+        Some(Self::Integer(self.to_int_32()? % other.to_int_32()?))
     }
 
     pub fn divide(&self, other: &Self) -> Option<Self> {
-        Some(Self::Integer(self.to_int()? / other.to_int()?))
+        if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+            return Some(Self::UInteger(a.wrapping_div(b.to_uint_32()?)));
+        }
+        Some(Self::Integer(self.to_int_32()? / other.to_int_32()?))
     }
 
     pub fn and(&self, other: &Self) -> Option<Self> {
-        Some(Self::Integer(self.to_int()? & other.to_int()?))
+        if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+            return Some(Self::UInteger(a & b.to_uint_32()?));
+        }
+        Some(Self::Integer(self.to_int_32()? & other.to_int_32()?))
     }
 
     pub fn or(&self, other: &Self) -> Option<Self> {
-        Some(Self::Integer(self.to_int()? | other.to_int()?))
+        if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+            return Some(Self::UInteger(a | b.to_uint_32()?));
+        }
+        Some(Self::Integer(self.to_int_32()? | other.to_int_32()?))
     }
 
     pub fn fadd(&self, other: &Self) -> Option<Self> {
@@ -83,7 +126,7 @@ impl Val {
         Some(Self::Float(self.to_float()? / other.to_float()?))
     }
 
-    pub fn negate(&self) -> Option<Self> { Some(Self::Integer(-self.to_int()?)) }
+    pub fn negate(&self) -> Option<Self> { Some(Self::Integer(-self.to_int_32()?)) }
 
     pub fn is_zero(&self) -> bool {
         match self {
@@ -106,6 +149,16 @@ impl Val {
                 Ordering::Less => -1,
                 Ordering::Equal => 0,
             }),
+            (Self::UInteger(a), Self::UInteger(b)) => Self::UInteger(match a.cmp(b) {
+                Ordering::Greater => 1,
+                Ordering::Less => NEGATIVE_UINT,
+                Ordering::Equal => 0,
+            }),
+            (Self::UInteger(a), b) | (b, Self::UInteger(a)) => Self::UInteger(match a.cmp(&b.to_uint_32()?) {
+                Ordering::Greater => 1,
+                Ordering::Less => NEGATIVE_UINT,
+                Ordering::Equal => 0,
+            }),
             (Self::Float(a), Self::Float(b)) => Self::Float(match a.partial_cmp(b)? {
                 Ordering::Greater => 1.0,
                 Ordering::Less => -1.0,
@@ -119,6 +172,7 @@ impl Val {
     pub fn cmp_eq(&self, other: &Self) -> Option<Self> {
         Some(match (self, other) {
             (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a == b { 1 } else { 0 }),
+            (Self::UInteger(a), Self::UInteger(b)) => Self::UInteger(if a == b { 1 } else { 0 }),
             (Self::Float(a), Self::Float(b)) => Self::Float(if a == b { 1.0 } else { 0.0 }),
             _ => {
                 return None;
@@ -128,6 +182,7 @@ impl Val {
     pub fn cmp_ne(&self, other: &Self) -> Option<Self> {
         Some(match (self, other) {
             (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a != b { 1 } else { 0 }),
+            (Self::UInteger(a), Self::UInteger(b)) => Self::UInteger(if a != b { 1 } else { 0 }),
             (Self::Float(a), Self::Float(b)) => Self::Float(if a != b { 1.0 } else { 0.0 }),
             _ => {
                 return None;
@@ -137,6 +192,7 @@ impl Val {
     pub fn cmp_lt(&self, other: &Self) -> Option<Self> {
         Some(match (self, other) {
             (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a < b { 1 } else { 0 }),
+            (Self::UInteger(a), Self::UInteger(b)) => Self::UInteger(if a < b { 1 } else { 0 }),
             (Self::Float(a), Self::Float(b)) => Self::Float(if a < b { 1.0 } else { 0.0 }),
             _ => {
                 return None;
@@ -146,6 +202,7 @@ impl Val {
     pub fn cmp_le(&self, other: &Self) -> Option<Self> {
         Some(match (self, other) {
             (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a <= b { 1 } else { 0 }),
+            (Self::UInteger(a), Self::UInteger(b)) => Self::UInteger(if a <= b { 1 } else { 0 }),
             (Self::Float(a), Self::Float(b)) => Self::Float(if a <= b { 1.0 } else { 0.0 }),
             _ => {
                 return None;
@@ -155,6 +212,7 @@ impl Val {
     pub fn cmp_gt(&self, other: &Self) -> Option<Self> {
         Some(match (self, other) {
             (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a > b { 1 } else { 0 }),
+            (Self::UInteger(a), Self::UInteger(b)) => Self::UInteger(if a > b { 1 } else { 0 }),
             (Self::Float(a), Self::Float(b)) => Self::Float(if a > b { 1.0 } else { 0.0 }),
             _ => {
                 return None;
@@ -164,6 +222,7 @@ impl Val {
     pub fn cmp_ge(&self, other: &Self) -> Option<Self> {
         Some(match (self, other) {
             (Self::Integer(a), Self::Integer(b)) => Self::Integer(if a >= b { 1 } else { 0 }),
+            (Self::UInteger(a), Self::UInteger(b)) => Self::UInteger(if a >= b { 1 } else { 0 }),
             (Self::Float(a), Self::Float(b)) => Self::Float(if a >= b { 1.0 } else { 0.0 }),
             _ => {
                 return None;
@@ -177,6 +236,7 @@ impl Hash for Val {
         discriminant(self).hash(state);
         match self {
             Self::Integer(int) => int.hash(state),
+            Self::UInteger(int) => int.hash(state),
             Self::Float(float) => float.to_bits().hash(state),
             Self::Location(s) => s.hash(state),
             Self::String(s) => s.hash(state),
@@ -199,10 +259,11 @@ impl FromStr for Val {
     type Err = &'static str;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(if s.chars().all(|c| c.is_numeric() || c == '-') {
-            Val::Integer(s.parse::<isize>().map_err(|_| {
-                println!("{}", s);
-                "`Val` parse error"
-            })?)
+            let mut x = s.parse::<isize>().map_err(|_| "failed to parse isize")?;
+            // TODO: confirm
+            // This conversion should always do the correct thing...
+            let x = x as i32;
+            Val::Integer(x)
         } else {
             Val::Location(s.to_string())
         })
@@ -212,6 +273,7 @@ impl fmt::Display for Val {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Val::Integer(int) => int.fmt(f),
+            Val::UInteger(int) => int.fmt(f),
             Val::Float(flt) => flt.fmt(f),
             Val::Location(loc) => loc.fmt(f),
             Val::String(s) => s.fmt(f),
@@ -407,6 +469,24 @@ pub enum Instruction {
     CbrEQ { a: Reg, b: Reg, loc: Loc },
     CbrNE { a: Reg, b: Reg, loc: Loc },
 
+    // Unsigned operations
+    CmpuLT { a: Reg, b: Reg, dst: Reg },
+    CmpuLE { a: Reg, b: Reg, dst: Reg },
+    CmpuGT { a: Reg, b: Reg, dst: Reg },
+    CmpuGE { a: Reg, b: Reg, dst: Reg },
+    Compu { a: Reg, b: Reg, dst: Reg },
+    TestuGT { test: Reg, dst: Reg },
+    TestuGE { test: Reg, dst: Reg },
+    TestuLT { test: Reg, dst: Reg },
+    TestuLE { test: Reg, dst: Reg },
+    CbruLT { a: Reg, b: Reg, loc: Loc },
+    CbruLE { a: Reg, b: Reg, loc: Loc },
+    CbruGT { a: Reg, b: Reg, loc: Loc },
+    CbruGE { a: Reg, b: Reg, loc: Loc },
+    RShiftu { src_a: Reg, src_b: Reg, dst: Reg },
+    ImmRShiftu { src: Reg, konst: Val, dst: Reg },
+
+
     // Floating point arithmetic
     /// `f2i`
     F2I { src: Reg, dst: Reg },
@@ -524,13 +604,24 @@ impl Hash for Instruction {
             | Instruction::CmpGE { a, b, dst }
             | Instruction::CmpEQ { a, b, dst }
             | Instruction::CmpNE { a, b, dst }
-            | Instruction::Comp { a, b, dst } => (a, b, dst, variant).hash(state),
+            | Instruction::Comp { a, b, dst }
+            // unsigned
+            | Instruction::CmpuGE { a, b, dst }
+            | Instruction::CmpuGT { a, b, dst }
+            | Instruction::CmpuLE { a, b, dst }
+            | Instruction::CmpuLT { a, b, dst }
+            | Instruction::Compu { a, b, dst } => (a, b, dst, variant).hash(state),
             Instruction::TestEQ { test, dst }
             | Instruction::TestNE { test, dst }
             | Instruction::TestGT { test, dst }
             | Instruction::TestGE { test, dst }
             | Instruction::TestLT { test, dst }
-            | Instruction::TestLE { test, dst } => (test, dst, variant).hash(state),
+            | Instruction::TestLE { test, dst }
+            // unsigned
+            | Instruction::TestuGE { test, dst }
+            | Instruction::TestuGT { test, dst }
+            | Instruction::TestuLE { test, dst }
+            | Instruction::TestuLT { test, dst } => (test, dst, variant).hash(state),
             Instruction::ImmJump(s) => (s, variant).hash(state),
             Instruction::Jump(s) => (s, variant).hash(state),
             Instruction::Call { name, args } => (name, args, variant).hash(state),
@@ -545,7 +636,15 @@ impl Hash for Instruction {
             | Instruction::CbrGT { a, b, loc }
             | Instruction::CbrGE { a, b, loc }
             | Instruction::CbrEQ { a, b, loc }
-            | Instruction::CbrNE { a, b, loc } => (a, b, loc, variant).hash(state),
+            | Instruction::CbrNE { a, b, loc }
+            // unsigned
+            | Instruction::CbruGE { a, b, loc }
+            | Instruction::CbruGT { a, b, loc }
+            | Instruction::CbruLE { a, b, loc }
+            | Instruction::CbruLT { a, b, loc } => (a, b, loc, variant).hash(state),
+
+            Instruction::RShiftu { src_a, src_b, dst } => (src_a, src_b, dst, variant).hash(state),
+            Instruction::ImmRShiftu { src, konst, dst } => (src, konst, dst, variant).hash(state),
 
             Instruction::FAdd { src_a, src_b, dst }
             | Instruction::FSub { src_a, src_b, dst }
@@ -719,6 +818,69 @@ impl PartialEq for Instruction {
                 Self::TestLE { test: l_test, dst: l_dst },
                 Self::TestLE { test: r_test, dst: r_dst },
             ) => l_test == r_test && l_dst == r_dst,
+
+            // Unsigned
+            (
+                Self::CmpuGE { a: l_a, b: l_b, dst: l_dst },
+                Self::CmpuGE { a: r_a, b: r_b, dst: r_dst },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+            (
+                Self::CmpuGT { a: l_a, b: l_b, dst: l_dst },
+                Self::CmpuGT { a: r_a, b: r_b, dst: r_dst },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+            (
+                Self::CmpuLE { a: l_a, b: l_b, dst: l_dst },
+                Self::CmpuLE { a: r_a, b: r_b, dst: r_dst },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+            (
+                Self::CmpuLT { a: l_a, b: l_b, dst: l_dst },
+                Self::CmpuLT { a: r_a, b: r_b, dst: r_dst },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+            (
+                Self::CbruGE { a: l_a, b: l_b, loc: l_loc },
+                Self::CbruGE { a: r_a, b: r_b, loc: r_loc },
+            ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
+            (
+                Self::CbruGT { a: l_a, b: l_b, loc: l_loc },
+                Self::CbruGT { a: r_a, b: r_b, loc: r_loc },
+            ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
+            (
+                Self::CbruLE { a: l_a, b: l_b, loc: l_loc },
+                Self::CbruLE { a: r_a, b: r_b, loc: r_loc },
+            ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
+            (
+                Self::CbruLT { a: l_a, b: l_b, loc: l_loc },
+                Self::CbruLT { a: r_a, b: r_b, loc: r_loc },
+            ) => l_a == r_a && l_b == r_b && l_loc == r_loc,
+            (
+                Self::TestuGE { test: l_test, dst: l_dst },
+                Self::TestuGE { test: r_test, dst: r_dst },
+            ) => l_test == r_test && l_dst == r_dst,
+            (
+                Self::TestuGT { test: l_test, dst: l_dst },
+                Self::TestuGT { test: r_test, dst: r_dst },
+            ) => l_test == r_test && l_dst == r_dst,
+            (
+                Self::TestuLE { test: l_test, dst: l_dst },
+                Self::TestuLE { test: r_test, dst: r_dst },
+            ) => l_test == r_test && l_dst == r_dst,
+            (
+                Self::TestuLT { test: l_test, dst: l_dst },
+                Self::TestuLT { test: r_test, dst: r_dst },
+            ) => l_test == r_test && l_dst == r_dst,
+            (
+                Self::Compu { a: l_a, b: l_b, dst: l_dst },
+                Self::Compu { a: r_a, b: r_b, dst: r_dst },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+            (
+                Self::RShiftu { src_a: l_a, src_b: l_b, dst: l_dst },
+                Self::RShiftu { src_a: r_a, src_b: r_b, dst: r_dst },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+            (
+                Self::ImmRShiftu { src: l_a, konst: l_b, dst: l_dst },
+                Self::ImmRShiftu { src: r_a, konst: r_b, dst: r_dst },
+            ) => l_a == r_a && l_b == r_b && l_dst == r_dst,
+
             (Self::ImmJump(l0), Self::ImmJump(r0)) => l0 == r0,
             (Self::Jump(l0), Self::Jump(r0)) => l0 == r0,
             (
@@ -902,7 +1064,13 @@ impl fmt::Display for Instruction {
             | Self::CmpGE { a, b, dst }
             | Self::CmpEQ { a, b, dst }
             | Self::CmpNE { a, b, dst }
-            | Self::Comp { a, b, dst } => {
+            | Self::Comp { a, b, dst }
+            // unsigned
+            | Self::Compu { a, b, dst }
+            | Self::CmpuGE { a, b, dst }
+            | Self::CmpuGT { a, b, dst }
+            | Self::CmpuLE { a, b, dst }
+            | Self::CmpuLT { a, b, dst } => {
                 writeln!(f, "    {} {}, {} => {}", self.inst_name(), a, b, dst)
             }
 
@@ -911,7 +1079,12 @@ impl fmt::Display for Instruction {
             | Self::TestGT { test, dst }
             | Self::TestGE { test, dst }
             | Self::TestLT { test, dst }
-            | Self::TestLE { test, dst } => {
+            | Self::TestLE { test, dst }
+            // Unsigned
+            | Self::TestuGT { test, dst }
+            | Self::TestuGE { test, dst }
+            | Self::TestuLT { test, dst }
+            | Self::TestuLE { test, dst } => {
                 writeln!(f, "    {} {} => {}", self.inst_name(), test, dst)
             }
             Self::ImmJump(label) => writeln!(f, "    {} -> {}", self.inst_name(), label),
@@ -949,8 +1122,20 @@ impl fmt::Display for Instruction {
             | Self::CbrGT { a, b, loc }
             | Self::CbrGE { a, b, loc }
             | Self::CbrEQ { a, b, loc }
-            | Self::CbrNE { a, b, loc } => {
+            | Self::CbrNE { a, b, loc }
+            // unsigned
+            | Self::CbruGE { a, b, loc }
+            | Self::CbruGT { a, b, loc }
+            | Self::CbruLE { a, b, loc }
+            | Self::CbruLT { a, b, loc } => {
                 writeln!(f, "    {} {}, {} -> {}", self.inst_name(), a, b, loc)
+            }
+
+            Self::RShiftu { src_a, src_b, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src_a, src_b, dst)
+            }
+            Self::ImmRShiftu { src, konst, dst } => {
+                writeln!(f, "    {} {}, {} => {}", self.inst_name(), src, konst, dst)
             }
 
             Self::FAdd { src_a, src_b, dst }
@@ -1118,7 +1303,13 @@ impl Instruction {
             | Self::CmpGE { a, b, dst }
             | Self::CmpEQ { a, b, dst }
             | Self::CmpNE { a, b, dst }
-            | Self::Comp { a, b, dst } => {
+            | Self::Comp { a, b, dst }
+            // unsigned
+            | Self::CmpuLT { a, b, dst }
+            | Self::CmpuLE { a, b, dst }
+            | Self::CmpuGT { a, b, dst }
+            | Self::CmpuGE { a, b, dst }
+            | Self::Compu { a, b, dst } => {
                 a.remove_phi();
                 b.remove_phi();
                 dst.remove_phi();
@@ -1129,7 +1320,12 @@ impl Instruction {
             | Self::TestGT { test, dst }
             | Self::TestGE { test, dst }
             | Self::TestLT { test, dst }
-            | Self::TestLE { test, dst } => {
+            | Self::TestLE { test, dst }
+            // unsigned
+            | Self::TestuGT { test, dst }
+            | Self::TestuGE { test, dst }
+            | Self::TestuLT { test, dst }
+            | Self::TestuLE { test, dst } => {
                 test.remove_phi();
                 dst.remove_phi();
             }
@@ -1162,9 +1358,25 @@ impl Instruction {
             | Self::CbrGT { a, b, .. }
             | Self::CbrGE { a, b, .. }
             | Self::CbrEQ { a, b, .. }
-            | Self::CbrNE { a, b, .. } => {
+            | Self::CbrNE { a, b, .. }
+            // unsigned
+            | Self::CbruLT { a, b, .. }
+            | Self::CbruLE { a, b, .. }
+            | Self::CbruGT { a, b, .. }
+            | Self::CbruGE { a, b, .. }=> {
                 a.remove_phi();
                 b.remove_phi();
+            }
+
+            // unsigned
+            Self::ImmRShiftu { src, dst, .. } => {
+                src.remove_phi();
+                dst.remove_phi();
+            }
+            Self::RShiftu { src_a, src_b, dst } => {
+                src_a.remove_phi();
+                src_b.remove_phi();
+                dst.remove_phi();
             }
 
             Self::FAdd { src_a, src_b, dst }
@@ -1239,6 +1451,7 @@ impl Instruction {
             Self::Add { dst, .. } => Some(dst),
             Self::Sub { dst, .. } => Some(dst),
             Self::Mult { dst, .. } => Some(dst),
+            Self::Div { dst, .. } => Some(dst),
             Self::LShift { dst, .. } => Some(dst),
             Self::RShift { dst, .. } => Some(dst),
             Self::Mod { dst, .. } => Some(dst),
@@ -1250,6 +1463,10 @@ impl Instruction {
             Self::ImmMult { dst, .. } => Some(dst),
             Self::ImmLShift { dst, .. } => Some(dst),
             Self::ImmRShift { dst, .. } => Some(dst),
+            // unsigned
+            Self::RShiftu { dst, .. } => Some(dst),
+            Self::ImmRShiftu { dst, .. } => Some(dst),
+
             Self::CmpLT { dst, .. } => Some(dst),
             Self::CmpLE { dst, .. } => Some(dst),
             Self::CmpGT { dst, .. } => Some(dst),
@@ -1257,12 +1474,25 @@ impl Instruction {
             Self::CmpEQ { dst, .. } => Some(dst),
             Self::CmpNE { dst, .. } => Some(dst),
             Self::Comp { dst, .. } => Some(dst),
+            // unsinged
+            Self::CmpuLT { dst, .. } => Some(dst),
+            Self::CmpuLE { dst, .. } => Some(dst),
+            Self::CmpuGT { dst, .. } => Some(dst),
+            Self::CmpuGE { dst, .. } => Some(dst),
+            Self::Compu { dst, .. } => Some(dst),
+
             Self::TestEQ { dst, .. } => Some(dst),
             Self::TestNE { dst, .. } => Some(dst),
             Self::TestGT { dst, .. } => Some(dst),
             Self::TestGE { dst, .. } => Some(dst),
             Self::TestLT { dst, .. } => Some(dst),
             Self::TestLE { dst, .. } => Some(dst),
+            // unsinged
+            Self::TestuLT { dst, .. } => Some(dst),
+            Self::TestuLE { dst, .. } => Some(dst),
+            Self::TestuGT { dst, .. } => Some(dst),
+            Self::TestuGE { dst, .. } => Some(dst),
+
             // Float stuff
             Self::FAdd { dst, .. } => Some(dst),
             Self::FSub { dst, .. } => Some(dst),
@@ -1301,6 +1531,7 @@ impl Instruction {
             | Self::Add { dst, .. }
             | Self::Sub { dst, .. }
             | Self::Mult { dst, .. }
+            | Self::Div { dst, .. }
             | Self::LShift { dst, .. }
             | Self::RShift { dst, .. }
             | Self::Mod { dst, .. }
@@ -1312,6 +1543,10 @@ impl Instruction {
             | Self::ImmMult { dst, .. }
             | Self::ImmLShift { dst, .. }
             | Self::ImmRShift { dst, .. }
+            // unsigned
+            | Self::RShiftu { dst, .. }
+            | Self::ImmRShiftu { dst, .. }
+
             | Self::ImmLoad { dst, .. }
             | Self::Load { dst, .. }
             | Self::LoadAddImm { dst, .. }
@@ -1323,12 +1558,25 @@ impl Instruction {
             | Self::CmpEQ { dst, .. }
             | Self::CmpNE { dst, .. }
             | Self::Comp { dst, .. }
+            // unsinged
+            | Self::CmpuLT { dst, .. }
+            | Self::CmpuLE { dst, .. }
+            | Self::CmpuGT { dst, .. }
+            | Self::CmpuGE { dst, .. }
+            | Self::Compu { dst, .. }
+
             | Self::TestEQ { dst, .. }
             | Self::TestNE { dst, .. }
             | Self::TestGT { dst, .. }
             | Self::TestGE { dst, .. }
             | Self::TestLT { dst, .. }
             | Self::TestLE { dst, .. }
+            // unsigned
+            | Self::TestuGT { dst, .. }
+            | Self::TestuGE { dst, .. }
+            | Self::TestuLT { dst, .. }
+            | Self::TestuLE { dst, .. }
+
             | Self::F2I { dst, .. }
             | Self::F2F { dst, .. }
             | Self::FAdd { dst, .. }
@@ -1361,8 +1609,12 @@ impl Instruction {
             Self::Add { src_a, src_b, .. }
             | Self::Sub { src_a, src_b, .. }
             | Self::Mult { src_a, src_b, .. }
+            | Self::Div { src_a, src_b, .. }
             | Self::LShift { src_a, src_b, .. }
             | Self::RShift { src_a, src_b, .. }
+            // unsigned
+            | Self::RShiftu { src_a, src_b, .. }
+
             | Self::Mod { src_a, src_b, .. }
             | Self::And { src_a, src_b, .. }
             | Self::Or { src_a, src_b, .. }
@@ -1377,6 +1629,9 @@ impl Instruction {
             | Self::ImmMult { src, .. }
             | Self::ImmLShift { src, .. }
             | Self::ImmRShift { src, .. }
+            // unsigned
+            | Self::ImmRShiftu { src, .. }
+
             | Self::LoadAddImm { src, .. }
             | Self::FLoadAddImm { src, .. } => vec![src],
 
@@ -1397,6 +1652,7 @@ impl Instruction {
             | Self::PutChar(r)
             | Self::Free(r)
             | Self::Realloc { src: r, .. }
+            | Self::Malloc { size: r, .. }
             | Self::FRead(r) => vec![r],
 
             Self::CmpLT { a, b, .. }
@@ -1406,8 +1662,20 @@ impl Instruction {
             | Self::CmpEQ { a, b, .. }
             | Self::CmpNE { a, b, .. }
             | Self::Comp { a, b, .. }
+            // unsigned
+            | Self::CmpuLT { a, b, .. }
+            | Self::CmpuLE { a, b, .. }
+            | Self::CmpuGT { a, b, .. }
+            | Self::CmpuGE { a, b, .. }
+            | Self::Compu { a, b, .. }
+
             | Self::CbrEQ { a, b, .. }
             | Self::CbrNE { a, b, .. }
+            | Self::CbrGT { a, b, .. }
+            | Self::CbrGE { a, b, .. }
+            | Self::CbrLT { a, b, .. }
+            | Self::CbrLE { a, b, .. }
+            // unsigned
             | Self::CbrGT { a, b, .. }
             | Self::CbrGE { a, b, .. }
             | Self::CbrLT { a, b, .. }
@@ -1420,7 +1688,12 @@ impl Instruction {
             | Self::TestGT { test, .. }
             | Self::TestGE { test, .. }
             | Self::TestLT { test, .. }
-            | Self::TestLE { test, .. } => vec![test],
+            | Self::TestLE { test, .. }
+            // unsigned
+            | Self::TestuGT { test, .. }
+            | Self::TestuGE { test, .. }
+            | Self::TestuLT { test, .. }
+            | Self::TestuLE { test, .. } => vec![test],
 
             Self::Call { args, .. } | Self::ImmCall { args, .. } => args.iter_mut().collect(),
             Self::ImmRet(ret) => vec![ret],
@@ -1442,8 +1715,12 @@ impl Instruction {
             Self::Add { src_a, src_b, .. }
             | Self::Sub { src_a, src_b, .. }
             | Self::Mult { src_a, src_b, .. }
+            | Self::Div { src_a, src_b, .. }
             | Self::LShift { src_a, src_b, .. }
             | Self::RShift { src_a, src_b, .. }
+            // unsigned
+            | Self::RShiftu { src_a, src_b, .. }
+
             | Self::Mod { src_a, src_b, .. }
             | Self::And { src_a, src_b, .. }
             | Self::Or { src_a, src_b, .. }
@@ -1458,6 +1735,9 @@ impl Instruction {
             | Self::ImmMult { src, .. }
             | Self::ImmLShift { src, .. }
             | Self::ImmRShift { src, .. }
+            // unsigned
+            | Self::ImmRShiftu { src, .. }
+
             | Self::LoadAddImm { src, .. }
             | Self::FLoadAddImm { src, .. } => vec![*src],
 
@@ -1478,6 +1758,7 @@ impl Instruction {
             | Self::PutChar(r)
             | Self::Free(r)
             | Self::Realloc { src: r, .. }
+            | Self::Malloc { size: r, .. }
             | Self::FRead(r) => vec![*r],
 
             Self::CmpLT { a, b, .. }
@@ -1487,12 +1768,24 @@ impl Instruction {
             | Self::CmpEQ { a, b, .. }
             | Self::CmpNE { a, b, .. }
             | Self::Comp { a, b, .. }
+            // unsigned
+            | Self::CmpuLT { a, b, .. }
+            | Self::CmpuLE { a, b, .. }
+            | Self::CmpuGT { a, b, .. }
+            | Self::CmpuGE { a, b, .. }
+            | Self::Compu { a, b, .. }
+
             | Self::CbrEQ { a, b, .. }
             | Self::CbrNE { a, b, .. }
             | Self::CbrGT { a, b, .. }
             | Self::CbrGE { a, b, .. }
             | Self::CbrLT { a, b, .. }
-            | Self::CbrLE { a, b, .. } => vec![*a, *b],
+            | Self::CbrLE { a, b, .. }
+            // unsigned
+            | Self::CbruGT { a, b, .. }
+            | Self::CbruGE { a, b, .. }
+            | Self::CbruLT { a, b, .. }
+            | Self::CbruLE { a, b, .. } => vec![*a, *b],
 
             Self::CbrT { cond, .. } | Self::CbrF { cond, .. } => vec![*cond],
 
@@ -1501,7 +1794,12 @@ impl Instruction {
             | Self::TestGT { test, .. }
             | Self::TestGE { test, .. }
             | Self::TestLT { test, .. }
-            | Self::TestLE { test, .. } => vec![*test],
+            | Self::TestLE { test, .. }
+            // unsigned
+            | Self::TestuGT { test, .. }
+            | Self::TestuGE { test, .. }
+            | Self::TestuLT { test, .. }
+            | Self::TestuLE { test, .. } => vec![*test],
 
             Self::Call { args, .. } | Self::ImmCall { args, .. } => args.clone(),
             Self::ImmRet(ret) => vec![*ret],
@@ -1523,8 +1821,12 @@ impl Instruction {
             Self::Add { src_a, src_b, .. }
             | Self::Sub { src_a, src_b, .. }
             | Self::Mult { src_a, src_b, .. }
+            | Self::Div { src_a, src_b, .. }
             | Self::LShift { src_a, src_b, .. }
             | Self::RShift { src_a, src_b, .. }
+            // unsigned
+            | Self::RShiftu { src_a, src_b, .. }
+
             | Self::Mod { src_a, src_b, .. }
             | Self::And { src_a, src_b, .. }
             | Self::Or { src_a, src_b, .. } => {
@@ -1534,7 +1836,9 @@ impl Instruction {
             | Self::ImmSub { src, konst, .. }
             | Self::ImmMult { src, konst, .. }
             | Self::ImmLShift { src, konst, .. }
-            | Self::ImmRShift { src, konst, .. } => {
+            | Self::ImmRShift { src, konst, .. }
+            // unsigned
+            | Self::ImmRShiftu { src, konst, .. } => {
                 (Some(Operand::Register(*src)), Some(Operand::Value(konst.clone())))
             }
             Self::ImmLoad { src, .. } => (Some(Operand::Value(src.clone())), None),
@@ -1558,6 +1862,7 @@ impl Instruction {
             | Self::SWrite(r)
             | Self::PutChar(r)
             | Self::Free(r)
+            | Self::Malloc { size: r, .. }
             | Self::Realloc { src: r, .. } => (Some(Operand::Register(*r)), None),
             Self::IRead(r) | Self::FRead(r) => (Some(Operand::Register(*r)), None),
 
@@ -1567,7 +1872,13 @@ impl Instruction {
             | Self::CmpGE { a, b, .. }
             | Self::CmpEQ { a, b, .. }
             | Self::CmpNE { a, b, .. }
-            | Self::Comp { a, b, .. } => (Some(Operand::Register(*a)), Some(Operand::Register(*b))),
+            | Self::Comp { a, b, .. }
+            // unsigned
+            | Self::CmpuLT { a, b, .. }
+            | Self::CmpuLE { a, b, .. }
+            | Self::CmpuGT { a, b, .. }
+            | Self::CmpuGE { a, b, .. }
+            | Self::Compu { a, b, .. } => (Some(Operand::Register(*a)), Some(Operand::Register(*b))),
             Self::CbrT { cond, .. } | Self::CbrF { cond, .. } => {
                 (Some(Operand::Register(*cond)), None)
             }
@@ -1576,7 +1887,12 @@ impl Instruction {
             | Self::CbrGT { a, b, .. }
             | Self::CbrGE { a, b, .. }
             | Self::CbrLT { a, b, .. }
-            | Self::CbrLE { a, b, .. } => {
+            | Self::CbrLE { a, b, .. }
+            // unsigned
+            | Self::CbruGT { a, b, .. }
+            | Self::CbruGE { a, b, .. }
+            | Self::CbruLT { a, b, .. }
+            | Self::CbruLE { a, b, .. } => {
                 (Some(Operand::Register(*a)), Some(Operand::Register(*b)))
             }
             Self::TestEQ { test, .. }
@@ -1584,7 +1900,12 @@ impl Instruction {
             | Self::TestGT { test, .. }
             | Self::TestGE { test, .. }
             | Self::TestLT { test, .. }
-            | Self::TestLE { test, .. } => (Some(Operand::Register(*test)), None),
+            | Self::TestLE { test, .. }
+            // unsigned
+            | Self::TestuGT { test, .. }
+            | Self::TestuGE { test, .. }
+            | Self::TestuLT { test, .. }
+            | Self::TestuLE { test, .. } => (Some(Operand::Register(*test)), None),
 
             Self::FAdd { src_a, src_b, .. }
             | Self::FSub { src_a, src_b, .. }
@@ -1617,8 +1938,12 @@ impl Instruction {
             Self::Add { src_a, src_b, .. }
             | Self::Sub { src_a, src_b, .. }
             | Self::Mult { src_a, src_b, .. }
+            | Self::Div { src_a, src_b, .. }
             | Self::LShift { src_a, src_b, .. }
             | Self::RShift { src_a, src_b, .. }
+            // unsigned
+            | Self::RShiftu { src_a, src_b, .. }
+
             | Self::Mod { src_a, src_b, .. }
             | Self::And { src_a, src_b, .. }
             | Self::Or { src_a, src_b, .. } => (Some(src_a), Some(src_b)),
@@ -1627,6 +1952,9 @@ impl Instruction {
             | Self::ImmMult { src, .. }
             | Self::ImmLShift { src, .. }
             | Self::ImmRShift { src, .. }
+            // unsigned
+            | Self::ImmRShiftu { src, .. }
+
             | Self::Load { src, .. }
             | Self::LoadAddImm { src, .. }
             | Self::Store { src, .. }
@@ -1638,8 +1966,10 @@ impl Instruction {
             | Self::SWrite(r)
             | Self::FWrite(r)
             | Self::IRead(r)
+            | Self::PutChar(r)
             | Self::Free(r)
             | Self::Realloc { src: r, .. }
+            | Self::Malloc { size: r, .. }
             | Self::FRead(r) => (Some(r), None),
 
             Self::CmpLT { a, b, .. }
@@ -1648,20 +1978,39 @@ impl Instruction {
             | Self::CmpGE { a, b, .. }
             | Self::CmpEQ { a, b, .. }
             | Self::CmpNE { a, b, .. }
-            | Self::Comp { a, b, .. } => (Some(a), Some(b)),
-            Self::CbrT { cond, .. } | Self::CbrF { cond, .. } => (Some(cond), None),
+            | Self::Comp { a, b, .. }
+            // unsigned
+            | Self::CmpuLT { a, b, .. }
+            | Self::CmpuLE { a, b, .. }
+            | Self::CmpuGT { a, b, .. }
+            | Self::CmpuGE { a, b, .. }
+            | Self::Compu { a, b, .. } => (Some(a), Some(b)),
+
             Self::CbrLT { a, b, .. }
             | Self::CbrLE { a, b, .. }
             | Self::CbrGT { a, b, .. }
             | Self::CbrGE { a, b, .. }
             | Self::CbrEQ { a, b, .. }
-            | Self::CbrNE { a, b, .. } => (Some(a), Some(b)),
+            | Self::CbrNE { a, b, .. }
+            // unsigned
+            | Self::CbruGT { a, b, .. }
+            | Self::CbruGE { a, b, .. }
+            | Self::CbruLT { a, b, .. }
+            | Self::CbruLE { a, b, .. } => (Some(a), Some(b)),
+
+            Self::CbrT { cond, .. } | Self::CbrF { cond, .. } => (Some(cond), None),
+
             Self::TestEQ { test, .. }
             | Self::TestNE { test, .. }
             | Self::TestGT { test, .. }
             | Self::TestGE { test, .. }
             | Self::TestLT { test, .. }
-            | Self::TestLE { test, .. } => (Some(test), None),
+            | Self::TestLE { test, .. }
+            // unsigned
+            | Self::TestuGT { test, .. }
+            | Self::TestuGE { test, .. }
+            | Self::TestuLT { test, .. }
+            | Self::TestuLE { test, .. } => (Some(test), None),
 
             Self::FAdd { src_a, src_b, .. }
             | Self::FSub { src_a, src_b, .. }
@@ -1685,6 +2034,8 @@ impl Instruction {
             Self::Div { .. } => "div",
             Self::LShift { .. } => "lshift",
             Self::RShift { .. } => "rshift",
+            // unsigned
+            Self::RShiftu { .. } => "rshiftu",
             Self::Mod { .. } => "mod",
             Self::And { .. } => "and",
             Self::Or { .. } => "or",
@@ -1694,6 +2045,8 @@ impl Instruction {
             Self::ImmMult { .. } => "multI",
             Self::ImmLShift { .. } => "lshiftI",
             Self::ImmRShift { .. } => "rshiftI",
+            // unsigned
+            Self::ImmRShiftu { .. } => "rshiftuI",
             Self::ImmLoad { .. } => "loadI",
             Self::Load { .. } => "load",
             Self::LoadAddImm { .. } => "loadAI",
@@ -1708,12 +2061,25 @@ impl Instruction {
             Self::CmpEQ { .. } => "cmp_EQ",
             Self::CmpNE { .. } => "cmp_NE",
             Self::Comp { .. } => "comp",
+            // unsigned
+            Self::CmpuLT { .. } => "cmpu_LT",
+            Self::CmpuLE { .. } => "cmpu_LE",
+            Self::CmpuGT { .. } => "cmpu_GT",
+            Self::CmpuGE { .. } => "cmpu_GE",
+            Self::Compu { .. } => "compu",
+
             Self::TestEQ { .. } => "testeq",
             Self::TestNE { .. } => "testne",
             Self::TestGT { .. } => "testgt",
             Self::TestGE { .. } => "testge",
             Self::TestLT { .. } => "testlt",
             Self::TestLE { .. } => "testle",
+            // unsigned
+            Self::TestuGT { .. } => "testugt",
+            Self::TestuGE { .. } => "testuge",
+            Self::TestuLT { .. } => "testult",
+            Self::TestuLE { .. } => "testule",
+
             Self::ImmJump(_) => "jumpI",
             Self::Jump(_) => "jump",
             Self::Call { .. } => "call",
@@ -1729,6 +2095,12 @@ impl Instruction {
             Self::CbrGE { .. } => "cbr_GE",
             Self::CbrEQ { .. } => "cbr_EQ",
             Self::CbrNE { .. } => "cbr_NE",
+            // unsigned
+            Self::CbruLT { .. } => "cbru_LT",
+            Self::CbruLE { .. } => "cbru_LE",
+            Self::CbruGT { .. } => "cbru_GT",
+            Self::CbruGE { .. } => "cbru_GE",
+
             Self::F2I { .. } => "f2i",
             Self::I2F { .. } => "i2f",
             Self::F2F { .. } => "f2f",
@@ -1777,7 +2149,12 @@ impl Instruction {
             | Self::CbrGT { loc, .. }
             | Self::CbrGE { loc, .. }
             | Self::CbrEQ { loc, .. }
-            | Self::CbrNE { loc, .. } => Some(&loc.0),
+            | Self::CbrNE { loc, .. }
+            // unsinged
+            | Self::CbruLT { loc, .. }
+            | Self::CbruLE { loc, .. }
+            | Self::CbruGT { loc, .. }
+            | Self::CbruGE { loc, .. } => Some(&loc.0),
             _ => None,
         }
     }
@@ -1792,7 +2169,12 @@ impl Instruction {
             | Self::CbrGT { loc, .. }
             | Self::CbrGE { loc, .. }
             | Self::CbrEQ { loc, .. }
-            | Self::CbrNE { loc, .. } => Some(loc),
+            | Self::CbrNE { loc, .. }
+            // unsinged
+            | Self::CbruLT { loc, .. }
+            | Self::CbruLE { loc, .. }
+            | Self::CbruGT { loc, .. }
+            | Self::CbruGE { loc, .. } => Some(loc),
             _ => None,
         }
     }
@@ -1808,6 +2190,11 @@ impl Instruction {
                 | Self::CbrGE { .. }
                 | Self::CbrEQ { .. }
                 | Self::CbrNE { .. }
+                // unsinged
+                | Self::CbruLT { .. }
+                | Self::CbruLE { .. }
+                | Self::CbruGT { .. }
+                | Self::CbruGE { .. }
         )
     }
 
@@ -1824,6 +2211,7 @@ impl Instruction {
             | Self::Mult { .. }
             | Self::LShift { .. }
             | Self::RShift { .. }
+            | Self::RShiftu { .. }
             | Self::Mod { .. }
             | Self::And { .. }
             | Self::Or { .. }
@@ -1833,6 +2221,7 @@ impl Instruction {
             | Self::ImmMult { .. }
             | Self::ImmLShift { .. }
             | Self::ImmRShift { .. }
+            | Self::ImmRShiftu { .. }
             | Self::ImmLoad { .. }
             | Self::Load { .. }
             | Self::LoadAddImm { .. }
@@ -1866,6 +2255,7 @@ impl Instruction {
                 Self::Mult { dst, .. } => Self::ImmLoad { src: Val::Integer(a * b), dst: *dst },
                 Self::LShift { dst, .. } => Self::ImmLoad { src: Val::Integer(a << b), dst: *dst },
                 Self::RShift { dst, .. } => Self::ImmLoad { src: Val::Integer(a >> b), dst: *dst },
+                Self::RShiftu { dst, .. } => Self::ImmLoad { src: Val::Integer(a >> b), dst: *dst },
                 Self::Mod { dst, .. } if *b != 0 => {
                     Self::ImmLoad { src: Val::Integer(a % b), dst: *dst }
                 }
@@ -2138,6 +2528,7 @@ impl Instruction {
                 | Self::Mult { .. }
                 | Self::LShift { .. }
                 | Self::RShift { .. }
+                | Self::RShiftu { .. }
                 | Self::Mod { .. }
                 | Self::And { .. }
                 | Self::Or { .. }
@@ -2147,6 +2538,7 @@ impl Instruction {
                 | Self::ImmMult { .. }
                 | Self::ImmLShift { .. }
                 | Self::ImmRShift { .. }
+                | Self::ImmRShiftu { .. }
                 | Self::FAdd { .. }
                 | Self::FSub { .. }
                 | Self::FMult { .. }
@@ -2167,8 +2559,10 @@ impl Instruction {
             Self::Add { src_a, src_b, dst }
             | Self::Sub { src_a, src_b, dst }
             | Self::Mult { src_a, src_b, dst }
+            | Self::Div { src_a, src_b, dst }
             | Self::LShift { src_a, src_b, dst }
             | Self::RShift { src_a, src_b, dst }
+            | Self::RShiftu { src_a, src_b, dst }
             | Self::Mod { src_a, src_b, dst }
             | Self::And { src_a, src_b, dst }
             | Self::Or { src_a, src_b, dst }
@@ -2183,6 +2577,7 @@ impl Instruction {
             | Self::ImmMult { src, dst, .. }
             | Self::ImmLShift { src, dst, .. }
             | Self::ImmRShift { src, dst, .. }
+            | Self::ImmRShiftu { src, dst, .. }
             | Self::LoadAddImm { src, dst, .. }
             | Self::FLoadAddImm { src, dst, .. } => vec![src, dst],
 
@@ -2214,14 +2609,25 @@ impl Instruction {
             | Self::CmpGE { a, b, dst }
             | Self::CmpEQ { a, b, dst }
             | Self::CmpNE { a, b, dst }
-            | Self::Comp { a, b, dst } => vec![a, b, dst],
+            | Self::Comp { a, b, dst }
+            // unsigned
+            | Self::CmpLT { a, b, dst }
+            | Self::CmpLE { a, b, dst }
+            | Self::CmpGT { a, b, dst }
+            | Self::CmpGE { a, b, dst }
+            | Self::Compu { a, b, dst } => vec![a, b, dst],
 
             Self::CbrEQ { a, b, .. }
             | Self::CbrNE { a, b, .. }
             | Self::CbrGT { a, b, .. }
             | Self::CbrGE { a, b, .. }
             | Self::CbrLT { a, b, .. }
-            | Self::CbrLE { a, b, .. } => vec![a, b],
+            | Self::CbrLE { a, b, .. }
+            // unsigned
+            | Self::CbruLT { a, b, .. }
+            | Self::CbruLE { a, b, .. }
+            | Self::CbruGT { a, b, .. }
+            | Self::CbruGE { a, b, .. } => vec![a, b],
 
             Self::CbrT { cond, .. } | Self::CbrF { cond, .. } => vec![cond],
 
@@ -2230,7 +2636,12 @@ impl Instruction {
             | Self::TestGT { test, dst }
             | Self::TestGE { test, dst }
             | Self::TestLT { test, dst }
-            | Self::TestLE { test, dst } => vec![test, dst],
+            | Self::TestLE { test, dst }
+            // unsigned
+            | Self::TestuGT { test, dst }
+            | Self::TestuGE { test, dst }
+            | Self::TestuLT { test, dst }
+            | Self::TestuLE { test, dst } => vec![test, dst],
 
             Self::Call { args, .. } | Self::Frame { params: args, .. } => args.iter_mut().collect(),
             Self::ImmCall { args, ret, .. } => args.iter_mut().chain(Some(ret)).collect(),
@@ -2257,6 +2668,8 @@ impl Instruction {
             | Self::Mult { src_a, src_b, dst }
             | Self::LShift { src_a, src_b, dst }
             | Self::RShift { src_a, src_b, dst }
+            // unsigned
+            | Self::RShiftu { src_a, src_b, dst }
             | Self::Mod { src_a, src_b, dst }
             | Self::And { src_a, src_b, dst }
             | Self::Or { src_a, src_b, dst }
@@ -2271,6 +2684,8 @@ impl Instruction {
             | Self::ImmMult { src, dst, .. }
             | Self::ImmLShift { src, dst, .. }
             | Self::ImmRShift { src, dst, .. }
+            // unsigned
+            | Self::ImmRShiftu { src, dst, .. }
             | Self::LoadAddImm { src, dst, .. }
             | Self::FLoadAddImm { src, dst, .. } => vec![src, dst],
 
@@ -2300,14 +2715,25 @@ impl Instruction {
             | Self::CmpGE { a, b, dst }
             | Self::CmpEQ { a, b, dst }
             | Self::CmpNE { a, b, dst }
-            | Self::Comp { a, b, dst } => vec![a, b, dst],
+            | Self::Comp { a, b, dst }
+            // unsigned
+            | Self::CmpuLT { a, b, dst }
+            | Self::CmpuLE { a, b, dst }
+            | Self::CmpuGT { a, b, dst }
+            | Self::CmpuGE { a, b, dst }
+            | Self::Compu { a, b, dst } => vec![a, b, dst],
 
             Self::CbrEQ { a, b, .. }
             | Self::CbrNE { a, b, .. }
             | Self::CbrGT { a, b, .. }
             | Self::CbrGE { a, b, .. }
             | Self::CbrLT { a, b, .. }
-            | Self::CbrLE { a, b, .. } => vec![a, b],
+            | Self::CbrLE { a, b, .. }
+            // unsinged
+            | Self::CbruGT { a, b, .. }
+            | Self::CbruGE { a, b, .. }
+            | Self::CbruLT { a, b, .. }
+            | Self::CbruLE { a, b, .. } => vec![a, b],
 
             Self::CbrT { cond, .. } | Self::CbrF { cond, .. } => vec![cond],
 
@@ -2316,7 +2742,12 @@ impl Instruction {
             | Self::TestGT { test, dst }
             | Self::TestGE { test, dst }
             | Self::TestLT { test, dst }
-            | Self::TestLE { test, dst } => vec![test, dst],
+            | Self::TestLE { test, dst }
+            // unsigned
+            | Self::TestuGT { test, dst }
+            | Self::TestuGE { test, dst }
+            | Self::TestuLT { test, dst }
+            | Self::TestuLE { test, dst } => vec![test, dst],
 
             Self::Call { args, .. } | Self::Frame { params: args, .. } => args.iter().collect(),
             Self::ImmCall { args, ret, .. } => args.iter().chain(Some(ret)).collect(),
@@ -2335,7 +2766,7 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
     let mut instructions = vec![];
 
     for line in input.lines() {
-        let comp = line.split_ascii_whitespace().map(|s| s.replace(',', "")).collect::<Vec<_>>();
+        let comp = line.split_whitespace().map(|s| s.replace(',', "")).collect::<Vec<_>>();
         if comp.is_empty() {
             continue;
         }
@@ -2365,6 +2796,11 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 dst: Reg::from_str(dst)?,
             }),
             ["rshift", a, b, "=>", dst] => instructions.push(Instruction::RShift {
+                src_a: Reg::from_str(a)?,
+                src_b: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["rshiftu", a, b, "=>", dst] => instructions.push(Instruction::RShiftu {
                 src_a: Reg::from_str(a)?,
                 src_b: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
@@ -2416,10 +2852,19 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 konst: Val::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
+            ["rshiftuI", a, b, "=>", dst] => instructions.push(Instruction::ImmRShiftu {
+                src: Reg::from_str(a)?,
+                konst: Val::UInteger(b.parse().map_err(|_| "failed to parse uint")?),
+                dst: Reg::from_str(dst)?,
+            }),
 
             // Memory operations
-            ["loadI", src, "=>", dst] => instructions
-                .push(Instruction::ImmLoad { src: Val::from_str(src)?, dst: Reg::from_str(dst)? }),
+            ["loadI", src, "=>", dst] => {
+                instructions.push(Instruction::ImmLoad {
+                    src: Val::from_str(src)?,
+                    dst: Reg::from_str(dst)?,
+                });
+            }
             ["load", src, "=>", dst] => instructions
                 .push(Instruction::Load { src: Reg::from_str(src)?, dst: Reg::from_str(dst)? }),
             ["loadAI", a, b, "=>", dst] => instructions.push(Instruction::LoadAddImm {
@@ -2480,6 +2925,32 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 b: Reg::from_str(b)?,
                 dst: Reg::from_str(dst)?,
             }),
+            // unsigned
+            ["cmpu_LT", a, b, "=>", dst] => instructions.push(Instruction::CmpLT {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["cmpu_LE", a, b, "=>", dst] => instructions.push(Instruction::CmpLE {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["cmpu_GT", a, b, "=>", dst] => instructions.push(Instruction::CmpGT {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["cmpu_GE", a, b, "=>", dst] => instructions.push(Instruction::CmpGE {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
+            ["compu", a, b, "=>", dst] => instructions.push(Instruction::CmpGE {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                dst: Reg::from_str(dst)?,
+            }),
             ["testeq", a, "=>", dst] => instructions
                 .push(Instruction::TestEQ { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
             ["testne", a, "=>", dst] => instructions
@@ -2491,6 +2962,15 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
             ["testlt", a, "=>", dst] => instructions
                 .push(Instruction::TestLT { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
             ["testle", a, "=>", dst] => instructions
+                .push(Instruction::TestLE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            // unsigned
+            ["testugt", a, "=>", dst] => instructions
+                .push(Instruction::TestGT { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            ["testuge", a, "=>", dst] => instructions
+                .push(Instruction::TestGE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            ["testult", a, "=>", dst] => instructions
+                .push(Instruction::TestLT { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+            ["testule", a, "=>", dst] => instructions
                 .push(Instruction::TestLE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
 
             // Float operations
@@ -2622,6 +3102,27 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
                 loc: Loc::from_str(label)?,
             }),
             ["cbr_NE", a, b, "->", label] => instructions.push(Instruction::CbrNE {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                loc: Loc::from_str(label)?,
+            }),
+            // unsigned
+            ["cbru_LT", a, b, "->", label] => instructions.push(Instruction::CbrLE {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                loc: Loc::from_str(label)?,
+            }),
+            ["cbru_LE", a, b, "->", label] => instructions.push(Instruction::CbrLE {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                loc: Loc::from_str(label)?,
+            }),
+            ["cbru_GT", a, b, "->", label] => instructions.push(Instruction::CbrGT {
+                a: Reg::from_str(a)?,
+                b: Reg::from_str(b)?,
+                loc: Loc::from_str(label)?,
+            }),
+            ["cbru_GE", a, b, "->", label] => instructions.push(Instruction::CbrGE {
                 a: Reg::from_str(a)?,
                 b: Reg::from_str(b)?,
                 loc: Loc::from_str(label)?,

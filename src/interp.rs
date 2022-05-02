@@ -1,16 +1,16 @@
 use std::{
     collections::{HashMap, HashSet, BTreeMap},
-    str::FromStr,
+    str::FromStr, cmp::Ordering, intrinsics::discriminant_value,
 };
 
-use crate::iloc::{IlocProgram, Instruction, Loc, Reg, Val};
+use crate::iloc::{IlocProgram, Instruction, Loc, Reg, Val, NEGATIVE_UINT};
 
-const HEAP_MASK: isize = 1 << 32;
+const HEAP_MASK: i32 = 1 << 31;
 
-pub fn is_heap(addr: isize) -> bool {
+pub fn is_heap(addr: i32) -> bool {
     (addr & HEAP_MASK) == HEAP_MASK
 }
-pub fn remove_heap_mask(addr: isize) -> isize {
+pub fn remove_heap_mask(addr: i32) -> i32 {
     addr & !HEAP_MASK
 }
 
@@ -37,7 +37,7 @@ pub struct Interpreter {
     ///
     /// This is a cheap way of implementing malloc...
     heap: Vec<Val>,
-    heap_meta: BTreeMap<isize, usize>,
+    heap_meta: BTreeMap<i32, usize>,
     /// Instructions broken up into functions and blocks.
     functions: HashMap<Loc, Vec<(usize, Instruction)>>,
     /// A map of function names to stack size and parameter list.
@@ -60,8 +60,29 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new(iloc: IlocProgram) -> Self {
+    pub fn new(mut iloc: IlocProgram) -> Self {
         let mut preamble_lines = iloc.preamble.len();
+        iloc.preamble.sort_by(|a, b| {
+            match discriminant_value(a).cmp(&discriminant_value(b)) {
+                Ordering::Equal => match (a, b) {
+                    (Instruction::Array { name: a, .. }, Instruction::Array { name: b, .. }) => {
+                        a.cmp(b)
+                    }
+                    (Instruction::Global { name: a, .. }, Instruction::Global { name: b, .. }) => {
+                        a.cmp(b)
+                    }
+                    (Instruction::String { name: a, .. }, Instruction::String { name: b, .. }) => {
+                        a.cmp(b)
+                    }
+                    (Instruction::Float { name: a, .. }, Instruction::Float { name: b, .. }) => {
+                        a.cmp(b)
+                    }
+                    _ => unreachable!(),
+                },
+                val => val,
+            }
+        });
+
         let mut stack = vec![];
         let data = iloc
             .preamble
@@ -75,11 +96,11 @@ impl Interpreter {
                         c.push(el);
                     }
                     stack.extend(c);
-                    Some((Loc(name), Val::Integer(4 + (stack.len() - 1) as isize)))
+                    Some((Loc(name), Val::Integer(4 + (stack.len() - 1) as i32)))
                 }
                 Instruction::Global { name, size, align: _ } => {
                     stack.push(Val::Null);
-                    Some((Loc(name), Val::Integer((stack.len() - 1) as isize)))
+                    Some((Loc(name), Val::Integer((stack.len() - 1) as i32)))
                 }
                 Instruction::String { name, mut content } => {
                     content = content.replace("\\n", "\n");
@@ -88,22 +109,26 @@ impl Interpreter {
                     let mut c = vec![];
                     for el in flipped {
                         c.extend(vec![Val::Null; 3]);
-                        c.push(Val::Integer(el as isize));
+                        c.push(Val::Integer(el as i32));
                     }
                     stack.extend(c);
                     stack.extend(vec![Val::Null; 3]);
                     // Push the size of the incoming string
-                    stack.push(Val::Integer(content.len() as isize));
-                    Some((Loc(name), Val::Integer((stack.len() - 1) as isize)))
+                    stack.push(Val::Integer(content.len() as i32));
+                    Some((Loc(name), Val::Integer((stack.len() - 1) as i32)))
                 }
                 Instruction::Float { name, content } => {
                     stack.push(Val::Float(content));
-                    Some((Loc(name), Val::Integer((stack.len() - 1) as isize)))
+                    Some((Loc(name), Val::Integer((stack.len() - 1) as i32)))
                 }
                 _ => None,
             })
             .collect::<HashMap<_, _>>();
 
+        // stack.extend(vec![Val::Null; STACK_SIZE]);
+
+        // Carr's examples read of the end of an array, null is not an acceptable default
+        // stack value...
         stack.extend(vec![Val::Integer(0); STACK_SIZE]);
 
         let mut registers = HashMap::new();
@@ -128,7 +153,7 @@ impl Interpreter {
                     // of the program itself, since our stack is
                     // separate it's just the end index of the stack
                     // since it grows towards index 0 from index (length)
-                    registers.insert(Reg::Var(0), Val::Integer((STACK_SIZE - 1) as isize));
+                    registers.insert(Reg::Var(0), Val::Integer((STACK_SIZE - 1) as i32));
                 }
 
                 fn_decl_map.insert(Loc(func.label.clone()), (func.stack_size, func.params));
@@ -150,9 +175,9 @@ impl Interpreter {
         }
     }
 
-    fn callee_stack_size(&self) -> isize {
+    fn callee_stack_size(&self) -> i32 {
         let CallStackEntry { name, .. } = self.call_stack.last().unwrap();
-        self.fn_decl.get(&Loc(name.to_string())).unwrap().0 as isize
+        self.fn_decl.get(&Loc(name.to_string())).unwrap().0 as i32
     }
 
     fn registers(&self) -> &HashMap<Reg, Val> { &self.call_stack.last().unwrap().registers }
@@ -215,6 +240,13 @@ impl Interpreter {
                 let b = self.registers().get(src_b)?;
 
                 let val = a.rshift(b)?;
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
+            }
+            Instruction::RShiftu { src_a, src_b, dst } => {
+                let a = self.registers().get(src_a)?;
+                let b = self.registers().get(src_b)?;
+
+                let val = a.rshiftu(b)?;
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::Mod { src_a, src_b, dst } => {
@@ -282,6 +314,12 @@ impl Interpreter {
                 let val = a.rshift(konst)?;
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
+            Instruction::ImmRShiftu { src, konst, dst } => {
+                let a = self.registers().get(src)?;
+
+                let val = a.rshiftu(konst)?;
+                self.call_stack.last_mut()?.registers.insert(*dst, val);
+            }
             Instruction::ImmLoad { src, dst } => {
                 let src = if let Val::Location(s) = src {
                     self.data.get(&Loc(s.to_owned()))?.clone()
@@ -291,7 +329,7 @@ impl Interpreter {
                 self.call_stack.last_mut()?.registers.insert(*dst, src);
             }
             Instruction::Load { src, dst } => {
-                let index = self.call_stack.last()?.registers.get(src)?.to_int()?;
+                let index = self.call_stack.last()?.registers.get(src)?.to_int_32()?;
                 let val = if is_heap(index) {
                     let index = remove_heap_mask(index);
                     self.heap[index as usize].clone()
@@ -302,8 +340,8 @@ impl Interpreter {
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::LoadAddImm { src, add, dst } => {
-                let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int()?;
-                let index = stack_idx + add.to_int()?;
+                let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int_32()?;
+                let index = stack_idx + add.to_int_32()?;
                 let val = if is_heap(index) {
                     let index = remove_heap_mask(index);
                     self.heap[index as usize].clone()
@@ -313,8 +351,8 @@ impl Interpreter {
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
             Instruction::LoadAdd { src, add, dst } => {
-                let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int()?;
-                let add_amt = self.call_stack.last()?.registers.get(add)?.to_int()?;
+                let stack_idx = self.call_stack.last()?.registers.get(src)?.to_int_32()?;
+                let add_amt = self.call_stack.last()?.registers.get(add)?.to_int_32()?;
                 let index = stack_idx + add_amt;
                 let val = if is_heap(index) {
                     let index = remove_heap_mask(index);
@@ -326,7 +364,7 @@ impl Interpreter {
             }
             Instruction::Store { src, dst } => {
                 let val = self.call_stack.last()?.registers.get(src)?.clone();
-                let index = self.call_stack.last()?.registers.get(dst)?.to_int()?;
+                let index = self.call_stack.last()?.registers.get(dst)?.to_int_32()?;
                 if is_heap(index) {
                     let index = remove_heap_mask(index);
                     self.heap[index as usize] = val;
@@ -336,8 +374,8 @@ impl Interpreter {
             }
             Instruction::StoreAddImm { src, add, dst } => {
                 let val = self.call_stack.last()?.registers.get(src)?.clone();
-                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()?;
-                let index = stack_idx + add.to_int()?;
+                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int_32()?;
+                let index = stack_idx + add.to_int_32()?;
                 if is_heap(index) {
                     let index = remove_heap_mask(index);
                     self.heap[index as usize] = val;
@@ -348,8 +386,8 @@ impl Interpreter {
             Instruction::StoreAdd { src, add, dst } => {
                 let val = self.call_stack.last()?.registers.get(src)?.clone();
 
-                let add = self.call_stack.last()?.registers.get(add)?.to_int()?;
-                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int()?;
+                let add = self.call_stack.last()?.registers.get(add)?.to_int_32()?;
+                let stack_idx = self.call_stack.last()?.registers.get(dst)?.to_int_32()?;
                 let index = stack_idx + add;
                 if is_heap(index) {
                     let index = remove_heap_mask(index);
@@ -358,25 +396,25 @@ impl Interpreter {
                     stack[index as usize] = val;
                 }
             }
-            Instruction::CmpLT { a, b, dst } => {
+            Instruction::CmpLT { a, b, dst } | Instruction::CmpuLT { a, b, dst } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
                 let val = a.cmp_lt(b)?;
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
-            Instruction::CmpLE { a, b, dst } => {
+            Instruction::CmpLE { a, b, dst } | Instruction::CmpuLE { a, b, dst } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
                 let val = a.cmp_le(b)?;
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
-            Instruction::CmpGT { a, b, dst } => {
+            Instruction::CmpGT { a, b, dst } | Instruction::CmpuGT { a, b, dst } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
                 let val = a.cmp_gt(b)?;
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
-            Instruction::CmpGE { a, b, dst } => {
+            Instruction::CmpGE { a, b, dst } | Instruction::CmpuGE { a, b, dst } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
                 let val = a.cmp_ge(b)?;
@@ -394,7 +432,7 @@ impl Interpreter {
                 let val = a.cmp_ne(b)?;
                 self.call_stack.last_mut()?.registers.insert(*dst, val);
             }
-            Instruction::Comp { a, b, dst } => {
+            Instruction::Comp { a, b, dst } | Instruction::Compu { a, b, dst } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
 
@@ -419,37 +457,41 @@ impl Interpreter {
                     .registers
                     .insert(*dst, Val::Integer(if is_ne { 1 } else { 0 }));
             }
-            Instruction::TestGT { test, dst } => {
+            Instruction::TestGT { test, dst } | Instruction::TestuGT { test, dst } => {
                 let a = self.registers().get(test)?;
                 let is_gt = match a {
                     Val::Integer(i) if *i > 0 => 1,
+                    Val::UInteger(i) if *i > 0 && *i != NEGATIVE_UINT => 1,
                     Val::Float(f) if *f > 0.0 => 1,
                     _ => 0,
                 };
                 self.call_stack.last_mut()?.registers.insert(*dst, Val::Integer(is_gt));
             }
-            Instruction::TestGE { test, dst } => {
+            Instruction::TestGE { test, dst } | Instruction::TestuGE { test, dst } => {
                 let a = self.registers().get(test)?;
                 let is_ge = match a {
-                    Val::Integer(i) if *i >= 0 => 1,
+                    Val::Integer(i) if *i >= 0  => 1,
+                    Val::UInteger(i) if *i != NEGATIVE_UINT => 1,
                     Val::Float(f) if *f >= 0.0 => 1,
                     _ => 0,
                 };
                 self.call_stack.last_mut()?.registers.insert(*dst, Val::Integer(is_ge));
             }
-            Instruction::TestLT { test, dst } => {
+            Instruction::TestLT { test, dst } | Instruction::TestuLT { test, dst } => {
                 let a = self.registers().get(test)?;
                 let is_lt = match a {
                     Val::Integer(i) if *i < 0 => 1,
+                    Val::UInteger(i) if *i == NEGATIVE_UINT => 1,
                     Val::Float(f) if *f < 0.0 => 1,
                     _ => 0,
                 };
                 self.call_stack.last_mut()?.registers.insert(*dst, Val::Integer(is_lt));
             }
-            Instruction::TestLE { test, dst } => {
+            Instruction::TestLE { test, dst } | Instruction::TestuLE { test, dst } => {
                 let a = self.registers().get(test)?;
                 let is_le = match a {
                     Val::Integer(i) if *i <= 0 => 1,
+                    Val::UInteger(i) if *i == 0 || *i == NEGATIVE_UINT => 1,
                     Val::Float(f) if *f <= 0.0 => 1,
                     _ => 0,
                 };
@@ -533,7 +575,7 @@ impl Interpreter {
                 let CallStackEntry { ret_val, registers, .. } = self.call_stack.pop()?;
 
                 let dst = ret_val.unwrap();
-                let val = registers.get(ret_reg).unwrap().clone();
+                let val = registers.get(ret_reg)?.clone();
                 self.call_stack.last_mut()?.registers.insert(dst, val);
 
                 return Some(true);
@@ -559,7 +601,7 @@ impl Interpreter {
                     return Some(true);
                 }
             }
-            Instruction::CbrLT { a, b, loc } => {
+            Instruction::CbrLT { a, b, loc } | Instruction::CbruLT { a, b, loc } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
                 let should_jump = a.cmp_lt(b)?.is_one();
@@ -569,7 +611,7 @@ impl Interpreter {
                     return Some(true);
                 }
             }
-            Instruction::CbrLE { a, b, loc } => {
+            Instruction::CbrLE { a, b, loc } | Instruction::CbruLE { a, b, loc } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
                 let should_jump = a.cmp_le(b)?.is_one();
@@ -579,7 +621,7 @@ impl Interpreter {
                     return Some(true);
                 }
             }
-            Instruction::CbrGT { a, b, loc } => {
+            Instruction::CbrGT { a, b, loc } | Instruction::CbruGT { a, b, loc } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
                 let should_jump = a.cmp_gt(b)?.is_one();
@@ -589,7 +631,7 @@ impl Interpreter {
                     return Some(true);
                 }
             }
-            Instruction::CbrGE { a, b, loc } => {
+            Instruction::CbrGE { a, b, loc } | Instruction::CbruGE { a, b, loc } => {
                 let a = self.registers().get(a)?;
                 let b = self.registers().get(b)?;
                 let should_jump = a.cmp_ge(b)?.is_one();
@@ -621,7 +663,7 @@ impl Interpreter {
             }
             Instruction::F2I { src, dst } => {
                 let int_from_float = if let Val::Float(f) = self.registers().get(src).cloned()? {
-                    unsafe { f.to_int_unchecked::<isize>() }
+                    unsafe { f.to_int_unchecked::<i32>() }
                 } else {
                     todo!("float error {:?}", self.registers().get(src).cloned())
                 };
@@ -685,7 +727,7 @@ impl Interpreter {
             }
             Instruction::FLoad { src, dst } => {
                 let stack_idx = self.call_stack.last()?.registers.get(src)?;
-                let index = stack_idx.to_int()?;
+                let index = stack_idx.to_int_32()?;
                 let val = if is_heap(index) {
                     let index = remove_heap_mask(index);
                     self.heap[index as usize].clone()
@@ -714,7 +756,7 @@ impl Interpreter {
                 handle.read_line(&mut buf).unwrap();
 
                 let stack_idx = self.call_stack.last()?.registers.get(r)?;
-                let index = stack_idx.to_int().unwrap();
+                let index = stack_idx.to_int_32()?;
                 if is_heap(index) {
                     let index = remove_heap_mask(index);
                     self.heap[index as usize] = Val::Integer(buf.trim().parse().unwrap());
@@ -726,14 +768,14 @@ impl Interpreter {
                 println!("{}", self.registers().get(r)?.to_float()?)
             }
             Instruction::IWrite(r) => {
-                println!("{}", self.registers().get(r)?.to_int()?)
+                println!("{}", self.registers().get(r)?)
             }
             Instruction::PutChar(r) => {
-                let ch = char::from_u32(self.registers().get(r)?.to_int()? as u32)?;
+                let ch = char::from_u32(self.registers().get(r)?.to_uint_32()? as u32)?;
                 print!("{}", ch)
             }
             Instruction::SWrite(r) => {
-                let s_idx = self.call_stack.last()?.registers.get(r)?.to_int()? as usize;
+                let s_idx = self.call_stack.last()?.registers.get(r)?.to_int_32()? as usize;
                 let start = &stack[s_idx];
 
                 let Val::Integer(size) = start else { return None; };
@@ -752,8 +794,8 @@ impl Interpreter {
                 print!("{}", text)
             }
             Instruction::Malloc { size, dst } => {
-                let addr = self.heap_meta.first_entry().map(|e| *e.key()).unwrap_or(STACK_SIZE as isize);
-                let size = self.call_stack.last()?.registers.get(size)?.to_int()? as isize;
+                let addr = self.heap_meta.first_entry().map(|e| *e.key()).unwrap_or(STACK_SIZE as i32);
+                let size = self.call_stack.last()?.registers.get(size)?.to_int_32()?;
 
                 self.heap_meta.insert(addr, size as usize);
                 self.call_stack
@@ -763,7 +805,7 @@ impl Interpreter {
                     .insert(*dst, Val::Integer(addr | HEAP_MASK));
             },
             Instruction::Free(reg) => {
-                let addr = self.call_stack.last()?.registers.get(reg)?.to_int()?;
+                let addr = self.call_stack.last()?.registers.get(reg)?.to_int_32()?;
                 if !is_heap(addr) { return None; }
                 let index = remove_heap_mask(addr);
                 let size = self.heap_meta.remove(&index)?;
@@ -774,19 +816,19 @@ impl Interpreter {
                 }
             },
             Instruction::Realloc { src, size, dst } => {
-                let old_addr = self.call_stack.last()?.registers.get(src)?.to_int()?;
+                let old_addr = self.call_stack.last()?.registers.get(src)?.to_int_32()?;
                 // Check that this was, in fact, allocated from the heap
                 if !is_heap(old_addr) { return None; }
 
                 let old_idx = remove_heap_mask(old_addr);
 
                 let old_size = *self.heap_meta.get(&old_idx)?;
-                let size = self.call_stack.last()?.registers.get(size)?.to_int()? as usize;
+                let size = self.call_stack.last()?.registers.get(size)?.to_int_32()? as usize;
 
                 let old_idx = old_idx as usize;
                 let mut copy_of_old_bytes = self.heap[old_idx - old_size..old_idx].to_vec();
 
-                let addr = self.heap_meta.first_entry().map(|e| *e.key()).unwrap_or(STACK_SIZE as isize);
+                let addr = self.heap_meta.first_entry().map(|e| *e.key()).unwrap_or(STACK_SIZE as i32);
                 let index = addr as usize;
                 for (i, slot) in self.heap[index - size..index].iter_mut().enumerate() {
                     if i >= (copy_of_old_bytes.len() - 1) {
@@ -856,7 +898,7 @@ fn debug_loop(
             }
             ["prints" | "ps"] => {
                 for (idx, slot) in interpreter.stack.iter().enumerate() {
-                    if matches!(slot, Val::Null | Val::Integer(0)) { continue; }
+                    if matches!(slot, Val::Null) { continue; }
                     println!("{}: {:?}", idx, slot);
                 }
             }
@@ -959,7 +1001,7 @@ pub fn run_interpreter(iloc: IlocProgram, debug: bool) -> Result<(), &'static st
                 println!("heap: [");
                 for (idx, slot) in interpreter.heap.iter().enumerate() {
                     if matches!(slot, Val::Null) { continue; }
-                    println!("  {}: {:?}", idx as isize | HEAP_MASK, slot);
+                    println!("  {}: {:?}", idx as i32 | HEAP_MASK, slot);
                 }
                 println!("]\nstack: [");
                 for (idx, slot) in interpreter.stack.iter().enumerate() {

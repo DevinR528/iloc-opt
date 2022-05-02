@@ -7,7 +7,8 @@
     try_blocks,
     drain_filter,
     default_free_fn,
-    if_let_guard
+    if_let_guard,
+    core_intrinsics,
 )]
 #![allow(unused)]
 
