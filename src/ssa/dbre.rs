@@ -33,7 +33,7 @@ fn rewrite_name(reg: &mut Reg, meta: &mut HashMap<Reg, RenameMeta>) {
     reg.as_phi(phi_id);
 }
 
-pub type ScopedExprTree = VecDeque<HashMap<(Operand, Option<Operand>, String), usize>>;
+pub type ScopedExprTree = VecDeque<HashMap<(Operand, Option<Operand>, String), (Reg, usize)>>;
 
 pub fn dom_val_num(
     blks: &mut [Block],
@@ -97,8 +97,8 @@ pub fn dom_val_num(
             let inst_name = op.inst_name().to_string();
 
             let expr = (a.clone(), b.clone(), inst_name.clone());
-            if let Some(subs) = expr_tree.iter().rev().find_map(|map| map.get(&expr)) {
-                if !is_expr || op.is_call_instruction() {
+            if let Some((prev_reg, subs)) = expr_tree.iter().rev().find_map(|map| map.get(&expr)) {
+                if !is_expr {
                     // We need all registers to be converted
                     if let Some(dst) = op.target_reg() {
                         // When we see a new definition of a register we increment it's phi value
@@ -113,22 +113,26 @@ pub fn dom_val_num(
                     // ssa value number for this dst register
                     let m = meta.entry(*dst).or_default();
                     m.stack.push_front(*subs);
-                    dead.insert(inst_idx);
+                    // Because we didn't keep track of the actual register we could
+                    // remove `loadI`s that loaded the same value to a different destination
+                    if prev_reg == dst {
+                        dead.insert(inst_idx);
+                    }
                 }
 
             } else if let Some(dst) = op.target_reg() {
                 // When we see a new definition of a register we increment it's phi value
                 new_name(*dst, meta);
 
-                let m = meta.get(dst).unwrap();
                 if is_expr {
+                    let m = meta.get(dst).unwrap();
                     let expr_tree = expr_tree.back_mut().unwrap();
-                    expr_tree.insert(expr, *m.stack.front().unwrap());
+                    expr_tree.insert(expr, (*dst, *m.stack.front().unwrap()));
 
                     if is_commutative {
                         expr_tree.insert(
                             (b.clone().unwrap(), Some(a.clone()), inst_name),
-                            *m.stack.front().unwrap(),
+                            (*dst, *m.stack.front().unwrap()),
                         );
                     }
                 }

@@ -188,12 +188,13 @@ pub fn build_interference(
                     if matches!(op, Reg::Phi(0, _) | Reg::Var(0)) { continue; }
 
                     if !def_loc.contains(&op) {
-                        // We found a use without a definition above it
+                        // We found a use without a definition above it in the same block
                         changed |= uloc.insert(op);
                     }
                 }
+
                 // All "kill" is after up_exposed since you can write to the same register
-                // used as an operand
+                // used as an operand i.e. `%vr1 + 10 => %vr1` is legit
                 if let Some(t) = inst.target_reg() {
                     def_loc.insert(*t);
                 }

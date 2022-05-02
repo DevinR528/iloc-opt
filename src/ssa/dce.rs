@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::{
-    iloc::{Function, Instruction, Loc, Val},
+    iloc::{Function, Instruction, Loc, Val, Reg},
     ssa::{postorder, reverse_postorder, DominatorTree},
     OrdLabel,
 };
@@ -12,6 +12,7 @@ impl Instruction {
             self,
             Instruction::ImmRet(..)
                 | Instruction::Ret
+                | Instruction::PutChar(..)
                 | Instruction::IRead(..)
                 | Instruction::FRead(..)
                 | Instruction::IWrite(..)
@@ -24,6 +25,9 @@ impl Instruction {
                 | Instruction::ImmJump(..)
                 | Instruction::Call { .. }
                 | Instruction::ImmCall { .. }
+                | Instruction::Malloc { .. }
+                | Instruction::Realloc { .. }
+                | Instruction::Free(..)
                 | Instruction::Frame { .. }
                 | Instruction::ImmLoad { src: Val::Location(..), .. }
         )
@@ -59,7 +63,7 @@ pub fn dead_code(func: &mut Function, domtree: &DominatorTree, start: &OrdLabel)
                             def_map.insert(*reg, (inst, b_label));
                         }
                     }
-                    Instruction::Phi(reg, _, Some(subs)) => {
+                    Instruction::Phi(reg, _set, Some(subs)) => {
                         let mut reg = *reg;
                         reg.as_phi(*subs);
                         def_map.insert(reg, (inst, b_label));
@@ -192,11 +196,11 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
 
         changed = false;
         for blk in postorder(&cfg_map, start) {
-            // TODO: this should be ok...
-            // Ignore code motion moved blocks...
-            if blk.as_str().starts_with(".pre.") {
-                continue;
-            }
+            // TODO: this should be ok... it was needed at one point
+            // if blk.as_str().starts_with(".pre.") {
+            //     continue;
+            // }
+
             let Some((idx, block)) = func.blocks.iter()
                 .enumerate()
                 .find(|(_, b)| b.label == blk.as_str())
@@ -219,11 +223,11 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
 
             // i (in "Engineering a Compiler" book pg. 548)
             if let Some(loc) = block.ends_with_jump() {
-                // TODO: this should be ok...
-                // Ignore code motion moved blocks...
-                if loc.starts_with(".pre.") {
-                    continue;
-                }
+                // TODO: this should be ok... it was needed at one point
+                // if loc.starts_with(".pre.") {
+                //     continue;
+                // }
+
                 // j (in "Engineering a Compiler" book pg. 548)
                 let Some(jump_to) = func.blocks.iter().find(|b| b.label == loc).cloned() else {
                     // We removed a block (loc) this block (blk) has as an only child

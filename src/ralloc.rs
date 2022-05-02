@@ -171,7 +171,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                 Err(FailedColoring { insert_spills, uses, defs }) => {
                     // println!("SPILLED {:?}", insert_spills);
                     // Make sure we don't spill these again...
-                    spilled_start = insert_spills.clone();
+                    spilled_start.extend(insert_spills.clone());
 
                     let mut spills = HashSet::new();
                     for (b, blk) in func.blocks.iter().enumerate() {
@@ -259,7 +259,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                     inst_idx + add + 1,
                                     Instruction::StoreAddImm {
                                         src: reg,
-                                        add: Val::Integer(-(stack_size as isize)),
+                                        add: Val::Integer(-(stack_size as i32)),
                                         dst: Reg::Phi(0, 0),
                                     },
                                 );
@@ -275,7 +275,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                                     (inst_idx + add),
                                     Instruction::LoadAddImm {
                                         src: Reg::Phi(0, 0),
-                                        add: Val::Integer(-(stack_size as isize)),
+                                        add: Val::Integer(-(stack_size as i32)),
                                         dst: reg,
                                     },
                                 );
@@ -304,10 +304,10 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
                         }
                     }
 
-                    // dump_to(
-                    //     &IlocProgram { preamble: vec![], functions: vec![func.clone()] },
-                    //     &format!("{}ra", func.label),
-                    // );
+                    dump_to(
+                        &IlocProgram { preamble: vec![], functions: vec![func.clone()] },
+                        &format!("{}ra", func.label),
+                    );
                 }
             }
         };

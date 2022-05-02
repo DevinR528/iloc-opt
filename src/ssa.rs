@@ -92,8 +92,8 @@ pub fn build_cfg(func: &mut Function) -> ControlFlowGraph {
     // `build_stripped_cfg` in the `dce` mod takes care of all cleaning unreachable code
     //
     // Remove unreachable blocks from the cf graph
-    // let remove_blks = all.difference(&seen.keys().copied().collect::<BTreeSet<_>>());
-    // for blk_idx in remove_blks {
+    // for blk in dead {
+    //     let Some(blk_idx) = func.blocks.iter().position(|b| b.label == blk) else { continue; };
     //     func.blocks.remove(blk_idx);
     // }
 
@@ -245,6 +245,9 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
                     dom_frontier_map.entry(run.clone()).or_default().insert(node.clone());
                     if let Some(idom) = idom_map.get(run) {
                         run = idom;
+                    } else {
+                        println!("no idom found for: {run}");
+                        break;
                     }
                 }
             }
@@ -279,7 +282,8 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
                 .iter()
                 .flat_map(|p| post_dom.get(p))
                 .collect::<Vec<_>>();
-            let mut new_dom = post_dom.get(n).unwrap().clone();
+            let Some(mut new_dom) = post_dom.get(n).cloned() else { println!("no post dom found {n}"); continue; };
+            // let mut new_dom = post_dom.get(n).unwrap().clone();
             for set in sets {
                 new_dom = new_dom.intersection(set).cloned().collect();
             }
