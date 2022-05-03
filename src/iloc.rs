@@ -70,16 +70,16 @@ impl Val {
         if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
             return Some(Self::UInteger(a.wrapping_shl(b.to_uint_32()?)));
         }
-        Some(Self::Integer(self.to_int_32()?.rotate_left(other.to_int_32()? as u32)))
+        Some(Self::Integer(self.to_int_32()?.wrapping_shl(other.to_int_32()? as u32)))
     }
 
     /// Right shift `>>`
     pub fn rshift(&self, other: &Self) -> Option<Self> {
-        Some(Self::Integer(self.to_int_32()?.rotate_right(other.to_int_32()? as u32)))
+        Some(Self::Integer(self.to_int_32()?.wrapping_shr(other.to_int_32()? as u32)))
     }
 
     pub fn rshiftu(&self, other: &Self) -> Option<Self> {
-        Some(Self::UInteger(self.to_uint_32()?.rotate_right(other.to_uint_32()?)))
+        Some(Self::UInteger(self.to_uint_32()?.wrapping_shr(other.to_uint_32()?)))
     }
 
     pub fn modulus(&self, other: &Self) -> Option<Self> {
