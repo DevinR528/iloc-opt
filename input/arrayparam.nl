@@ -7,8 +7,8 @@ nonrecursive, as well as parameter passing.
 
 PROGRAM subprog;
  VAR i,j,k,l:INTEGER;
-     a,b,c,d:INTEGER;
-     x:ARRAY[1..10] OF INTEGER;
+	 a,b,c,d:INTEGER;
+	 x:ARRAY[1..10] OF INTEGER;
 
 {* pass array as parm *}
 
@@ -50,7 +50,7 @@ BEGIN
 	i:=1;
 	WHILE i<=10 DO BEGIN
 	  x[i]:= x[i]*i;
-	  inc(x[i]); 
+	  inc(x[i]);
 	  i:=i+1
 	END;
 	writearray(x)

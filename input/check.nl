@@ -7,7 +7,7 @@ BEGIN
 	WHILE i <= 10 DO BEGIN
 	  IF i < 0 THEN j := 10 MOD 0;
 	  i := i + 1
-        END;
+		END;
 	WRITE('SUCCESS')
 END
-            
+
