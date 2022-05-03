@@ -52,23 +52,30 @@ impl Val {
 	}
 
 	pub fn sub(&self, other: &Self) -> Option<Self> {
-		if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+		if let (Self::UInteger(a), b) = (self, other) {
 			return Some(Self::UInteger(a.wrapping_sub(b.to_uint_32()?)));
+		} else if let (a, Self::UInteger(b)) = (self, other) {
+			return Some(Self::UInteger(a.to_uint_32()?.wrapping_sub(*b)));
 		}
 		Some(Self::Integer(self.to_int_32()?.wrapping_sub(other.to_int_32()?)))
 	}
 
 	pub fn mult(&self, other: &Self) -> Option<Self> {
-		if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+		if let (Self::UInteger(a), b) = (self, other) {
 			return Some(Self::UInteger(a.wrapping_mul(b.to_uint_32()?)));
+		} else if let (a, Self::UInteger(b)) = (self, other) {
+			return Some(Self::UInteger(a.to_uint_32()?.wrapping_mul(*b)));
 		}
+
 		Some(Self::Integer(self.to_int_32()?.wrapping_mul(other.to_int_32()?)))
 	}
 
 	/// Left shift `<<`
 	pub fn lshift(&self, other: &Self) -> Option<Self> {
-		if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+		if let (Self::UInteger(a), b) = (self, other) {
 			return Some(Self::UInteger(a.wrapping_shl(b.to_uint_32()?)));
+		} else if let (a, Self::UInteger(b)) = (self, other) {
+			return Some(Self::UInteger(a.to_uint_32()?.wrapping_shl(*b)));
 		}
 		Some(Self::Integer(self.to_int_32()?.wrapping_shl(other.to_int_32()? as u32)))
 	}
@@ -83,29 +90,37 @@ impl Val {
 	}
 
 	pub fn modulus(&self, other: &Self) -> Option<Self> {
-		if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+		if let (Self::UInteger(a), b) = (self, other) {
 			return Some(Self::UInteger(a % b.to_uint_32()?));
+		} else if let (a, Self::UInteger(b)) = (self, other) {
+			return Some(Self::UInteger(a.to_uint_32()? % b));
 		}
 		Some(Self::Integer(self.to_int_32()? % other.to_int_32()?))
 	}
 
 	pub fn divide(&self, other: &Self) -> Option<Self> {
-		if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
-			return Some(Self::UInteger(a.wrapping_div(b.to_uint_32()?)));
+		if let (Self::UInteger(a), b) = (self, other) {
+			return Some(Self::UInteger(a / b.to_uint_32()?));
+		} else if let (a, Self::UInteger(b)) = (self, other) {
+			return Some(Self::UInteger(a.to_uint_32()? / b));
 		}
 		Some(Self::Integer(self.to_int_32()? / other.to_int_32()?))
 	}
 
 	pub fn and(&self, other: &Self) -> Option<Self> {
-		if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+		if let (Self::UInteger(a), b) = (self, other) {
 			return Some(Self::UInteger(a & b.to_uint_32()?));
+		} else if let (a, Self::UInteger(b)) = (self, other) {
+			return Some(Self::UInteger(a.to_uint_32()? & b));
 		}
 		Some(Self::Integer(self.to_int_32()? & other.to_int_32()?))
 	}
 
 	pub fn or(&self, other: &Self) -> Option<Self> {
-		if let (Self::UInteger(a), b) | (b, Self::UInteger(a)) = (self, other) {
+		if let (Self::UInteger(a), b) = (self, other) {
 			return Some(Self::UInteger(a | b.to_uint_32()?));
+		} else if let (a, Self::UInteger(b)) = (self, other) {
+			return Some(Self::UInteger(a.to_uint_32()? | b));
 		}
 		Some(Self::Integer(self.to_int_32()? | other.to_int_32()?))
 	}
@@ -131,6 +146,7 @@ impl Val {
 	pub fn is_zero(&self) -> bool {
 		match self {
 			Self::Integer(0) => true,
+			Self::UInteger(0) => true,
 			Self::Float(num) => *num == 0.0,
 			_ => false,
 		}
@@ -138,6 +154,7 @@ impl Val {
 	pub fn is_one(&self) -> bool {
 		match self {
 			Self::Integer(1) => true,
+			Self::UInteger(1) => true,
 			Self::Float(num) => *num == 1.0,
 			_ => false,
 		}
@@ -154,8 +171,15 @@ impl Val {
 				Ordering::Less => NEGATIVE_UINT,
 				Ordering::Equal => 0,
 			}),
-			(Self::UInteger(a), b) | (b, Self::UInteger(a)) => {
+			(Self::UInteger(a), b) => {
 				Self::UInteger(match a.cmp(&b.to_uint_32()?) {
+					Ordering::Greater => 1,
+					Ordering::Less => NEGATIVE_UINT,
+					Ordering::Equal => 0,
+				})
+			}
+			(a, Self::UInteger(b)) => {
+				Self::UInteger(match a.to_uint_32()?.cmp(b) {
 					Ordering::Greater => 1,
 					Ordering::Less => NEGATIVE_UINT,
 					Ordering::Equal => 0,
@@ -175,6 +199,10 @@ impl Val {
 		Some(match (self, other) {
 			(Self::Integer(a), Self::Integer(b)) => Self::Integer(if a == b { 1 } else { 0 }),
 			(Self::UInteger(a), Self::UInteger(b)) => Self::UInteger(if a == b { 1 } else { 0 }),
+			(Self::UInteger(a), b) | (b, Self::UInteger(a)) => {
+				let b = b.to_uint_32()?;
+				Self::UInteger(if *a == b { 1 } else { 0 })
+			}
 			(Self::Float(a), Self::Float(b)) => Self::Float(if a == b { 1.0 } else { 0.0 }),
 			_ => {
 				return None;
@@ -185,6 +213,10 @@ impl Val {
 		Some(match (self, other) {
 			(Self::Integer(a), Self::Integer(b)) => Self::Integer(if a != b { 1 } else { 0 }),
 			(Self::UInteger(a), Self::UInteger(b)) => Self::UInteger(if a != b { 1 } else { 0 }),
+			(Self::UInteger(a), b) | (b, Self::UInteger(a)) => {
+				let b = b.to_uint_32()?;
+				Self::UInteger(if *a != b { 1 } else { 0 })
+			}
 			(Self::Float(a), Self::Float(b)) => Self::Float(if a != b { 1.0 } else { 0.0 }),
 			_ => {
 				return None;
@@ -195,6 +227,20 @@ impl Val {
 		Some(match (self, other) {
 			(Self::Integer(a), Self::Integer(b)) => Self::Integer(if a < b { 1 } else { 0 }),
 			(Self::UInteger(a), Self::UInteger(b)) => Self::UInteger(if a < b { 1 } else { 0 }),
+			(Self::UInteger(a), b) | (b, Self::UInteger(a)) => {
+				let b = b.to_uint_32()?;
+
+				// if *a == NEGATIVE_UINT && b != NEGATIVE_UINT { return Some(Self::UInteger(1)); }
+
+				Self::UInteger(if *a < b { 1 } else { 0 })
+			}
+			(a, Self::UInteger(b)) => {
+				let a = a.to_uint_32()?;
+
+				// if a == NEGATIVE_UINT && *b != NEGATIVE_UINT { return Some(Self::UInteger(1)); }
+
+				Self::UInteger(if a < *b { 1 } else { 0 })
+			}
 			(Self::Float(a), Self::Float(b)) => Self::Float(if a < b { 1.0 } else { 0.0 }),
 			_ => {
 				return None;
@@ -205,6 +251,19 @@ impl Val {
 		Some(match (self, other) {
 			(Self::Integer(a), Self::Integer(b)) => Self::Integer(if a <= b { 1 } else { 0 }),
 			(Self::UInteger(a), Self::UInteger(b)) => Self::UInteger(if a <= b { 1 } else { 0 }),
+			(Self::UInteger(a), b) => {
+				// if *a == NEGATIVE_UINT { return Some(Self::UInteger(1)); }
+
+				let b = b.to_uint_32()?;
+				Self::UInteger(if *a <= b { 1 } else { 0 })
+			}
+			(a, Self::UInteger(b)) => {
+				let a = a.to_uint_32()?;
+
+				// if a == NEGATIVE_UINT { return Some(Self::UInteger(1)); }
+
+				Self::UInteger(if a <= *b { 1 } else { 0 })
+			}
 			(Self::Float(a), Self::Float(b)) => Self::Float(if a <= b { 1.0 } else { 0.0 }),
 			_ => {
 				return None;
@@ -215,6 +274,20 @@ impl Val {
 		Some(match (self, other) {
 			(Self::Integer(a), Self::Integer(b)) => Self::Integer(if a > b { 1 } else { 0 }),
 			(Self::UInteger(a), Self::UInteger(b)) => Self::UInteger(if a > b { 1 } else { 0 }),
+			(Self::UInteger(a), b) => {
+				let b = b.to_uint_32()?;
+
+				// if *a == NEGATIVE_UINT { return Some(Self::UInteger(0)); }
+
+				Self::UInteger(if *a > b { 1 } else { 0 })
+			}
+			(a, Self::UInteger(b)) => {
+				let a = a.to_uint_32()?;
+
+				// if a == NEGATIVE_UINT { return Some(Self::UInteger(0)); }
+
+				Self::UInteger(if a > *b { 1 } else { 0 })
+			}
 			(Self::Float(a), Self::Float(b)) => Self::Float(if a > b { 1.0 } else { 0.0 }),
 			_ => {
 				return None;
@@ -225,6 +298,20 @@ impl Val {
 		Some(match (self, other) {
 			(Self::Integer(a), Self::Integer(b)) => Self::Integer(if a >= b { 1 } else { 0 }),
 			(Self::UInteger(a), Self::UInteger(b)) => Self::UInteger(if a >= b { 1 } else { 0 }),
+			(Self::UInteger(a), b) => {
+				let b = b.to_uint_32()?;
+
+				// if *a == NEGATIVE_UINT && b != NEGATIVE_UINT { return Some(Self::UInteger(0)); }
+
+				Self::UInteger(if *a >= b { 1 } else { 0 })
+			}
+			(a, Self::UInteger(b)) => {
+				let a = a.to_uint_32()?;
+
+				// if a == NEGATIVE_UINT && *b != NEGATIVE_UINT { return Some(Self::UInteger(0)); }
+
+				Self::UInteger(if a >= *b { 1 } else { 0 })
+			}
 			(Self::Float(a), Self::Float(b)) => Self::Float(if a >= b { 1.0 } else { 0.0 }),
 			_ => {
 				return None;
@@ -1272,6 +1359,14 @@ impl Operand {
 
 impl Instruction {
 	pub fn new_phi(reg: Reg) -> Self { Self::Phi(reg, BTreeSet::default(), None) }
+
+	pub fn push_global(&mut self, val: Val) {
+		let Self::Global { content, .. } = self else {
+			unreachable!("this should only be called for global found: {}", self)
+		};
+		content.push(val);
+	}
+
 	pub fn remove_phis(&mut self) {
 		match self {
 			Self::FLoad { src, dst }
@@ -2949,27 +3044,27 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
 				dst: Reg::from_str(dst)?,
 			}),
 			// unsigned
-			["cmpu_LT", a, b, "=>", dst] => instructions.push(Instruction::CmpLT {
+			["cmpu_LT", a, b, "=>", dst] => instructions.push(Instruction::CmpuLT {
 				a: Reg::from_str(a)?,
 				b: Reg::from_str(b)?,
 				dst: Reg::from_str(dst)?,
 			}),
-			["cmpu_LE", a, b, "=>", dst] => instructions.push(Instruction::CmpLE {
+			["cmpu_LE", a, b, "=>", dst] => instructions.push(Instruction::CmpuLE {
 				a: Reg::from_str(a)?,
 				b: Reg::from_str(b)?,
 				dst: Reg::from_str(dst)?,
 			}),
-			["cmpu_GT", a, b, "=>", dst] => instructions.push(Instruction::CmpGT {
+			["cmpu_GT", a, b, "=>", dst] => instructions.push(Instruction::CmpuGT {
 				a: Reg::from_str(a)?,
 				b: Reg::from_str(b)?,
 				dst: Reg::from_str(dst)?,
 			}),
-			["cmpu_GE", a, b, "=>", dst] => instructions.push(Instruction::CmpGE {
+			["cmpu_GE", a, b, "=>", dst] => instructions.push(Instruction::CmpuGE {
 				a: Reg::from_str(a)?,
 				b: Reg::from_str(b)?,
 				dst: Reg::from_str(dst)?,
 			}),
-			["compu", a, b, "=>", dst] => instructions.push(Instruction::CmpGE {
+			["compu", a, b, "=>", dst] => instructions.push(Instruction::Compu {
 				a: Reg::from_str(a)?,
 				b: Reg::from_str(b)?,
 				dst: Reg::from_str(dst)?,
@@ -2988,13 +3083,13 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
 				.push(Instruction::TestLE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
 			// unsigned
 			["testugt", a, "=>", dst] => instructions
-				.push(Instruction::TestGT { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+				.push(Instruction::TestuGT { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
 			["testuge", a, "=>", dst] => instructions
-				.push(Instruction::TestGE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+				.push(Instruction::TestuGE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
 			["testult", a, "=>", dst] => instructions
-				.push(Instruction::TestLT { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+				.push(Instruction::TestuLT { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
 			["testule", a, "=>", dst] => instructions
-				.push(Instruction::TestLE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
+				.push(Instruction::TestuLE { test: Reg::from_str(a)?, dst: Reg::from_str(dst)? }),
 
 			// Float operations
 			["f2i", src, "=>", dst] => instructions
@@ -3176,19 +3271,43 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
 					params,
 				})
 			}
-			[".global", name, size, align] => instructions.push(Instruction::Global {
-				name: name.to_string(),
-				size: size.parse().map_err(|_| "failed to parse .global size")?,
-				align: align.parse().map_err(|_| "failed to parse .global align")?,
-				content: vec![],
-			}),
-			[".global", name, size, align, ":"] => {
+			[".global", name, size, align] if align.ends_with(':') => {
+				let align = align.trim_end_matches(':');
+
 				in_global_seq = Some(Instruction::Global {
 					name: name.to_string(),
 					size: size.parse().map_err(|_| "failed to parse .global size")?,
 					align: align.parse().map_err(|_| "failed to parse .global align")?,
 					content: vec![],
 				});
+			}
+			[".global", name, size, align, number] if align.ends_with(':') => {
+				let align = align.trim_end_matches(':');
+
+				instructions.push(Instruction::Global {
+					name: name.to_string(),
+					size: size.parse().map_err(|_| "failed to parse .global size")?,
+					align: align.parse().map_err(|_| "failed to parse .global align")?,
+					content: vec![Val::from_str(number)?],
+				});
+			},
+			[".global", name, size, align] => instructions.push(Instruction::Global {
+				name: name.to_string(),
+				size: size.parse().map_err(|_| "failed to parse .global size")?,
+				align: align.parse().map_err(|_| "failed to parse .global align")?,
+				content: vec![],
+			}),
+			["[", ty, val] if let Some(curr_global) = &mut in_global_seq => {
+				curr_global.push_global(Val::from_str(val)?);
+			}
+			[ty, val] if let Some(curr_global) = &mut in_global_seq => {
+				curr_global.push_global(Val::from_str(val)?);
+			}
+			[ty, val, "]"] if in_global_seq.is_some() => {
+				let mut curr_global = in_global_seq.take().unwrap();
+				curr_global.push_global(Val::from_str(val)?);
+
+				instructions.push(curr_global);
 			}
 			[".string", name, str_lit @ ..] => {
 				let text = str_lit.join(" ");

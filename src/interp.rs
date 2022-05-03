@@ -79,24 +79,30 @@ impl Interpreter {
 			val => val,
 		});
 
+		// let mut stack = vec![Val::Null; 4];
 		let mut stack = vec![];
+
 		let data = iloc
 			.preamble
 			.into_iter()
 			.flat_map(|inst| match inst {
-				Instruction::Array { name, size, mut content } => {
-					content.reverse();
-					let mut c = vec![];
-					for el in content {
-						c.extend(vec![Val::Null; 3]);
-						c.push(el);
+				Instruction::Global { name, size, align: _, mut content } => {
+					if content.is_empty() {
+						stack.push(Val::Null);
+						Some((Loc(name), Val::Integer((stack.len() - 1) as i32)))
+					} else if let [single] = content.as_slice() {
+						stack.push(single.clone());
+						Some((Loc(name), Val::Integer((stack.len() - 1) as i32)))
+					} else {
+						content.reverse();
+						let mut c = vec![];
+						for el in content {
+							c.extend(vec![Val::Null; 3]);
+							c.push(el);
+						}
+						stack.extend(c);
+						Some((Loc(name), Val::Integer(4 + (stack.len() - 1) as i32)))
 					}
-					stack.extend(c);
-					Some((Loc(name), Val::Integer(4 + (stack.len() - 1) as i32)))
-				}
-				Instruction::Global { name, size, align: _ } => {
-					stack.push(Val::Null);
-					Some((Loc(name), Val::Integer((stack.len() - 1) as i32)))
 				}
 				Instruction::String { name, mut content } => {
 					content = content.replace("\\n", "\n");
@@ -121,11 +127,10 @@ impl Interpreter {
 			})
 			.collect::<HashMap<_, _>>();
 
-		// stack.extend(vec![Val::Null; STACK_SIZE]);
-
+		stack.extend(vec![Val::Null; STACK_SIZE]);
 		// Carr's examples read of the end of an array, null is not an acceptable default
 		// stack value...
-		stack.extend(vec![Val::Integer(0); STACK_SIZE]);
+		// stack.extend(vec![Val::Integer(0); STACK_SIZE]);
 
 		let mut registers = HashMap::new();
 		let mut label_map = HashMap::new();
