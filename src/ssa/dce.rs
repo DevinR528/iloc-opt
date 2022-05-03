@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::{
-	iloc::{Function, Instruction, Loc, Val, Reg},
+	iloc::{Function, Instruction, Loc, Reg, Val},
 	ssa::{postorder, reverse_postorder, DominatorTree},
 	OrdLabel,
 };
@@ -236,7 +236,10 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
 
 				// The `all()` method defaults to true if no iteration happens
 				if block.instructions.iter().all(|i| {
-					matches!(i, Instruction::Skip(..) | Instruction::Label(..) | Instruction::Phi(..))
+					matches!(
+						i,
+						Instruction::Skip(..) | Instruction::Label(..) | Instruction::Phi(..)
+					)
 				}) {
 					changed = true;
 					// println!("transfer {blk} to {loc}");
@@ -254,7 +257,10 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
 				}
 				// The `all()` method defaults to true if no iteration happens!!
 				if jump_to.instructions.iter().all(|i| {
-					matches!(i, Instruction::Skip(..) | Instruction::Label(..) | Instruction::Phi(..))
+					matches!(
+						i,
+						Instruction::Skip(..) | Instruction::Label(..) | Instruction::Phi(..)
+					)
 				}) {
 					changed = true;
 					println!("overwrite {blk} to {loc}");
@@ -279,7 +285,6 @@ pub fn cleanup(func: &mut Function, start: &OrdLabel) {
 
 		if changed {
 			cfg_map = build_stripped_cfg(func);
-
 		}
 	}
 }

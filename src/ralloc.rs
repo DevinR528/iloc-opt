@@ -76,7 +76,9 @@ impl PartialOrd for Spill {
 		Some(match self.blk_idx().cmp(&other.blk_idx()) {
 			Ordering::Equal => match self.inst_idx().cmp(&other.inst_idx()) {
 				Ordering::Equal => match (self, other) {
-					(Spill::Load { .. } | Spill::ImmLoad { .. }, Spill::Store { .. }) => Ordering::Less,
+					(Spill::Load { .. } | Spill::ImmLoad { .. }, Spill::Store { .. }) => {
+						Ordering::Less
+					}
 					(Spill::Store { .. }, Spill::ImmLoad { .. } | Spill::Load { .. }) => {
 						Ordering::Greater
 					}
@@ -159,12 +161,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
 		// TODO: Move/copy coalesce instructions in `build_interference`
 		// TODO: Move/copy coalesce instructions in `build_interference`
 		let (graph, interfere, defs) = loop {
-			match color::build_interference(
-				&mut func.blocks,
-				&dtree,
-				&loop_map,
-				&spilled_start
-			) {
+			match color::build_interference(&mut func.blocks, &dtree, &loop_map, &spilled_start) {
 				Ok(ColoredGraph { graph, interference, defs }) => {
 					break (graph, interference, defs)
 				}

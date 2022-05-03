@@ -5,10 +5,9 @@ use std::{
 
 use crate::{
 	iloc::Function,
+	lcm::print_maps,
 	ssa::{reverse_postorder, DominatorTree, OrdLabel},
 };
-
-use super::print_maps;
 
 #[derive(Debug)]
 pub enum LoopInfo {
@@ -81,10 +80,9 @@ pub fn find_loops(func: &mut Function, domtree: &DominatorTree) -> LoopAnalysis 
 	for blk in reverse_postorder(&domtree.cfg_succs_map, &start) {
 		// We check each predecessor of the control flow graph
 		for pred in domtree.cfg_preds_map.get(blk).unwrap_or(&BTreeSet::default()) {
-			// If the block dominates one of it's preds it is a back edge to a loop or it's a self loop
-			if domtree.dom_tree.get(blk).map_or(false, |set| set.contains(pred))
-				|| blk == pred
-			{
+			// If the block dominates one of it's preds it is a back edge to a loop or it's a self
+			// loop
+			if domtree.dom_tree.get(blk).map_or(false, |set| set.contains(pred)) || blk == pred {
 				if loops.insert(blk.to_string(), blk.to_string()).is_none() {
 					loop_ord.push(blk.as_str());
 				}

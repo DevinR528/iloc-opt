@@ -1,18 +1,16 @@
 use std::{
-	collections::{HashMap, HashSet, BTreeMap},
-	str::FromStr, cmp::Ordering, intrinsics::discriminant_value,
+	cmp::Ordering,
+	collections::{BTreeMap, HashMap, HashSet},
+	intrinsics::discriminant_value,
+	str::FromStr,
 };
 
 use crate::iloc::{IlocProgram, Instruction, Loc, Reg, Val, NEGATIVE_UINT};
 
 const HEAP_MASK: i32 = 1 << 31;
 
-pub fn is_heap(addr: i32) -> bool {
-	(addr & HEAP_MASK) == HEAP_MASK
-}
-pub fn remove_heap_mask(addr: i32) -> i32 {
-	addr & !HEAP_MASK
-}
+pub fn is_heap(addr: i32) -> bool { (addr & HEAP_MASK) == HEAP_MASK }
+pub fn remove_heap_mask(addr: i32) -> i32 { addr & !HEAP_MASK }
 
 const STACK_SIZE: usize = 4096 * 4 * 4;
 
@@ -62,25 +60,23 @@ pub struct Interpreter {
 impl Interpreter {
 	pub fn new(mut iloc: IlocProgram) -> Self {
 		let mut preamble_lines = iloc.preamble.len();
-		iloc.preamble.sort_by(|a, b| {
-			match discriminant_value(a).cmp(&discriminant_value(b)) {
-				Ordering::Equal => match (a, b) {
-					(Instruction::Array { name: a, .. }, Instruction::Array { name: b, .. }) => {
-						a.cmp(b)
-					}
-					(Instruction::Global { name: a, .. }, Instruction::Global { name: b, .. }) => {
-						a.cmp(b)
-					}
-					(Instruction::String { name: a, .. }, Instruction::String { name: b, .. }) => {
-						a.cmp(b)
-					}
-					(Instruction::Float { name: a, .. }, Instruction::Float { name: b, .. }) => {
-						a.cmp(b)
-					}
-					_ => unreachable!(),
-				},
-				val => val,
-			}
+		iloc.preamble.sort_by(|a, b| match discriminant_value(a).cmp(&discriminant_value(b)) {
+			Ordering::Equal => match (a, b) {
+				(Instruction::Array { name: a, .. }, Instruction::Array { name: b, .. }) => {
+					a.cmp(b)
+				}
+				(Instruction::Global { name: a, .. }, Instruction::Global { name: b, .. }) => {
+					a.cmp(b)
+				}
+				(Instruction::String { name: a, .. }, Instruction::String { name: b, .. }) => {
+					a.cmp(b)
+				}
+				(Instruction::Float { name: a, .. }, Instruction::Float { name: b, .. }) => {
+					a.cmp(b)
+				}
+				_ => unreachable!(),
+			},
+			val => val,
 		});
 
 		let mut stack = vec![];
@@ -186,7 +182,6 @@ impl Interpreter {
 		if self.call_stack.is_empty() {
 			return Some(false);
 		}
-
 
 		let CallStackEntry { name: func, .. } = self.call_stack.last()?;
 		let stack = &mut self.stack;
@@ -470,7 +465,7 @@ impl Interpreter {
 			Instruction::TestGE { test, dst } | Instruction::TestuGE { test, dst } => {
 				let a = self.registers().get(test)?;
 				let is_ge = match a {
-					Val::Integer(i) if *i >= 0  => 1,
+					Val::Integer(i) if *i >= 0 => 1,
 					Val::UInteger(i) if *i != NEGATIVE_UINT => 1,
 					Val::Float(f) if *f >= 0.0 => 1,
 					_ => 0,
@@ -794,7 +789,8 @@ impl Interpreter {
 				print!("{}", text)
 			}
 			Instruction::Malloc { size, dst } => {
-				let addr = self.heap_meta.first_entry().map(|e| *e.key()).unwrap_or(STACK_SIZE as i32);
+				let addr =
+					self.heap_meta.first_entry().map(|e| *e.key()).unwrap_or(STACK_SIZE as i32);
 				let size = self.call_stack.last()?.registers.get(size)?.to_int_32()?;
 
 				self.heap_meta.insert(addr, size as usize);
@@ -803,10 +799,12 @@ impl Interpreter {
 					.unwrap()
 					.registers
 					.insert(*dst, Val::Integer(addr | HEAP_MASK));
-			},
+			}
 			Instruction::Free(reg) => {
 				let addr = self.call_stack.last()?.registers.get(reg)?.to_int_32()?;
-				if !is_heap(addr) { return None; }
+				if !is_heap(addr) {
+					return None;
+				}
 				let index = remove_heap_mask(addr);
 				let size = self.heap_meta.remove(&index)?;
 
@@ -814,11 +812,13 @@ impl Interpreter {
 				for slot in &mut self.heap[index - size..index] {
 					*slot = Val::Null;
 				}
-			},
+			}
 			Instruction::Realloc { src, size, dst } => {
 				let old_addr = self.call_stack.last()?.registers.get(src)?.to_int_32()?;
 				// Check that this was, in fact, allocated from the heap
-				if !is_heap(old_addr) { return None; }
+				if !is_heap(old_addr) {
+					return None;
+				}
 
 				let old_idx = remove_heap_mask(old_addr);
 
@@ -828,19 +828,22 @@ impl Interpreter {
 				let old_idx = old_idx as usize;
 				let mut copy_of_old_bytes = self.heap[old_idx - old_size..old_idx].to_vec();
 
-				let addr = self.heap_meta.first_entry().map(|e| *e.key()).unwrap_or(STACK_SIZE as i32);
+				let addr =
+					self.heap_meta.first_entry().map(|e| *e.key()).unwrap_or(STACK_SIZE as i32);
 				let index = addr as usize;
 				for (i, slot) in self.heap[index - size..index].iter_mut().enumerate() {
 					if i >= (copy_of_old_bytes.len() - 1) {
 						*slot = copy_of_old_bytes.remove(i);
-					} else { break; }
+					} else {
+						break;
+					}
 				}
 				self.call_stack
 					.last_mut()
 					.unwrap()
 					.registers
 					.insert(*dst, Val::Integer(addr | HEAP_MASK));
-			},
+			}
 			_ => todo!("{:?}", instrs[self.inst_idx]),
 		}
 		self.inst_idx += 1;
@@ -898,7 +901,9 @@ fn debug_loop(
 			}
 			["prints" | "ps"] => {
 				for (idx, slot) in interpreter.stack.iter().enumerate() {
-					if matches!(slot, Val::Null) { continue; }
+					if matches!(slot, Val::Null) {
+						continue;
+					}
 					println!("{}: {:?}", idx, slot);
 				}
 			}
@@ -907,7 +912,9 @@ fn debug_loop(
 			}
 			["printh" | "ph"] => {
 				for (idx, slot) in interpreter.heap.iter().enumerate() {
-					if matches!(slot, Val::Null) { continue; }
+					if matches!(slot, Val::Null) {
+						continue;
+					}
 					println!("{}: {:?}", idx, slot);
 				}
 			}
@@ -1000,12 +1007,16 @@ pub fn run_interpreter(iloc: IlocProgram, debug: bool) -> Result<(), &'static st
 				);
 				println!("heap: [");
 				for (idx, slot) in interpreter.heap.iter().enumerate() {
-					if matches!(slot, Val::Null) { continue; }
+					if matches!(slot, Val::Null) {
+						continue;
+					}
 					println!("  {}: {:?}", idx as i32 | HEAP_MASK, slot);
 				}
 				println!("]\nstack: [");
 				for (idx, slot) in interpreter.stack.iter().enumerate() {
-					if matches!(slot, Val::Null | Val::Integer(0)) { continue; }
+					if matches!(slot, Val::Null | Val::Integer(0)) {
+						continue;
+					}
 					println!("  {}: {:?}", idx, slot);
 				}
 				println!("]");

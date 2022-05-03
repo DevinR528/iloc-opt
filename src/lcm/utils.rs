@@ -28,9 +28,7 @@ pub fn postorder<'a>(
 			// This is fall through then jump or in traversal language left then right
 			// child
 			for child in set.iter() {
-				if seen.contains(child) {
-					continue;
-				}
+				if seen.contains(child) { continue; }
 				_postord(succs, child, collected, seen);
 			}
 		}

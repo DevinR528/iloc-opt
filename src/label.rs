@@ -47,9 +47,7 @@ impl OrdLabel {
 		}
 	}
 
-	pub fn from_known(label: &str) -> Self {
-		LABEL_MAP.lock().unwrap().get(label).unwrap().clone()
-	}
+	pub fn from_known(label: &str) -> Self { LABEL_MAP.lock().unwrap().get(label).unwrap().clone() }
 
 	pub fn as_str(&self) -> &str { &self.1 }
 }

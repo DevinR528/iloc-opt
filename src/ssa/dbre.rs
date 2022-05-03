@@ -1,6 +1,7 @@
 use std::{
 	collections::{BTreeSet, HashMap, VecDeque},
-	ops::Range, fmt::Debug,
+	fmt::Debug,
+	ops::Range,
 };
 
 use crate::{
@@ -72,7 +73,6 @@ pub fn dom_val_num(
 		match op {
 			Instruction::Call { args, .. } => {
 				for arg in args {
-
 					rewrite_name(arg, meta);
 				}
 			}
@@ -119,7 +119,6 @@ pub fn dom_val_num(
 						dead.insert(inst_idx);
 					}
 				}
-
 			} else if let Some(dst) = op.target_reg() {
 				// When we see a new definition of a register we increment it's phi value
 				new_name(*dst, meta);
@@ -142,8 +141,10 @@ pub fn dom_val_num(
 		} else if let Some(dst) = op.target_reg() {
 			// When we see a new definition of a register we increment it's phi value
 			new_name(*dst, meta);
-		} else if let Instruction::Frame {  params, .. } = op {
-			for dst in params { new_name(*dst, meta); }
+		} else if let Instruction::Frame { params, .. } = op {
+			for dst in params {
+				new_name(*dst, meta);
+			}
 		}
 	}
 
@@ -203,11 +204,12 @@ pub fn dom_val_num(
 			if let Some(meta) = meta.get_mut(r) {
 				let subscript = meta.stack.pop_front().unwrap();
 				subs.replace(subscript);
-			} else { unreachable!() }
+			} else {
+				unreachable!()
+			}
 		}
 	}
 
 	// Pop scope since we are leaving
 	expr_tree.pop_back();
-
 }

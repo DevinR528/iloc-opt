@@ -8,7 +8,7 @@
 	drain_filter,
 	default_free_fn,
 	if_let_guard,
-	core_intrinsics,
+	core_intrinsics
 )]
 #![allow(unused)]
 
@@ -108,7 +108,8 @@ fn main() {
 				}
 			}
 
-			// SSA (dominator based value numbering redundancy elimination and dead code elimination)
+			// SSA (dominator based value numbering redundancy elimination and dead code
+			// elimination)
 			let mut blocks = make_basic_blocks(&blocks);
 			let func_domtree = ssa::ssa_optimization(&mut blocks);
 
@@ -152,11 +153,8 @@ fn main() {
 			for func in &mut blocks.functions {
 				let cfg = build_cfg(func);
 				let dtree = dominator_tree(&cfg, &mut func.blocks);
-				let phis = ssa::insert_phi_functions(
-					func,
-					&dtree.cfg_succs_map,
-					&dtree.dom_frontier_map,
-				);
+				let phis =
+					ssa::insert_phi_functions(func, &dtree.cfg_succs_map, &dtree.dom_frontier_map);
 
 				let mut meta = HashMap::new();
 				for (_blk_label, register_set) in phis {

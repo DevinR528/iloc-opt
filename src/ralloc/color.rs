@@ -258,9 +258,7 @@ pub fn build_interference(
 	for block in postorder(&domtree.cfg_succs_map, &start) {
 		let blk_idx = blocks.iter().position(|b| b.label == block.as_str()).unwrap();
 		for inst in blocks[blk_idx].instructions.iter_mut().rev() {
-			if matches!(inst, Instruction::Skip(..)) {
-				continue;
-			}
+			if matches!(inst, Instruction::Skip(..)) { continue; }
 
 			let uloc = uexpr.entry(block.clone()).or_default();
 			let def_loc = defs.entry(block.clone()).or_default();

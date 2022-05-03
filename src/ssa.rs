@@ -1,9 +1,9 @@
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque, BTreeMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
 pub use crate::{
-	label::OrdLabel,
-	lcm::{find_loops, lazy_code_motion, postorder, reverse_postorder, print_maps},
 	iloc::{Block, Function, IlocProgram, Instruction, Operand, Reg},
+	label::OrdLabel,
+	lcm::{find_loops, lazy_code_motion, postorder, print_maps, reverse_postorder},
 };
 
 mod dbre;
@@ -17,8 +17,8 @@ use fold::{const_fold, ConstMap, ValueKind, WorkStuff};
 #[derive(Clone, Debug, Default)]
 pub struct ControlFlowGraph {
 	paths: HashMap<String, BTreeSet<OrdLabel>>,
-	/// After `build_cfg` this will only ever be one `.E_exit` since this is used to merge all actual
-	/// exit blocks to a single exit.
+	/// After `build_cfg` this will only ever be one `.E_exit` since this is used to merge all
+	/// actual exit blocks to a single exit.
 	exits: Vec<OrdLabel>,
 }
 
@@ -124,7 +124,11 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
 	let start = OrdLabel::entry();
 	let exit = OrdLabel::exit();
 
-	let succs = cfg.paths.iter().map(|(k, v)| (OrdLabel::from_known(k), v.clone())).collect::<HashMap<_, _>>();
+	let succs = cfg
+		.paths
+		.iter()
+		.map(|(k, v)| (OrdLabel::from_known(k), v.clone()))
+		.collect::<HashMap<_, _>>();
 	for (ord, n) in reverse_postorder(&succs, &start).into_iter().enumerate() {
 		// Updates the global map that keeps track of a labels order in the graph
 		OrdLabel::update(ord as isize, n.as_str());
@@ -138,10 +142,7 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
 		.paths
 		.iter()
 		.map(|(k, v)| {
-			(
-				OrdLabel::from_known(k),
-				v.iter().map(|l| OrdLabel::from_known(l.as_str())).collect(),
-			)
+			(OrdLabel::from_known(k), v.iter().map(|l| OrdLabel::from_known(l.as_str())).collect())
 		})
 		.collect();
 	let mut preds: HashMap<_, BTreeSet<_>> = HashMap::new();
@@ -335,7 +336,6 @@ pub fn dominator_tree(cfg: &ControlFlowGraph, blocks: &mut [Block]) -> Dominator
 	// print_maps("post_idom", post_idom_map.iter());
 	// print_maps("post_dom_tree", post_dom_tree.iter());
 
-
 	let empty = BTreeSet::new();
 	// This is control dependence
 	let mut post_dom_frontier = HashMap::<_, BTreeSet<OrdLabel>>::with_capacity(all_nodes.len());
@@ -439,10 +439,7 @@ pub fn insert_phi_functions(
 				.collect();
 
 			// PhiDef(b) ∪ UpExpr(b) ∪ (LiveOut(b) - Defs(b))
-			let new = upvar.get(label).unwrap_or(&empty)
-				.union(&live_def_diff)
-				.copied()
-				.collect();
+			let new = upvar.get(label).unwrap_or(&empty).union(&live_def_diff).copied().collect();
 			let old = live_in.entry(label.clone()).or_default();
 			if *old != new {
 				*old = new;
@@ -518,8 +515,7 @@ pub fn ssa_optimization(iloc: &mut IlocProgram) -> HashMap<String, DominatorTree
 		// print_maps("dom_tree", dtree.dom_tree.iter());
 
 		// The `phis` used to fill the `meta` map
-		let _phis =
-			insert_phi_functions(func, &dtree.cfg_succs_map, &dtree.dom_frontier_map);
+		let _phis = insert_phi_functions(func, &dtree.cfg_succs_map, &dtree.dom_frontier_map);
 
 		let mut meta = HashMap::new();
 		let mut stack = VecDeque::new();
@@ -585,7 +581,7 @@ fn lcm_pre() {
 	let cfg = build_cfg(&mut blocks.functions[0]);
 	let dtree = dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 
-	lazy_code_motion(&mut blocks.functions[0], &dtree, );
+	lazy_code_motion(&mut blocks.functions[0], &dtree);
 
 	let mut buf = String::new();
 	for inst in blocks.instruction_iter() {
@@ -706,7 +702,7 @@ fn lcm_simple() {
 	let name = OrdLabel::entry();
 	let dom = dominator_tree(&cfg, &mut blocks.functions[0].blocks);
 
-	lazy_code_motion(&mut blocks.functions[0], &dom, );
+	lazy_code_motion(&mut blocks.functions[0], &dom);
 }
 #[allow(unused)]
 fn emit_cfg_viz(cfg: &ControlFlowGraph, file: &str) {

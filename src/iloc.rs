@@ -39,7 +39,7 @@ impl Val {
 		if let Self::UInteger(uint) = self {
 			return Some(*uint);
 		} else if let Self::Integer(int) = self {
-			return Some(*int as u32)
+			return Some(*int as u32);
 		}
 		None
 	}
@@ -154,11 +154,13 @@ impl Val {
 				Ordering::Less => NEGATIVE_UINT,
 				Ordering::Equal => 0,
 			}),
-			(Self::UInteger(a), b) | (b, Self::UInteger(a)) => Self::UInteger(match a.cmp(&b.to_uint_32()?) {
-				Ordering::Greater => 1,
-				Ordering::Less => NEGATIVE_UINT,
-				Ordering::Equal => 0,
-			}),
+			(Self::UInteger(a), b) | (b, Self::UInteger(a)) => {
+				Self::UInteger(match a.cmp(&b.to_uint_32()?) {
+					Ordering::Greater => 1,
+					Ordering::Less => NEGATIVE_UINT,
+					Ordering::Equal => 0,
+				})
+			}
 			(Self::Float(a), Self::Float(b)) => Self::Float(match a.partial_cmp(b)? {
 				Ordering::Greater => 1.0,
 				Ordering::Less => -1.0,
@@ -546,7 +548,7 @@ pub enum Instruction {
 	Data,
 	Text,
 	Frame { name: String, size: usize, params: Vec<Reg> },
-	Global { name: String, size: usize, align: usize },
+	Global { name: String, size: usize, align: usize, content: Vec<Val> },
 	Array { name: String, size: usize, content: Vec<Val> },
 	String { name: String, content: String },
 	Float { name: String, content: f64 },
@@ -665,7 +667,7 @@ impl Hash for Instruction {
 			Instruction::Push(s) => (s, variant).hash(state),
 			Instruction::PushR(s) => (s, variant).hash(state),
 			Instruction::Frame { name, size, params } => (name, size, params, variant).hash(state),
-			Instruction::Global { name, size, align } => (name, size, align, variant).hash(state),
+			Instruction::Global { name, size, align, content } => (name, size, align, content, variant).hash(state),
 			Instruction::Array { name, size, content } => (name, size, content).hash(state),
 			Instruction::String { name, content } => (name, content, variant).hash(state),
 			Instruction::Float { name, content } => (name, content.to_bits(), variant).hash(state),
@@ -988,9 +990,9 @@ impl PartialEq for Instruction {
 				Self::Frame { name: r_name, size: r_size, params: r_params },
 			) => l_name == r_name && l_size == r_size && l_params == r_params,
 			(
-				Self::Global { name: l_name, size: l_size, align: l_align },
-				Self::Global { name: r_name, size: r_size, align: r_align },
-			) => l_name == r_name && l_size == r_size && l_align == r_align,
+				Self::Global { name: l_name, size: l_size, align: l_align, content: l_cont },
+				Self::Global { name: r_name, size: r_size, align: r_align, content: r_cont },
+			) => l_name == r_name && l_size == r_size && l_align == r_align && l_cont == r_cont,
 			(
 				Self::Array { name: l_name, size: l_size, content: l_content },
 				Self::Array { name: r_name, size: r_size, content: r_content },
@@ -1180,8 +1182,29 @@ impl fmt::Display for Instruction {
 					params.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(", ")
 				)
 			}
-			Self::Global { name, size, align } => {
-				writeln!(f, "    .{} {}, {}, {}", self.inst_name(), name, size, align)
+			Self::Global { name, size, align, content } => {
+				let mut global = if content.is_empty() {
+					String::new()
+				} else if let [single_item] = content.as_slice() {
+					format!(":	{}", single_item)
+				} else {
+					let mut buf = ":\n[".to_string();
+					let content_str = content.iter().map(|v| {
+						match v {
+							Val::Integer(i) => format!(".int {}", i),
+							Val::UInteger(u) => format!(".uint {}", u),
+							Val::Float(f) => format!(".float {}", f),
+							Val::Location(loc) => unreachable!("is this posible {}", loc),
+							Val::String(c) => format!(".string {}", c),
+							Val::Null => ".zeros 4".to_string(),
+						}
+					}).collect::<Vec<_>>().join(",");
+					buf.push_str(&content_str);
+					buf.push(']');
+					buf
+				};
+
+				write!(f, "	.{} {}, {}, {}{}", self.inst_name(), name, size, align, global)
 			}
 			Self::Array { name, size, content } => {
 				write!(f, "    .{} {}, {}, [", self.inst_name(), name, size)?;
@@ -2502,8 +2525,7 @@ impl Instruction {
 				| Self::ImmCall { .. }
 				| Self::ImmRCall { .. }
 				| Self::Malloc { .. }
-				| Self::Free(..)
-				| Self::Realloc { .. }
+				| Self::Free(..) | Self::Realloc { .. }
 		)
 	}
 
@@ -2765,6 +2787,7 @@ impl Instruction {
 pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
 	let mut instructions = vec![];
 
+	let mut in_global_seq = None;
 	for line in input.lines() {
 		let comp = line.split_whitespace().map(|s| s.replace(',', "")).collect::<Vec<_>>();
 		if comp.is_empty() {
@@ -3157,18 +3180,14 @@ pub fn parse_text(input: &str) -> Result<Vec<Instruction>, &'static str> {
 				name: name.to_string(),
 				size: size.parse().map_err(|_| "failed to parse .global size")?,
 				align: align.parse().map_err(|_| "failed to parse .global align")?,
+				content: vec![],
 			}),
-			[".array", name, size, content_str @ ..] => {
-				let mut content = vec![];
-				let mut cstr = content_str.join(" ");
-				cstr = cstr.trim_start_matches('[').trim_end_matches(']').to_string();
-				for c in cstr.split(' ') {
-					content.push(Val::from_str(c)?);
-				}
-				instructions.push(Instruction::Array {
+			[".global", name, size, align, ":"] => {
+				in_global_seq = Some(Instruction::Global {
 					name: name.to_string(),
-					size: size.parse().map_err(|_| "failed to parse .array size")?,
-					content,
+					size: size.parse().map_err(|_| "failed to parse .global size")?,
+					align: align.parse().map_err(|_| "failed to parse .global align")?,
+					content: vec![],
 				});
 			}
 			[".string", name, str_lit @ ..] => {

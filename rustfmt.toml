@@ -8,3 +8,4 @@ format_macro_bodies = true
 format_macro_matchers = true
 unstable_features = true
 fn_single_line = true
+hard_tabs = true

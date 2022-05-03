@@ -380,8 +380,8 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
 	// print_maps("delete", delete.iter());
 	// println!();
 
-	// These are the instructions that we know are in the delete set and we deleted them during insertion
-	// (we just moved the instruction from one `Vec<Instruction>` to another)
+	// These are the instructions that we know are in the delete set and we deleted them during
+	// insertion (we just moved the instruction from one `Vec<Instruction>` to another)
 	let mut deleted = BTreeSet::new();
 	// The insert instructions that have a `pred` (or move to, aka this is the edge to insert on)
 	// and the instruction itself in common
@@ -403,9 +403,6 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
 				deleted.insert((pred.clone(), *r));
 				continue;
 			}
-
-
-
 
 			let Some(b) = func.blocks.iter().position(|b| b.label == succ.as_str()) else {
 				unreachable!("{:?}", succ)
@@ -431,12 +428,11 @@ pub fn lazy_code_motion(func: &mut Function, domtree: &DominatorTree) {
 		}
 
 		let preds_succs = domtree.cfg_succs_map.get(pred).unwrap();
-		let is_insert_on_all_succs_edges = preds_succs.iter()
-			.all(|s| {
-				insert.get(&(pred.clone(), s.clone())).map_or(false, |insert_set| {
-					insert_set.is_subset(registers) && insert_set.is_superset(registers)
-				})
-			});
+		let is_insert_on_all_succs_edges = preds_succs.iter().all(|s| {
+			insert.get(&(pred.clone(), s.clone())).map_or(false, |insert_set| {
+				insert_set.is_subset(registers) && insert_set.is_superset(registers)
+			})
+		});
 		if is_insert_on_all_succs_edges {
 			common_insert.extend(registers);
 		}
@@ -537,6 +533,5 @@ fn is_invalid_move(inst: &Instruction) -> bool {
 			| Instruction::I2F { .. }
 			| Instruction::F2I { .. }
 			| Instruction::F2F { .. }
-		)
-		|| matches!(inst, Instruction::I2I { src, .. } if *src != Reg::Var(0))
+	) || matches!(inst, Instruction::I2I { src, .. } if *src != Reg::Var(0))
 }
