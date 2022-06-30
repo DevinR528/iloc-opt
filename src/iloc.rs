@@ -8,6 +8,8 @@ use std::{
     usize,
 };
 
+use crate::sched::Hardware;
+
 #[derive(Clone, Debug)]
 pub enum Val {
     Integer(isize),
@@ -244,7 +246,6 @@ impl FromStr for Reg {
 impl fmt::Display for Reg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Reg::Var(num) if unsafe { crate::SSA } => write!(f, "%vr{}", num),
             Reg::Phi(num, subs) if unsafe { crate::SSA } => {
                 write!(f, "%vr{}_{}", num, subs)
             }

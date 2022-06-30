@@ -1,5 +1,5 @@
 comment_width = 100
-max_width = 100
+max_width = 90
 imports_granularity = "Crate"
 newline_style = "Unix"
 use_small_heuristics = "Max"

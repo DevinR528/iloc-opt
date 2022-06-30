@@ -73,7 +73,7 @@ impl LoopAnalysis {
     }
 }
 
-pub fn find_loops(func: &mut Function, domtree: &DominatorTree) -> LoopAnalysis {
+pub fn find_loops(domtree: &DominatorTree) -> LoopAnalysis {
     let start = OrdLabel::entry();
     let mut loops = BTreeMap::<_, String>::new();
     let mut loop_ord = vec![];

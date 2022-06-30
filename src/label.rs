@@ -2,11 +2,11 @@ use std::{
     borrow::Borrow,
     collections::{hash_map::Entry, HashMap},
     fmt, hash,
-    sync::Mutex,
+    sync::{Mutex, LazyLock},
 };
 
-static LABEL_MAP: std::lazy::SyncLazy<Mutex<HashMap<String, OrdLabel>>> =
-    std::lazy::SyncLazy::new(|| Mutex::new(HashMap::new()));
+static LABEL_MAP: LazyLock<Mutex<HashMap<String, OrdLabel>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Clone)]
 pub struct OrdLabel(isize, String);

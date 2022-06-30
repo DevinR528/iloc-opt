@@ -147,7 +147,7 @@ pub fn allocate_registers(prog: &mut IlocProgram) {
             }
         }
 
-        let loop_map = find_loops(func, &dtree);
+        let loop_map = find_loops(&dtree);
 
         // dump_to(
         //     &IlocProgram { preamble: vec![], functions: vec![func.clone()] },

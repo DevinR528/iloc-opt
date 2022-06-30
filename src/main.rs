@@ -43,12 +43,16 @@ mod ssa;
 /// registers for our currently infinite set.
 mod ralloc;
 
+/// ## Schedule instructions
+mod sched;
+
 use iloc::{make_blks, parse_text};
 use label::OrdLabel;
 use lcm::lazy_code_motion;
 use ralloc::K_DEGREE;
 #[allow(unused)]
 use ssa::{build_cfg, dominator_tree, ssa_optimization};
+use sched::schedual_prog;
 
 use crate::{
     iloc::{make_basic_blocks, Instruction},
@@ -120,6 +124,12 @@ fn main() {
                 }
                 lazy_code_motion(func, func_domtree.get(&func.label).unwrap());
             }
+
+            unsafe { SSA = true; }
+            for func in &mut blocks.functions {
+                sched::schedual_prog(func, func_domtree.get(&func.label).unwrap());
+            }
+            unsafe { SSA = false; }
 
             // REGISTER ALLOCATION
             ralloc::allocate_registers(&mut blocks);

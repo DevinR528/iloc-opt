@@ -17,6 +17,14 @@ pub fn print_maps<K: fmt::Debug, V: fmt::Debug>(name: &str, map: impl Iterator<I
     println!("}}")
 }
 
+pub fn print_maps_display<K: fmt::Display, V: fmt::Debug>(name: &str, map: impl Iterator<Item = (K, V)>) {
+    println!("{} {{", name);
+    for (k, v) in map {
+        println!("    '{}': {:?},", k.to_string().trim(), v);
+    }
+    println!("}}")
+}
+
 // Critical edge - These must be split
 // Critical edges are edges from a block with multiple successors to a block
 // with multiple predecessors.
