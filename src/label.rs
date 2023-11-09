@@ -5,8 +5,8 @@ use std::{
 	sync::Mutex,
 };
 
-static LABEL_MAP: std::lazy::SyncLazy<Mutex<HashMap<String, OrdLabel>>> =
-	std::lazy::SyncLazy::new(|| Mutex::new(HashMap::new()));
+static LABEL_MAP: std::sync::LazyLock<Mutex<HashMap<String, OrdLabel>>> =
+	std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Clone)]
 pub struct OrdLabel(isize, String);

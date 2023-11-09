@@ -360,7 +360,7 @@ fn combine(func: &mut Function, from: &str, into: &str) {
 	func.blocks[into].instructions.extend(
 		from_blk
 			.instructions
-			.drain_filter(|i| !matches!(i, Instruction::Label(..) | Instruction::Frame { .. })),
+			.extract_if(|i| !matches!(i, Instruction::Label(..) | Instruction::Frame { .. })),
 	);
 }
 

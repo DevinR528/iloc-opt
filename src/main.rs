@@ -1,14 +1,11 @@
 #![feature(
-	let_else,
-	map_first_last,
-	once_cell,
 	stmt_expr_attributes,
 	let_chains,
 	try_blocks,
-	drain_filter,
-	default_free_fn,
 	if_let_guard,
-	core_intrinsics
+	core_intrinsics,
+	lazy_cell,
+	extract_if
 )]
 #![allow(unused)]
 

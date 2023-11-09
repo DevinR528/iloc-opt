@@ -419,7 +419,7 @@ pub fn build_interference(
 	let mut graph_degree = interference.clone().into_iter().collect::<Vec<_>>();
 	let mut color_hard_first: VecDeque<(_, BTreeMap<_, ColoredReg>)> = VecDeque::new();
 	let spilled_cannot_spill: VecDeque<(_, BTreeMap<_, _>)> = graph_degree
-		.drain_filter(|(r, _)| spilled.contains(r))
+		.extract_if(|(r, _)| spilled.contains(r))
 		.map(|(r, edges)| (
 			r,
 			edges.into_iter().map(|r| (r, ColoredReg::Uncolored(r))).collect(),
